@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Tower Defense</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a2e;
+        }
+
+        #bevy-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s ease-out;
+        }
+
+        #loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader-title {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #e94560;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+        }
+
+        .loader-container {
+            width: 300px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .loader-bar {
+            width: 30%;
+            height: 100%;
+            background: linear-gradient(90deg, #e94560, #0f3460);
+            border-radius: 4px;
+            animation: loading 1.5s ease-in-out infinite;
+        }
+
+        @keyframes loading {
+            0% {
+                transform: translateX(-100%);
+            }
+            50% {
+                transform: translateX(200%);
+            }
+            100% {
+                transform: translateX(-100%);
+            }
+        }
+
+        .loader-text {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 1.5rem;
+            letter-spacing: 0.1em;
+        }
+
+        .tower-icon {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
+        .tower-icon::before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 40px;
+            background: #e94560;
+            clip-path: polygon(20% 100%, 80% 100%, 100% 0%, 0% 0%);
+        }
+
+        .tower-icon::after {
+            content: '';
+            position: absolute;
+            bottom: 35px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 45px;
+            background: #0f3460;
+            border-radius: 4px 4px 0 0;
+        }
+    </style>
+    <link data-trunk rel="copy-dir" href="assets"/>
+</head>
+<body>
+    <canvas id="bevy-canvas"></canvas>
+    <div id="loading-screen">
+        <div class="tower-icon"></div>
+        <h1 class="loader-title">Tower Defense</h1>
+        <div class="loader-container">
+            <div class="loader-bar"></div>
+        </div>
+        <p class="loader-text">Loading game assets...</p>
+    </div>
+    <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z"/>
+    <script>
+        // Hide loading screen once Bevy takes over
+        window.hideLoadingScreen = function() {
+            const loader = document.getElementById('loading-screen');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(() => loader.remove(), 500);
+            }
+        };
+    </script>
+</body>
+</html>
