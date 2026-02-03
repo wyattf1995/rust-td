@@ -102,6 +102,9 @@ struct SellValueText;
 #[derive(Component)]
 struct EndlessModeButton;
 
+#[derive(Component)]
+struct CloseMenuButton;
+
 fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
     // Top bar - HUD
     commands
@@ -497,6 +500,120 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                             font_size: 16.0,
                             color: Color::WHITE,
                         },
+                    ));
+                });
+        });
+
+    // Tower context menu (initially hidden) - for upgrade/sell
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    width: Val::Px(130.0),
+                    height: Val::Px(120.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::SpaceEvenly,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::all(Val::Px(8.0)),
+                    position_type: PositionType::Absolute,
+                    display: Display::None,
+                    ..default()
+                },
+                background_color: Color::srgba(0.1, 0.1, 0.15, 0.95).into(),
+                ..default()
+            },
+            TowerContextMenu,
+            GameEntity,
+        ))
+        .with_children(|parent| {
+            // Close button (X)
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(20.0),
+                            height: Val::Px(20.0),
+                            position_type: PositionType::Absolute,
+                            right: Val::Px(4.0),
+                            top: Val::Px(4.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        background_color: Color::srgba(0.5, 0.2, 0.2, 0.8).into(),
+                        ..default()
+                    },
+                    CloseMenuButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn(TextBundle::from_section(
+                        "X",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 12.0,
+                            color: Color::WHITE,
+                        },
+                    ));
+                });
+
+            // Upgrade button
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(32.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::top(Val::Px(20.0)),
+                            ..default()
+                        },
+                        background_color: GameColors::BUTTON_NORMAL.into(),
+                        ..default()
+                    },
+                    UpgradeButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "Upgrade [U]",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 12.0,
+                                color: Color::WHITE,
+                            },
+                        ),
+                        UpgradeCostText,
+                    ));
+                });
+
+            // Sell button
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(32.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        background_color: Color::srgb(0.6, 0.2, 0.2).into(),
+                        ..default()
+                    },
+                    SellButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "Sell [S]",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 12.0,
+                                color: Color::WHITE,
+                            },
+                        ),
+                        SellValueText,
                     ));
                 });
         });
@@ -899,23 +1016,55 @@ fn update_tower_context_menu(
     mut sell_text: Query<&mut Text, With<SellValueText>>,
     windows: Query<&Window>,
     mouse_button: Res<ButtonInput<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    economy: Res<PlayerEconomy>,
+    mut upgrade_events: EventWriter<UpgradeTowerEvent>,
+    mut sell_events: EventWriter<SellTowerEvent>,
 ) {
-    // Right-click to select a tower
-    if mouse_button.just_pressed(MouseButton::Right) {
+    // Escape to deselect
+    if keyboard.just_pressed(KeyCode::Escape) && selected_tower.0.is_some() {
+        selected_tower.0 = None;
+        return;
+    }
+
+    // Keyboard shortcuts when tower is selected
+    if let Some(tower_entity) = selected_tower.0 {
+        if let Ok((_, tower)) = towers.get(tower_entity) {
+            // U to upgrade
+            if keyboard.just_pressed(KeyCode::KeyU) {
+                if tower.can_upgrade() && economy.gold >= tower.upgrade_cost() {
+                    upgrade_events.send(UpgradeTowerEvent { tower: tower_entity });
+                }
+            }
+            // S to sell
+            if keyboard.just_pressed(KeyCode::KeyS) {
+                sell_events.send(SellTowerEvent { tower: tower_entity });
+                selected_tower.0 = None;
+                return;
+            }
+        }
+    }
+
+    // Left-click to select/deselect towers
+    if mouse_button.just_pressed(MouseButton::Left) {
         if let Some((hx, hy)) = hovered_tile.position {
             if map.tiles[hx][hy] == TileType::Tower {
                 // Find the tower at this position
                 for (entity, tower) in &towers {
                     if tower.grid_x == hx && tower.grid_y == hy {
-                        selected_tower.0 = Some(entity);
+                        // Toggle selection - if already selected, deselect
+                        if selected_tower.0 == Some(entity) {
+                            selected_tower.0 = None;
+                        } else {
+                            selected_tower.0 = Some(entity);
+                        }
                         break;
                     }
                 }
             } else {
+                // Clicked on non-tower tile - deselect
                 selected_tower.0 = None;
             }
-        } else {
-            selected_tower.0 = None;
         }
     }
 
@@ -938,13 +1087,13 @@ fn update_tower_context_menu(
                 // Update text
                 for mut text in &mut upgrade_text {
                     if tower.can_upgrade() {
-                        text.sections[0].value = format!("Upgrade ({}g)", tower.upgrade_cost());
+                        text.sections[0].value = format!("Upgrade [U] ({}g)", tower.upgrade_cost());
                     } else {
                         text.sections[0].value = "MAX LEVEL".to_string();
                     }
                 }
                 for mut text in &mut sell_text {
-                    text.sections[0].value = format!("Sell ({}g)", tower.sell_value());
+                    text.sections[0].value = format!("Sell [S] ({}g)", tower.sell_value());
                 }
             } else {
                 style.display = Display::None;
@@ -959,11 +1108,15 @@ fn update_tower_context_menu(
 fn tower_context_buttons(
     mut upgrade_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<UpgradeButton>),
+        (Changed<Interaction>, With<UpgradeButton>, Without<SellButton>, Without<CloseMenuButton>),
     >,
     mut sell_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<SellButton>, Without<UpgradeButton>),
+        (Changed<Interaction>, With<SellButton>, Without<UpgradeButton>, Without<CloseMenuButton>),
+    >,
+    mut close_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<CloseMenuButton>, Without<UpgradeButton>, Without<SellButton>),
     >,
     mut selected_tower: ResMut<SelectedPlacedTower>,
     towers: Query<&Tower>,
@@ -971,6 +1124,22 @@ fn tower_context_buttons(
     mut upgrade_events: EventWriter<UpgradeTowerEvent>,
     mut sell_events: EventWriter<SellTowerEvent>,
 ) {
+    // Close button
+    for (interaction, mut color) in &mut close_query {
+        match *interaction {
+            Interaction::Pressed => {
+                selected_tower.0 = None;
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.7, 0.3, 0.3).into();
+            }
+            Interaction::None => {
+                *color = Color::srgba(0.5, 0.2, 0.2, 0.8).into();
+            }
+        }
+    }
+
+    // Upgrade button
     for (interaction, mut color) in &mut upgrade_query {
         match *interaction {
             Interaction::Pressed => {
@@ -991,6 +1160,7 @@ fn tower_context_buttons(
         }
     }
 
+    // Sell button
     for (interaction, mut color) in &mut sell_query {
         match *interaction {
             Interaction::Pressed => {
