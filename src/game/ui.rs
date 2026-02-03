@@ -965,12 +965,11 @@ fn tower_context_buttons(
         (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<SellButton>, Without<UpgradeButton>),
     >,
-    selected_tower: Res<SelectedPlacedTower>,
+    mut selected_tower: ResMut<SelectedPlacedTower>,
     towers: Query<&Tower>,
     economy: Res<PlayerEconomy>,
     mut upgrade_events: EventWriter<UpgradeTowerEvent>,
     mut sell_events: EventWriter<SellTowerEvent>,
-    mut selected_placed: ResMut<SelectedPlacedTower>,
 ) {
     for (interaction, mut color) in &mut upgrade_query {
         match *interaction {
@@ -997,7 +996,7 @@ fn tower_context_buttons(
             Interaction::Pressed => {
                 if let Some(tower_entity) = selected_tower.0 {
                     sell_events.send(SellTowerEvent { tower: tower_entity });
-                    selected_placed.0 = None;
+                    selected_tower.0 = None;
                 }
             }
             Interaction::Hovered => {
