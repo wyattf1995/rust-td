@@ -4,14 +4,27 @@ use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
 
 use super::GameEntity;
+use super::tower::{SelectedTowerType, Tower};
 
 pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GameMap>()
-            .add_systems(OnEnter(GameState::Playing), setup_map);
+            .init_resource::<HoveredTile>()
+            .add_systems(OnEnter(GameState::Playing), setup_map)
+            .add_systems(
+                Update,
+                (tile_hover_system, update_tile_visuals)
+                    .run_if(in_state(GameState::Playing)),
+            );
     }
+}
+
+/// Currently hovered tile
+#[derive(Resource, Default)]
+pub struct HoveredTile {
+    pub position: Option<(usize, usize)>,
 }
 
 /// Grid dimensions
@@ -168,7 +181,12 @@ impl GameMap {
 pub struct MapTile {
     pub x: usize,
     pub y: usize,
+    pub base_color: Color,
 }
+
+/// Range preview circle when hovering over buildable tile
+#[derive(Component)]
+pub struct TileRangePreview;
 
 fn setup_map(mut commands: Commands, map: Res<GameMap>) {
     // Spawn grid tiles
@@ -194,7 +212,7 @@ fn setup_map(mut commands: Commands, map: Res<GameMap>) {
                     transform: Transform::from_translation(pos.extend(0.0)),
                     ..default()
                 },
-                MapTile { x, y },
+                MapTile { x, y, base_color: color },
                 GameEntity,
             ));
         }
@@ -256,5 +274,123 @@ fn setup_map(mut commands: Commands, map: Res<GameMap>) {
             },
             GameEntity,
         ));
+    }
+
+    // Spawn range preview circle (initially hidden)
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::NONE,
+                custom_size: Some(Vec2::splat(300.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.8)),
+            ..default()
+        },
+        TileRangePreview,
+        GameEntity,
+    ));
+}
+
+fn tile_hover_system(
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform)>,
+    mut hovered_tile: ResMut<HoveredTile>,
+) {
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
+
+    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+        return;
+    };
+
+    let Some(cursor_pos) = window.cursor_position() else {
+        hovered_tile.position = None;
+        return;
+    };
+
+    // Check if cursor is in UI area
+    let window_height = window.height();
+    if cursor_pos.y > window_height - 140.0 || cursor_pos.y < 50.0 {
+        hovered_tile.position = None;
+        return;
+    }
+
+    // Convert to world coordinates
+    let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) else {
+        hovered_tile.position = None;
+        return;
+    };
+
+    // Convert to grid coordinates
+    hovered_tile.position = GameMap::world_to_grid(world_pos);
+}
+
+fn update_tile_visuals(
+    hovered_tile: Res<HoveredTile>,
+    map: Res<GameMap>,
+    selected_tower: Res<SelectedTowerType>,
+    mut tiles: Query<(&MapTile, &mut Sprite)>,
+    mut range_preview: Query<(&mut Sprite, &mut Transform), (With<TileRangePreview>, Without<MapTile>)>,
+    towers: Query<&Tower>,
+) {
+    // Update tile colors based on hover
+    for (tile, mut sprite) in &mut tiles {
+        if let Some((hx, hy)) = hovered_tile.position {
+            if tile.x == hx && tile.y == hy {
+                // Tile is hovered
+                let tile_type = map.tiles[tile.x][tile.y];
+                if tile_type == TileType::Empty {
+                    // Buildable - show green tint
+                    sprite.color = Color::srgba(0.3, 0.6, 0.3, 1.0);
+                } else if tile_type == TileType::Tower {
+                    // Has tower - show selection highlight
+                    sprite.color = Color::srgba(0.4, 0.4, 0.6, 1.0);
+                } else {
+                    // Not buildable - show red tint
+                    sprite.color = Color::srgba(0.6, 0.3, 0.3, 1.0);
+                }
+            } else {
+                sprite.color = tile.base_color;
+            }
+        } else {
+            sprite.color = tile.base_color;
+        }
+    }
+
+    // Update range preview
+    for (mut preview_sprite, mut preview_transform) in &mut range_preview {
+        if let Some((hx, hy)) = hovered_tile.position {
+            let tile_type = map.tiles[hx][hy];
+
+            if tile_type == TileType::Empty {
+                // Show range preview for placing new tower
+                let pos = GameMap::grid_to_world(hx, hy);
+                preview_transform.translation = pos.extend(0.8);
+                let range = selected_tower.0.range();
+                preview_sprite.custom_size = Some(Vec2::splat(range * 2.0));
+                preview_sprite.color = GameColors::RANGE_INDICATOR;
+            } else if tile_type == TileType::Tower {
+                // Show range of existing tower
+                let pos = GameMap::grid_to_world(hx, hy);
+                preview_transform.translation = pos.extend(0.8);
+
+                // Find the tower at this position
+                let mut found_range = 150.0;
+                for tower in &towers {
+                    if tower.grid_x == hx && tower.grid_y == hy {
+                        found_range = tower.range;
+                        break;
+                    }
+                }
+                preview_sprite.custom_size = Some(Vec2::splat(found_range * 2.0));
+                preview_sprite.color = GameColors::RANGE_INDICATOR;
+            } else {
+                preview_sprite.color = Color::NONE;
+            }
+        } else {
+            preview_sprite.color = Color::NONE;
+        }
     }
 }

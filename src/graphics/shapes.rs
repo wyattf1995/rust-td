@@ -57,6 +57,22 @@ impl GameColors {
     pub const HEALTH_BAR_BG: Color = Color::srgb(0.2, 0.2, 0.2);
     pub const UI_OVERLAY: Color = Color::srgba(0.0, 0.0, 0.0, 0.7);
     pub const GAME_OVER_OVERLAY: Color = Color::srgba(0.0, 0.0, 0.0, 0.8);
+
+    // Additional enemy colors
+    pub const ENEMY_ARMORED: Color = Color::srgb(0.4, 0.45, 0.5);  // Steel gray
+    pub const ENEMY_FLYING: Color = Color::srgb(0.6, 0.8, 1.0);    // Sky blue
+    pub const ENEMY_BOSS: Color = Color::srgb(0.7, 0.1, 0.2);      // Dark red
+
+    // Effect colors
+    pub const DAMAGE_TEXT: Color = Color::srgb(1.0, 0.3, 0.3);
+    pub const GOLD_TEXT: Color = Color::srgb(1.0, 0.85, 0.0);
+    pub const MUZZLE_FLASH: Color = Color::srgb(1.0, 0.9, 0.6);
+    pub const DEATH_EFFECT: Color = Color::srgba(1.0, 0.5, 0.3, 0.8);
+
+    // Ability colors
+    pub const ABILITY_FREEZE: Color = Color::srgb(0.5, 0.9, 1.0);
+    pub const ABILITY_GOLD_RUSH: Color = Color::srgb(1.0, 0.85, 0.0);
+    pub const ABILITY_NUKE: Color = Color::srgb(1.0, 0.4, 0.2);
 }
 
 /// Shape sizes
@@ -81,4 +97,14 @@ impl ShapeSizes {
     pub const PATH_INDICATOR: f32 = 6.0;
     pub const SPAWN_INDICATOR: f32 = 20.0;
     pub const SPLASH_RADIUS: f32 = 60.0;
+
+    // Additional enemy sizes
+    pub const ENEMY_ARMORED: f32 = 35.0;
+    pub const ENEMY_FLYING: f32 = 26.0;
+    pub const ENEMY_BOSS: f32 = 55.0;
+
+    // Effect sizes
+    pub const DAMAGE_TEXT_SIZE: f32 = 16.0;
+    pub const MUZZLE_FLASH: f32 = 15.0;
+    pub const DEATH_EFFECT: f32 = 40.0;
 }

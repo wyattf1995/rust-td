@@ -3,7 +3,9 @@ use bevy::prelude::*;
 pub mod economy;
 pub mod enemy;
 pub mod map;
+pub mod pool;
 pub mod projectile;
+pub mod spatial;
 pub mod tower;
 pub mod ui;
 
@@ -21,6 +23,8 @@ impl Plugin for GamePlugin {
             projectile::ProjectilePlugin,
             economy::EconomyPlugin,
             ui::GameUiPlugin,
+            spatial::SpatialPlugin,
+            pool::PoolPlugin,
         ))
         .add_systems(OnEnter(GameState::Playing), setup_game)
         .add_systems(OnExit(GameState::Playing), cleanup_game)

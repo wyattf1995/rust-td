@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
+use crate::loading::GameAssets;
 
 use super::{
     enemy::Enemy,
@@ -16,7 +17,7 @@ impl Plugin for ProjectilePlugin {
         app.add_event::<SpawnProjectileEvent>()
             .add_systems(
                 Update,
-                (spawn_projectiles, projectile_movement, projectile_collision, update_effects)
+                (spawn_projectiles, projectile_movement, projectile_collision, update_effects, update_damage_numbers)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -29,6 +30,7 @@ pub struct Projectile {
     pub damage: f32,
     pub speed: f32,
     pub tower_type: TowerType,
+    pub predicted_pos: Option<Vec2>,  // For leading shots
 }
 
 /// Trail particle
@@ -43,6 +45,13 @@ pub struct SplashEffect {
     pub lifetime: Timer,
 }
 
+/// Floating damage number
+#[derive(Component)]
+pub struct DamageNumber {
+    pub lifetime: Timer,
+    pub velocity: Vec2,
+}
+
 /// Event to spawn a projectile
 #[derive(Event)]
 pub struct SpawnProjectileEvent {
@@ -55,6 +64,7 @@ pub struct SpawnProjectileEvent {
 fn spawn_projectiles(
     mut commands: Commands,
     mut events: EventReader<SpawnProjectileEvent>,
+    enemies: Query<(&Transform, &Enemy)>,
 ) {
     for event in events.read() {
         let color = match event.tower_type {
@@ -73,6 +83,25 @@ fn spawn_projectiles(
             TowerType::Rapid => 5.0,    // Small rapid bullets
         };
 
+        let projectile_speed = 400.0;
+
+        // Calculate predicted position (leading the target)
+        let predicted_pos = if let Ok((enemy_transform, enemy)) = enemies.get(event.target) {
+            let enemy_pos = enemy_transform.translation.truncate();
+            let distance = event.start.distance(enemy_pos);
+            let travel_time = distance / projectile_speed;
+
+            // Predict where enemy will be based on its current velocity direction
+            // Approximate by using enemy speed (we don't store velocity directly)
+            let prediction_offset = enemy.speed * travel_time * 0.8; // 0.8 factor for some inaccuracy
+
+            // Simple prediction: move in the direction enemy is facing
+            // Since enemies follow path, we just add speed in their movement direction
+            Some(enemy_pos + Vec2::new(prediction_offset * 0.5, 0.0)) // Rough eastward bias
+        } else {
+            None
+        };
+
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
@@ -86,8 +115,9 @@ fn spawn_projectiles(
             Projectile {
                 target: event.target,
                 damage: event.damage,
-                speed: 400.0,
+                speed: projectile_speed,
                 tower_type: event.tower_type,
+                predicted_pos,
             },
             GameEntity,
         ));
@@ -96,14 +126,36 @@ fn spawn_projectiles(
 
 fn projectile_movement(
     mut commands: Commands,
-    mut projectiles: Query<(Entity, &Projectile, &mut Transform)>,
-    enemies: Query<&Transform, (With<Enemy>, Without<Projectile>)>,
+    mut projectiles: Query<(Entity, &mut Projectile, &mut Transform)>,
+    enemies: Query<(&Transform, &Enemy), Without<Projectile>>,
     time: Res<Time>,
 ) {
-    for (entity, projectile, mut transform) in &mut projectiles {
-        // Get target position
-        let target_pos = if let Ok(enemy_transform) = enemies.get(projectile.target) {
-            enemy_transform.translation.truncate()
+    for (entity, mut projectile, mut transform) in &mut projectiles {
+        // Get target position with leading
+        let target_pos = if let Ok((enemy_transform, enemy)) = enemies.get(projectile.target) {
+            let enemy_pos = enemy_transform.translation.truncate();
+            let current_pos = transform.translation.truncate();
+
+            // Update prediction based on current state
+            let distance = current_pos.distance(enemy_pos);
+            let travel_time = distance / projectile.speed;
+
+            // Lead the target based on enemy speed and predicted travel time
+            // This creates a more accurate interception point
+            let lead_distance = enemy.speed * travel_time * 0.7;
+
+            // Blend between direct aim and predicted position
+            // Closer projectiles aim more directly, farther ones lead more
+            let blend = (distance / 200.0).min(1.0);
+
+            if let Some(predicted) = projectile.predicted_pos {
+                // Update prediction as we get closer
+                let new_predicted = enemy_pos + Vec2::new(lead_distance, 0.0);
+                projectile.predicted_pos = Some(enemy_pos.lerp(new_predicted, blend));
+                predicted.lerp(enemy_pos, 1.0 - blend)
+            } else {
+                enemy_pos
+            }
         } else {
             // Target no longer exists, despawn projectile
             commands.entity(entity).despawn_recursive();
@@ -148,6 +200,7 @@ fn projectile_collision(
     mut commands: Commands,
     projectiles: Query<(Entity, &Projectile, &Transform)>,
     mut enemies: Query<(Entity, &mut Enemy, &Transform)>,
+    assets: Res<GameAssets>,
 ) {
     // Check projectile collisions
     for (proj_entity, projectile, proj_transform) in &projectiles {
@@ -159,8 +212,13 @@ fn projectile_collision(
             let distance = proj_pos.distance(enemy_pos);
 
             if distance < 20.0 {
-                // Apply damage
-                enemy.health -= projectile.damage;
+                // Calculate damage with armor reduction
+                let armor = enemy.enemy_type.armor();
+                let actual_damage = projectile.damage * (1.0 - armor);
+                enemy.health -= actual_damage;
+
+                // Spawn damage number
+                spawn_damage_number(&mut commands, &assets, enemy_pos, actual_damage);
 
                 // Apply slow effect for slow towers
                 if projectile.tower_type == TowerType::Slow {
@@ -179,7 +237,10 @@ fn projectile_collision(
 
                         let other_pos = other_transform.translation.truncate();
                         if enemy_pos.distance(other_pos) < splash_radius {
-                            other_enemy.health -= splash_damage;
+                            let other_armor = other_enemy.enemy_type.armor();
+                            let other_actual_damage = splash_damage * (1.0 - other_armor);
+                            other_enemy.health -= other_actual_damage;
+                            spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage);
                         }
                     }
 
@@ -207,6 +268,64 @@ fn projectile_collision(
         } else {
             // Target doesn't exist anymore
             commands.entity(proj_entity).despawn_recursive();
+        }
+    }
+}
+
+fn spawn_damage_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, damage: f32) {
+    // Random offset and velocity for variety
+    let offset_x = (rand_simple(pos.x) - 0.5) * 20.0;
+    let velocity = Vec2::new(offset_x, 40.0);
+
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section(
+                format!("{:.0}", damage),
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: ShapeSizes::DAMAGE_TEXT_SIZE,
+                    color: GameColors::DAMAGE_TEXT,
+                },
+            ),
+            transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, 10.0)),
+            ..default()
+        },
+        DamageNumber {
+            lifetime: Timer::from_seconds(0.6, TimerMode::Once),
+            velocity,
+        },
+        GameEntity,
+    ));
+}
+
+// Simple pseudo-random based on position (deterministic)
+fn rand_simple(seed: f32) -> f32 {
+    ((seed * 12.9898).sin() * 43758.5453).fract()
+}
+
+fn update_damage_numbers(
+    mut commands: Commands,
+    mut numbers: Query<(Entity, &mut DamageNumber, &mut Transform, &mut Text)>,
+    time: Res<Time>,
+) {
+    for (entity, mut number, mut transform, mut text) in &mut numbers {
+        number.lifetime.tick(time.delta());
+
+        // Move upward
+        transform.translation.x += number.velocity.x * time.delta_seconds();
+        transform.translation.y += number.velocity.y * time.delta_seconds();
+
+        // Slow down velocity
+        number.velocity *= 0.95;
+
+        // Fade out
+        let alpha = 1.0 - number.lifetime.fraction();
+        if let Some(section) = text.sections.get_mut(0) {
+            section.style.color = GameColors::DAMAGE_TEXT.with_alpha(alpha);
+        }
+
+        if number.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
         }
     }
 }

@@ -8,6 +8,7 @@ use super::{
     enemy::Enemy,
     map::GameMap,
     projectile::SpawnProjectileEvent,
+    spatial::SpatialGrid,
     GameEntity,
 };
 
@@ -17,18 +18,80 @@ impl Plugin for TowerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SelectedTowerType>()
             .init_resource::<HoveredTower>()
+            .init_resource::<SelectedPlacedTower>()
             .add_event::<PlaceTowerEvent>()
+            .add_event::<SellTowerEvent>()
+            .add_event::<UpgradeTowerEvent>()
             .add_systems(
                 Update,
                 (
                     handle_tower_placement,
+                    handle_tower_selling,
+                    handle_tower_upgrade,
                     tower_targeting,
                     tower_attack,
                     update_tower_visuals,
                     update_range_indicators,
+                    update_muzzle_flashes,
+                    tower_hotkeys,
                 )
                     .run_if(in_state(GameState::Playing)),
             );
+    }
+}
+
+/// Currently selected placed tower for selling/upgrading
+#[derive(Resource, Default)]
+pub struct SelectedPlacedTower(pub Option<Entity>);
+
+/// Event to sell a tower
+#[derive(Event)]
+pub struct SellTowerEvent {
+    pub tower: Entity,
+}
+
+/// Event to upgrade a tower
+#[derive(Event)]
+pub struct UpgradeTowerEvent {
+    pub tower: Entity,
+}
+
+/// Muzzle flash effect
+#[derive(Component)]
+pub struct MuzzleFlash {
+    pub lifetime: Timer,
+}
+
+/// Targeting priority for towers
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum TargetingPriority {
+    #[default]
+    First,      // Furthest along the path (default, best for preventing leaks)
+    Closest,    // Nearest to tower (best for rapid-fire towers)
+    LowestHP,   // Lowest current health (good for finishing enemies)
+    HighestHP,  // Highest current health (focus on tanks)
+    Fastest,    // Fastest moving (pick off speedsters)
+}
+
+impl TargetingPriority {
+    pub fn name(&self) -> &'static str {
+        match self {
+            TargetingPriority::First => "First",
+            TargetingPriority::Closest => "Closest",
+            TargetingPriority::LowestHP => "Low HP",
+            TargetingPriority::HighestHP => "High HP",
+            TargetingPriority::Fastest => "Fastest",
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        match self {
+            TargetingPriority::First => TargetingPriority::Closest,
+            TargetingPriority::Closest => TargetingPriority::LowestHP,
+            TargetingPriority::LowestHP => TargetingPriority::HighestHP,
+            TargetingPriority::HighestHP => TargetingPriority::Fastest,
+            TargetingPriority::Fastest => TargetingPriority::First,
+        }
     }
 }
 
@@ -133,6 +196,8 @@ pub struct Tower {
     pub target: Option<Entity>,
     pub grid_x: usize,
     pub grid_y: usize,
+    pub level: u32,
+    pub targeting: TargetingPriority,
 }
 
 impl Tower {
@@ -146,12 +211,53 @@ impl Tower {
             target: None,
             grid_x,
             grid_y,
+            level: 1,
+            targeting: TargetingPriority::default(),
         }
     }
 
+    pub fn cycle_targeting(&mut self) {
+        self.targeting = self.targeting.next();
+    }
+
     pub fn sell_value(&self) -> u32 {
-        // Return 75% of original cost
-        (self.tower_type.cost() as f32 * 0.75) as u32
+        // Return 75% of total invested cost
+        let base_cost = self.tower_type.cost();
+        let upgrade_cost = self.upgrade_cost_total();
+        ((base_cost + upgrade_cost) as f32 * 0.75) as u32
+    }
+
+    pub fn upgrade_cost(&self) -> u32 {
+        if self.level >= 3 {
+            return 0; // Max level
+        }
+        // Each upgrade costs 60% of base cost, increasing per level
+        (self.tower_type.cost() as f32 * 0.6 * self.level as f32) as u32
+    }
+
+    fn upgrade_cost_total(&self) -> u32 {
+        // Total spent on upgrades
+        let mut total = 0;
+        for lvl in 1..self.level {
+            total += (self.tower_type.cost() as f32 * 0.6 * lvl as f32) as u32;
+        }
+        total
+    }
+
+    pub fn can_upgrade(&self) -> bool {
+        self.level < 3
+    }
+
+    pub fn upgrade(&mut self) {
+        if self.level >= 3 {
+            return;
+        }
+        self.level += 1;
+        // 25% boost per level
+        self.damage = self.tower_type.damage() * (1.0 + 0.25 * (self.level - 1) as f32);
+        self.range = self.tower_type.range() * (1.0 + 0.1 * (self.level - 1) as f32);
+        let attack_speed = self.tower_type.attack_speed() * (1.0 + 0.15 * (self.level - 1) as f32);
+        self.attack_cooldown = Timer::from_seconds(1.0 / attack_speed, TimerMode::Repeating);
     }
 }
 
@@ -252,14 +358,22 @@ fn handle_tower_placement(
 fn tower_targeting(
     mut towers: Query<(&mut Tower, &Transform)>,
     enemies: Query<(Entity, &Transform, &Enemy)>,
+    spatial_grid: Res<SpatialGrid>,
 ) {
     for (mut tower, tower_transform) in &mut towers {
         let tower_pos = tower_transform.translation.truncate();
 
-        // Find closest enemy in range
+        // Use spatial grid to get nearby entities (much faster than checking all)
+        let nearby = spatial_grid.query_range(tower_pos, tower.range);
+
+        // Find best target based on priority
         let mut best_target: Option<(Entity, f32)> = None;
 
-        for (enemy_entity, enemy_transform, enemy) in &enemies {
+        for entity in nearby {
+            let Ok((enemy_entity, enemy_transform, enemy)) = enemies.get(entity) else {
+                continue;
+            };
+
             if enemy.health <= 0.0 || enemy.marked_dead {
                 continue;
             }
@@ -267,15 +381,26 @@ fn tower_targeting(
             let enemy_pos = enemy_transform.translation.truncate();
             let distance = tower_pos.distance(enemy_pos);
 
-            if distance <= tower.range {
-                // Prefer enemies further along the path (higher path_index)
-                if let Some((_, best_index)) = best_target {
-                    if enemy.path_index > best_index as usize {
-                        best_target = Some((enemy_entity, enemy.path_index as f32));
-                    }
-                } else {
-                    best_target = Some((enemy_entity, enemy.path_index as f32));
+            // Double-check distance (spatial grid is approximate)
+            if distance > tower.range {
+                continue;
+            }
+
+            // Calculate priority score based on targeting mode
+            let score = match tower.targeting {
+                TargetingPriority::First => enemy.path_index as f32 * 1000.0,
+                TargetingPriority::Closest => -distance,
+                TargetingPriority::LowestHP => -enemy.health,
+                TargetingPriority::HighestHP => enemy.health,
+                TargetingPriority::Fastest => enemy.base_speed,
+            };
+
+            if let Some((_, best_score)) = best_target {
+                if score > best_score {
+                    best_target = Some((enemy_entity, score));
                 }
+            } else {
+                best_target = Some((enemy_entity, score));
             }
         }
 
@@ -291,6 +416,7 @@ fn tower_targeting(
 }
 
 fn tower_attack(
+    mut commands: Commands,
     mut towers: Query<(&mut Tower, &Transform)>,
     enemies: Query<&Transform, With<Enemy>>,
     time: Res<Time>,
@@ -310,6 +436,23 @@ fn tower_attack(
                         damage: tower.damage,
                         tower_type: tower.tower_type,
                     });
+
+                    // Spawn muzzle flash
+                    commands.spawn((
+                        SpriteBundle {
+                            sprite: Sprite {
+                                color: GameColors::MUZZLE_FLASH,
+                                custom_size: Some(Vec2::splat(ShapeSizes::MUZZLE_FLASH)),
+                                ..default()
+                            },
+                            transform: Transform::from_translation(start.extend(2.8)),
+                            ..default()
+                        },
+                        MuzzleFlash {
+                            lifetime: Timer::from_seconds(0.08, TimerMode::Once),
+                        },
+                        GameEntity,
+                    ));
                 }
             }
         }
@@ -359,5 +502,111 @@ fn update_range_indicators(
             transform.translation.x = tower_transform.translation.x;
             transform.translation.y = tower_transform.translation.y;
         }
+    }
+}
+
+fn handle_tower_selling(
+    mut commands: Commands,
+    mut events: EventReader<SellTowerEvent>,
+    mut economy: ResMut<PlayerEconomy>,
+    mut map: ResMut<GameMap>,
+    towers: Query<&Tower>,
+    range_indicators: Query<(Entity, &RangeIndicator)>,
+    barrels: Query<(Entity, &TowerBarrel)>,
+) {
+    for event in events.read() {
+        if let Ok(tower) = towers.get(event.tower) {
+            // Refund gold
+            economy.gold += tower.sell_value();
+
+            // Clear map tile
+            map.remove_tower(tower.grid_x, tower.grid_y);
+
+            // Despawn tower
+            commands.entity(event.tower).despawn_recursive();
+
+            // Despawn range indicator
+            for (entity, indicator) in &range_indicators {
+                if indicator.tower == event.tower {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
+
+            // Despawn barrel
+            for (entity, barrel) in &barrels {
+                if barrel.tower == event.tower {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
+        }
+    }
+}
+
+fn handle_tower_upgrade(
+    mut events: EventReader<UpgradeTowerEvent>,
+    mut economy: ResMut<PlayerEconomy>,
+    mut towers: Query<(&mut Tower, &mut Sprite)>,
+    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), Without<Tower>>,
+) {
+    for event in events.read() {
+        if let Ok((mut tower, mut sprite)) = towers.get_mut(event.tower) {
+            let cost = tower.upgrade_cost();
+            if cost > 0 && economy.gold >= cost {
+                economy.gold -= cost;
+                tower.upgrade();
+
+                // Visual feedback - slightly brighter color
+                let base_color = tower.tower_type.color();
+                let brightness = 1.0 + 0.15 * (tower.level - 1) as f32;
+                sprite.color = Color::srgb(
+                    (base_color.to_srgba().red * brightness).min(1.0),
+                    (base_color.to_srgba().green * brightness).min(1.0),
+                    (base_color.to_srgba().blue * brightness).min(1.0),
+                );
+
+                // Update range indicator size
+                for (indicator, mut ind_sprite) in &mut range_indicators {
+                    if indicator.tower == event.tower {
+                        ind_sprite.custom_size = Some(Vec2::splat(tower.range * 2.0));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn update_muzzle_flashes(
+    mut commands: Commands,
+    mut flashes: Query<(Entity, &mut MuzzleFlash, &mut Sprite)>,
+    time: Res<Time>,
+) {
+    for (entity, mut flash, mut sprite) in &mut flashes {
+        flash.lifetime.tick(time.delta());
+
+        // Fade out
+        let alpha = 1.0 - flash.lifetime.fraction();
+        sprite.color = GameColors::MUZZLE_FLASH.with_alpha(alpha);
+
+        if flash.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+fn tower_hotkeys(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut selected: ResMut<SelectedTowerType>,
+) {
+    // Number keys 1-5 select tower types
+    if keyboard.just_pressed(KeyCode::Digit1) {
+        selected.0 = TowerType::Basic;
+    } else if keyboard.just_pressed(KeyCode::Digit2) {
+        selected.0 = TowerType::Splash;
+    } else if keyboard.just_pressed(KeyCode::Digit3) {
+        selected.0 = TowerType::Slow;
+    } else if keyboard.just_pressed(KeyCode::Digit4) {
+        selected.0 = TowerType::Sniper;
+    } else if keyboard.just_pressed(KeyCode::Digit5) {
+        selected.0 = TowerType::Rapid;
     }
 }

@@ -27,6 +27,7 @@ impl Plugin for EnemyPlugin {
                     handle_enemy_killed,
                     handle_enemy_escaped,
                     check_wave_complete,
+                    update_death_effects,
                 )
                     .run_if(in_state(GameState::Playing)),
             );
@@ -39,6 +40,9 @@ pub enum EnemyType {
     Basic,
     Fast,
     Tank,
+    Armored,  // Resistant to damage
+    Flying,   // Ignores some path (takes shortcuts)
+    Boss,     // Big and tough
 }
 
 impl EnemyType {
@@ -47,6 +51,9 @@ impl EnemyType {
             EnemyType::Basic => 100.0,
             EnemyType::Fast => 60.0,
             EnemyType::Tank => 300.0,
+            EnemyType::Armored => 200.0,
+            EnemyType::Flying => 80.0,
+            EnemyType::Boss => 1000.0,
         }
     }
 
@@ -55,6 +62,9 @@ impl EnemyType {
             EnemyType::Basic => 50.0,
             EnemyType::Fast => 90.0,
             EnemyType::Tank => 30.0,
+            EnemyType::Armored => 35.0,
+            EnemyType::Flying => 70.0,
+            EnemyType::Boss => 25.0,
         }
     }
 
@@ -63,6 +73,9 @@ impl EnemyType {
             EnemyType::Basic => 10,
             EnemyType::Fast => 15,
             EnemyType::Tank => 30,
+            EnemyType::Armored => 25,
+            EnemyType::Flying => 20,
+            EnemyType::Boss => 100,
         }
     }
 
@@ -71,6 +84,9 @@ impl EnemyType {
             EnemyType::Basic => GameColors::ENEMY_BASIC,
             EnemyType::Fast => GameColors::ENEMY_FAST,
             EnemyType::Tank => GameColors::ENEMY_TANK,
+            EnemyType::Armored => GameColors::ENEMY_ARMORED,
+            EnemyType::Flying => GameColors::ENEMY_FLYING,
+            EnemyType::Boss => GameColors::ENEMY_BOSS,
         }
     }
 
@@ -79,7 +95,24 @@ impl EnemyType {
             EnemyType::Basic => ShapeSizes::ENEMY_BASIC,
             EnemyType::Fast => ShapeSizes::ENEMY_FAST,
             EnemyType::Tank => ShapeSizes::ENEMY_TANK,
+            EnemyType::Armored => ShapeSizes::ENEMY_ARMORED,
+            EnemyType::Flying => ShapeSizes::ENEMY_FLYING,
+            EnemyType::Boss => ShapeSizes::ENEMY_BOSS,
         }
+    }
+
+    /// Armor reduces damage taken (0.0 = no armor, 0.5 = 50% damage reduction)
+    pub fn armor(&self) -> f32 {
+        match self {
+            EnemyType::Armored => 0.5,
+            EnemyType::Boss => 0.3,
+            _ => 0.0,
+        }
+    }
+
+    /// Whether this enemy can fly (skip path sections)
+    pub fn is_flying(&self) -> bool {
+        matches!(self, EnemyType::Flying)
     }
 }
 
@@ -130,6 +163,13 @@ pub struct HealthBarFill {
     pub enemy: Entity,
 }
 
+/// Death effect that fades out
+#[derive(Component)]
+pub struct DeathEffect {
+    pub lifetime: Timer,
+    pub initial_size: f32,
+}
+
 /// Wave configuration
 #[derive(Clone)]
 pub struct Wave {
@@ -147,23 +187,29 @@ pub struct WaveManager {
     pub wave_active: bool,
     pub enemies_alive: u32,
     pub all_waves_complete: bool,
+    pub endless_mode: bool,
+    pub perfect_wave: bool,  // No enemies escaped this wave
 }
 
 impl Default for WaveManager {
     fn default() -> Self {
         let waves = vec![
+            // Wave 1: Introduction
             Wave {
                 enemies: vec![(EnemyType::Basic, 5)],
                 spawn_delay: 1.0,
             },
+            // Wave 2: Fast enemies introduced
             Wave {
                 enemies: vec![(EnemyType::Basic, 8), (EnemyType::Fast, 3)],
                 spawn_delay: 0.9,
             },
+            // Wave 3: More pressure
             Wave {
                 enemies: vec![(EnemyType::Basic, 10), (EnemyType::Fast, 5)],
                 spawn_delay: 0.8,
             },
+            // Wave 4: Tanks introduced
             Wave {
                 enemies: vec![
                     (EnemyType::Basic, 8),
@@ -172,21 +218,60 @@ impl Default for WaveManager {
                 ],
                 spawn_delay: 0.8,
             },
+            // Wave 5: Armored enemies
+            Wave {
+                enemies: vec![
+                    (EnemyType::Basic, 10),
+                    (EnemyType::Fast, 6),
+                    (EnemyType::Armored, 3),
+                ],
+                spawn_delay: 0.7,
+            },
+            // Wave 6: Flying enemies
             Wave {
                 enemies: vec![
                     (EnemyType::Basic, 12),
                     (EnemyType::Fast, 8),
-                    (EnemyType::Tank, 4),
+                    (EnemyType::Flying, 4),
                 ],
                 spawn_delay: 0.7,
             },
+            // Wave 7: Mixed assault
             Wave {
                 enemies: vec![
                     (EnemyType::Basic, 15),
                     (EnemyType::Fast, 10),
-                    (EnemyType::Tank, 6),
+                    (EnemyType::Tank, 4),
+                    (EnemyType::Armored, 3),
                 ],
                 spawn_delay: 0.6,
+            },
+            // Wave 8: Heavy wave
+            Wave {
+                enemies: vec![
+                    (EnemyType::Tank, 6),
+                    (EnemyType::Armored, 5),
+                    (EnemyType::Flying, 4),
+                ],
+                spawn_delay: 0.7,
+            },
+            // Wave 9: Pre-boss rush
+            Wave {
+                enemies: vec![
+                    (EnemyType::Fast, 15),
+                    (EnemyType::Flying, 8),
+                    (EnemyType::Basic, 10),
+                ],
+                spawn_delay: 0.5,
+            },
+            // Wave 10: Boss wave
+            Wave {
+                enemies: vec![
+                    (EnemyType::Boss, 1),
+                    (EnemyType::Tank, 4),
+                    (EnemyType::Armored, 4),
+                ],
+                spawn_delay: 0.8,
             },
         ];
 
@@ -198,6 +283,8 @@ impl Default for WaveManager {
             wave_active: false,
             enemies_alive: 0,
             all_waves_complete: false,
+            endless_mode: false,
+            perfect_wave: true,
         }
     }
 }
@@ -205,8 +292,13 @@ impl Default for WaveManager {
 impl WaveManager {
     pub fn start_wave(&mut self) {
         if self.current_wave >= self.waves.len() {
-            self.all_waves_complete = true;
-            return;
+            if self.endless_mode {
+                // Generate endless wave
+                self.generate_endless_wave();
+            } else {
+                self.all_waves_complete = true;
+                return;
+            }
         }
 
         let wave = &self.waves[self.current_wave];
@@ -221,10 +313,68 @@ impl WaveManager {
         }
 
         self.wave_active = true;
+        self.perfect_wave = true;
     }
 
     pub fn total_waves(&self) -> usize {
-        self.waves.len()
+        if self.endless_mode {
+            self.current_wave + 1
+        } else {
+            self.waves.len()
+        }
+    }
+
+    /// Calculate wave completion bonus
+    pub fn wave_bonus(&self) -> u32 {
+        let base_bonus = 20 + (self.current_wave as u32 * 10);
+        if self.perfect_wave {
+            base_bonus * 2  // Double bonus for perfect wave
+        } else {
+            base_bonus
+        }
+    }
+
+    fn generate_endless_wave(&mut self) {
+        // Generate progressively harder waves
+        let wave_num = self.current_wave + 1;
+        let difficulty = wave_num as u32;
+
+        let mut enemies = vec![];
+
+        // Base enemies scale with wave
+        enemies.push((EnemyType::Basic, 5 + difficulty * 2));
+        enemies.push((EnemyType::Fast, difficulty * 2));
+
+        // Tanks appear more frequently
+        if wave_num > 2 {
+            enemies.push((EnemyType::Tank, difficulty));
+        }
+
+        // Armored
+        if wave_num > 4 {
+            enemies.push((EnemyType::Armored, difficulty / 2));
+        }
+
+        // Flying
+        if wave_num > 6 {
+            enemies.push((EnemyType::Flying, difficulty / 2));
+        }
+
+        // Boss every 5 waves
+        if wave_num % 5 == 0 {
+            enemies.push((EnemyType::Boss, wave_num as u32 / 5));
+        }
+
+        let spawn_delay = (0.8 - (wave_num as f32 * 0.02)).max(0.3);
+
+        self.waves.push(Wave {
+            enemies,
+            spawn_delay,
+        });
+    }
+
+    pub fn toggle_endless_mode(&mut self) {
+        self.endless_mode = !self.endless_mode;
     }
 }
 
@@ -237,6 +387,8 @@ fn reset_wave_manager(mut wave_manager: ResMut<WaveManager>) {
 pub struct EnemyKilledEvent {
     pub enemy: Entity,
     pub reward: u32,
+    pub position: Vec3,
+    pub size: f32,
 }
 
 #[derive(Event)]
@@ -345,9 +497,19 @@ fn enemy_movement(
             continue;
         }
 
-        let (next_x, next_y) = map.path[enemy.path_index + 1];
-        let target_pos = GameMap::grid_to_world(next_x, next_y);
         let current_pos = transform.translation.truncate();
+
+        // Flying enemies take shortcuts - skip to a waypoint further ahead
+        let target_index = if enemy.enemy_type.is_flying() {
+            // Skip up to 5 waypoints ahead (creates diagonal movement)
+            let skip = 5.min(map.path.len() - 1 - enemy.path_index);
+            enemy.path_index + skip
+        } else {
+            enemy.path_index + 1
+        };
+
+        let (next_x, next_y) = map.path[target_index];
+        let target_pos = GameMap::grid_to_world(next_x, next_y);
 
         let direction = (target_pos - current_pos).normalize_or_zero();
         let movement = direction * enemy.speed * time.delta_seconds();
@@ -356,22 +518,25 @@ fn enemy_movement(
         transform.translation.y += movement.y;
 
         // Check if reached next waypoint
-        if current_pos.distance(target_pos) < 5.0 {
-            enemy.path_index += 1;
+        let reach_distance = if enemy.enemy_type.is_flying() { 15.0 } else { 5.0 };
+        if current_pos.distance(target_pos) < reach_distance {
+            enemy.path_index = target_index;
         }
     }
 }
 
 fn enemy_health_check(
-    mut enemies: Query<(Entity, &mut Enemy)>,
+    mut enemies: Query<(Entity, &mut Enemy, &Transform)>,
     mut killed_events: EventWriter<EnemyKilledEvent>,
 ) {
-    for (entity, mut enemy) in &mut enemies {
+    for (entity, mut enemy, transform) in &mut enemies {
         if enemy.health <= 0.0 && !enemy.marked_dead {
             enemy.marked_dead = true;
             killed_events.send(EnemyKilledEvent {
                 enemy: entity,
                 reward: enemy.reward,
+                position: transform.translation,
+                size: enemy.enemy_type.size(),
             });
         }
     }
@@ -379,21 +544,37 @@ fn enemy_health_check(
 
 fn update_health_bars(
     enemies: Query<(&Enemy, &Transform)>,
-    mut health_bars: Query<(&HealthBar, &mut Transform), Without<Enemy>>,
-    mut health_fills: Query<(&HealthBarFill, &mut Transform, &mut Sprite), (Without<Enemy>, Without<HealthBar>)>,
+    mut health_bars: Query<(&HealthBar, &mut Transform, &mut Visibility), Without<Enemy>>,
+    mut health_fills: Query<(&HealthBarFill, &mut Transform, &mut Sprite, &mut Visibility), (Without<Enemy>, Without<HealthBar>)>,
 ) {
-    for (health_bar, mut bar_transform) in &mut health_bars {
+    for (health_bar, mut bar_transform, mut visibility) in &mut health_bars {
         if let Ok((enemy, enemy_transform)) = enemies.get(health_bar.enemy) {
             let size = enemy.enemy_type.size();
+            let health_pct = enemy.health / enemy.max_health;
+
+            // Cull health bars for full-health enemies (optimization + cleaner visuals)
+            *visibility = if health_pct >= 1.0 {
+                Visibility::Hidden
+            } else {
+                Visibility::Inherited
+            };
+
             bar_transform.translation.x = enemy_transform.translation.x;
             bar_transform.translation.y = enemy_transform.translation.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET;
         }
     }
 
-    for (health_fill, mut fill_transform, mut sprite) in &mut health_fills {
+    for (health_fill, mut fill_transform, mut sprite, mut visibility) in &mut health_fills {
         if let Ok((enemy, enemy_transform)) = enemies.get(health_fill.enemy) {
             let size = enemy.enemy_type.size();
             let health_pct = (enemy.health / enemy.max_health).max(0.0);
+
+            // Cull health bars for full-health enemies
+            *visibility = if health_pct >= 1.0 {
+                Visibility::Hidden
+            } else {
+                Visibility::Inherited
+            };
 
             fill_transform.translation.x = enemy_transform.translation.x;
             fill_transform.translation.y = enemy_transform.translation.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET;
@@ -422,7 +603,26 @@ fn handle_enemy_killed(
 ) {
     for event in events.read() {
         economy.gold += event.reward;
+        economy.score += event.reward;
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
+
+        // Spawn death effect
+        commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: GameColors::DEATH_EFFECT,
+                    custom_size: Some(Vec2::splat(event.size)),
+                    ..default()
+                },
+                transform: Transform::from_translation(event.position.truncate().extend(3.9)),
+                ..default()
+            },
+            DeathEffect {
+                lifetime: Timer::from_seconds(0.3, TimerMode::Once),
+                initial_size: event.size,
+            },
+            GameEntity,
+        ));
 
         // Despawn enemy
         if let Some(entity_commands) = commands.get_entity(event.enemy) {
@@ -447,6 +647,28 @@ fn handle_enemy_killed(
     }
 }
 
+fn update_death_effects(
+    mut commands: Commands,
+    mut effects: Query<(Entity, &mut DeathEffect, &mut Sprite, &mut Transform)>,
+    time: Res<Time>,
+) {
+    for (entity, mut effect, mut sprite, mut transform) in &mut effects {
+        effect.lifetime.tick(time.delta());
+
+        let progress = effect.lifetime.fraction();
+        // Expand and fade out
+        let scale = 1.0 + progress * 0.5;
+        let alpha = 1.0 - progress;
+
+        transform.scale = Vec3::splat(scale);
+        sprite.color = GameColors::DEATH_EFFECT.with_alpha(alpha * 0.8);
+
+        if effect.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
 fn handle_enemy_escaped(
     mut commands: Commands,
     mut events: EventReader<EnemyEscapedEvent>,
@@ -459,6 +681,7 @@ fn handle_enemy_escaped(
     for event in events.read() {
         economy.lives = economy.lives.saturating_sub(1);
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
+        wave_manager.perfect_wave = false;
 
         // Despawn enemy
         if let Some(entity_commands) = commands.get_entity(event.enemy) {
@@ -489,16 +712,22 @@ fn handle_enemy_escaped(
 
 fn check_wave_complete(
     mut wave_manager: ResMut<WaveManager>,
+    mut economy: ResMut<PlayerEconomy>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     if wave_manager.wave_active
         && wave_manager.enemies_to_spawn.is_empty()
         && wave_manager.enemies_alive == 0
     {
+        // Award wave completion bonus
+        let bonus = wave_manager.wave_bonus();
+        economy.gold += bonus;
+        economy.score += bonus;
+
         wave_manager.wave_active = false;
         wave_manager.current_wave += 1;
 
-        if wave_manager.current_wave >= wave_manager.waves.len() {
+        if wave_manager.current_wave >= wave_manager.waves.len() && !wave_manager.endless_mode {
             wave_manager.all_waves_complete = true;
             next_state.set(GameState::Victory);
         }

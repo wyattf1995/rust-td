@@ -12,8 +12,19 @@ pub enum GameState {
     Loading,
     Menu,
     Playing,
+    Paused,
     GameOver,
     Victory,
+}
+
+/// Game speed multiplier
+#[derive(Resource)]
+pub struct GameSpeed(pub f32);
+
+impl Default for GameSpeed {
+    fn default() -> Self {
+        Self(1.0)
+    }
 }
 
 fn main() {
@@ -39,6 +50,7 @@ fn main() {
         )
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.18)))
         .init_state::<GameState>()
+        .init_resource::<GameSpeed>()
         .add_plugins((
             loading::LoadingPlugin,
             menu::MenuPlugin,

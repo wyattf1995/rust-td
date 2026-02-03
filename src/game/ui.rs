@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
-use crate::{loading::GameAssets, GameState};
+use crate::{loading::GameAssets, GameState, GameSpeed};
 use crate::graphics::shapes::GameColors;
 
 use super::{
     economy::PlayerEconomy,
     enemy::WaveManager,
-    map::GameMap,
-    tower::{PlaceTowerEvent, SelectedTowerType, TowerType},
+    map::{GameMap, HoveredTile, TileType},
+    tower::{PlaceTowerEvent, SelectedTowerType, SelectedPlacedTower, SellTowerEvent, UpgradeTowerEvent, Tower, TowerType},
     GameEntity,
 };
 
@@ -16,19 +16,31 @@ pub struct GameUiPlugin;
 impl Plugin for GameUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::Playing), setup_ui)
+            .add_systems(OnEnter(GameState::Paused), setup_pause_menu)
+            .add_systems(OnExit(GameState::Paused), cleanup_pause_menu)
             .add_systems(
                 Update,
                 (
                     update_gold_display,
                     update_lives_display,
                     update_wave_display,
+                    update_score_display,
                     tower_button_system,
                     start_wave_button,
                     handle_tile_click,
                     update_tower_selection,
                     update_info_panel,
+                    speed_button_system,
+                    pause_input,
+                    update_tower_context_menu,
+                    tower_context_buttons,
                 )
                     .run_if(in_state(GameState::Playing)),
+            )
+            .add_systems(
+                Update,
+                (pause_menu_buttons, pause_input_resume)
+                    .run_if(in_state(GameState::Paused)),
             );
     }
 }
@@ -56,6 +68,39 @@ struct InfoPanel;
 
 #[derive(Component)]
 struct InfoPanelText;
+
+#[derive(Component)]
+struct ScoreText;
+
+#[derive(Component)]
+struct SpeedButton(f32);
+
+#[derive(Component)]
+struct PauseMenu;
+
+#[derive(Component)]
+struct ResumeButton;
+
+#[derive(Component)]
+struct QuitButton;
+
+#[derive(Component)]
+struct TowerContextMenu;
+
+#[derive(Component)]
+struct SellButton;
+
+#[derive(Component)]
+struct UpgradeButton;
+
+#[derive(Component)]
+struct UpgradeCostText;
+
+#[derive(Component)]
+struct SellValueText;
+
+#[derive(Component)]
+struct EndlessModeButton;
 
 fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
     // Top bar - HUD
@@ -115,18 +160,86 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                     ));
                 });
 
-            // Center - Wave info
-            parent.spawn((
-                TextBundle::from_section(
-                    "Wave 1 / 6",
-                    TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 24.0,
-                        color: Color::WHITE,
+            // Center section - Wave info and Score
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        row_gap: Val::Px(2.0),
+                        ..default()
                     },
-                ),
-                WaveText,
-            ));
+                    ..default()
+                })
+                .with_children(|parent| {
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "Wave 1 / 10",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 22.0,
+                                color: Color::WHITE,
+                            },
+                        ),
+                        WaveText,
+                    ));
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "Score: 0",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 14.0,
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                            },
+                        ),
+                        ScoreText,
+                    ));
+                });
+
+            // Speed controls
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(4.0),
+                        ..default()
+                    },
+                    ..default()
+                })
+                .with_children(|parent| {
+                    for speed in [1.0, 2.0, 3.0] {
+                        parent
+                            .spawn((
+                                ButtonBundle {
+                                    style: Style {
+                                        width: Val::Px(32.0),
+                                        height: Val::Px(28.0),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        ..default()
+                                    },
+                                    background_color: if speed == 1.0 {
+                                        GameColors::BUTTON_SELECTED.into()
+                                    } else {
+                                        GameColors::BUTTON_NORMAL.into()
+                                    },
+                                    ..default()
+                                },
+                                SpeedButton(speed),
+                            ))
+                            .with_children(|parent| {
+                                parent.spawn(TextBundle::from_section(
+                                    format!("{}x", speed as u32),
+                                    TextStyle {
+                                        font: assets.font.clone(),
+                                        font_size: 14.0,
+                                        color: Color::WHITE,
+                                    },
+                                ));
+                            });
+                    }
+                });
 
             // Right side - Lives
             parent
@@ -558,4 +671,341 @@ fn handle_tile_click(
         grid_y,
         tower_type: selected.0,
     });
+}
+
+fn update_score_display(
+    economy: Res<PlayerEconomy>,
+    mut query: Query<&mut Text, With<ScoreText>>,
+) {
+    if economy.is_changed() {
+        for mut text in &mut query {
+            text.sections[0].value = format!("Score: {}", economy.score);
+        }
+    }
+}
+
+fn speed_button_system(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor, &SpeedButton),
+        Changed<Interaction>,
+    >,
+    mut game_speed: ResMut<GameSpeed>,
+    mut all_speed_buttons: Query<(&SpeedButton, &mut BackgroundColor), Without<Interaction>>,
+    mut time: ResMut<Time<Virtual>>,
+) {
+    for (interaction, mut color, speed_button) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                game_speed.0 = speed_button.0;
+                time.set_relative_speed(speed_button.0);
+                *color = GameColors::BUTTON_SELECTED.into();
+
+                // Update all button colors
+                for (btn, mut btn_color) in &mut all_speed_buttons {
+                    if btn.0 == speed_button.0 {
+                        *btn_color = GameColors::BUTTON_SELECTED.into();
+                    } else {
+                        *btn_color = GameColors::BUTTON_NORMAL.into();
+                    }
+                }
+            }
+            Interaction::Hovered => {
+                if game_speed.0 != speed_button.0 {
+                    *color = GameColors::BUTTON_HOVER.into();
+                }
+            }
+            Interaction::None => {
+                if game_speed.0 == speed_button.0 {
+                    *color = GameColors::BUTTON_SELECTED.into();
+                } else {
+                    *color = GameColors::BUTTON_NORMAL.into();
+                }
+            }
+        }
+    }
+}
+
+fn pause_input(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if keyboard.just_pressed(KeyCode::Escape) {
+        next_state.set(GameState::Paused);
+    }
+}
+
+fn pause_input_resume(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if keyboard.just_pressed(KeyCode::Escape) {
+        next_state.set(GameState::Playing);
+    }
+}
+
+fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) {
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                background_color: Color::srgba(0.0, 0.0, 0.0, 0.7).into(),
+                ..default()
+            },
+            PauseMenu,
+        ))
+        .with_children(|parent| {
+            parent.spawn(TextBundle::from_section(
+                "PAUSED",
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 64.0,
+                    color: Color::WHITE,
+                },
+            ).with_style(Style {
+                margin: UiRect::bottom(Val::Px(40.0)),
+                ..default()
+            }));
+
+            // Resume button
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(200.0),
+                            height: Val::Px(50.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::bottom(Val::Px(10.0)),
+                            ..default()
+                        },
+                        background_color: GameColors::BUTTON_START.into(),
+                        ..default()
+                    },
+                    ResumeButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn(TextBundle::from_section(
+                        "RESUME",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 24.0,
+                            color: Color::WHITE,
+                        },
+                    ));
+                });
+
+            // Quit button
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(200.0),
+                            height: Val::Px(50.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        background_color: Color::srgb(0.5, 0.2, 0.2).into(),
+                        ..default()
+                    },
+                    QuitButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn(TextBundle::from_section(
+                        "QUIT TO MENU",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 24.0,
+                            color: Color::WHITE,
+                        },
+                    ));
+                });
+
+            // Hint text
+            parent.spawn(TextBundle::from_section(
+                "Press ESC to resume",
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 16.0,
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.5),
+                },
+            ).with_style(Style {
+                margin: UiRect::top(Val::Px(30.0)),
+                ..default()
+            }));
+        });
+}
+
+fn cleanup_pause_menu(mut commands: Commands, query: Query<Entity, With<PauseMenu>>) {
+    for entity in &query {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+fn pause_menu_buttons(
+    mut resume_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<ResumeButton>),
+    >,
+    mut quit_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<QuitButton>, Without<ResumeButton>),
+    >,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    for (interaction, mut color) in &mut resume_query {
+        match *interaction {
+            Interaction::Pressed => {
+                next_state.set(GameState::Playing);
+            }
+            Interaction::Hovered => {
+                *color = GameColors::BUTTON_START_HOVER.into();
+            }
+            Interaction::None => {
+                *color = GameColors::BUTTON_START.into();
+            }
+        }
+    }
+
+    for (interaction, mut color) in &mut quit_query {
+        match *interaction {
+            Interaction::Pressed => {
+                next_state.set(GameState::Menu);
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.6, 0.3, 0.3).into();
+            }
+            Interaction::None => {
+                *color = Color::srgb(0.5, 0.2, 0.2).into();
+            }
+        }
+    }
+}
+
+fn update_tower_context_menu(
+    hovered_tile: Res<HoveredTile>,
+    map: Res<GameMap>,
+    towers: Query<(Entity, &Tower)>,
+    mut selected_tower: ResMut<SelectedPlacedTower>,
+    mut context_menu: Query<(&mut Style, &Children), With<TowerContextMenu>>,
+    mut upgrade_text: Query<&mut Text, (With<UpgradeCostText>, Without<SellValueText>)>,
+    mut sell_text: Query<&mut Text, With<SellValueText>>,
+    windows: Query<&Window>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+) {
+    // Right-click to select a tower
+    if mouse_button.just_pressed(MouseButton::Right) {
+        if let Some((hx, hy)) = hovered_tile.position {
+            if map.tiles[hx][hy] == TileType::Tower {
+                // Find the tower at this position
+                for (entity, tower) in &towers {
+                    if tower.grid_x == hx && tower.grid_y == hy {
+                        selected_tower.0 = Some(entity);
+                        break;
+                    }
+                }
+            } else {
+                selected_tower.0 = None;
+            }
+        } else {
+            selected_tower.0 = None;
+        }
+    }
+
+    // Update context menu visibility and position
+    for (mut style, _) in &mut context_menu {
+        if let Some(tower_entity) = selected_tower.0 {
+            if let Ok((_, tower)) = towers.get(tower_entity) {
+                style.display = Display::Flex;
+
+                // Position near the tower
+                if let Ok(window) = windows.get_single() {
+                    let world_pos = GameMap::grid_to_world(tower.grid_x, tower.grid_y);
+                    // Convert to screen space (approximate)
+                    let screen_x = world_pos.x + window.width() / 2.0 + 40.0;
+                    let screen_y = window.height() / 2.0 - world_pos.y - 45.0;
+                    style.left = Val::Px(screen_x.clamp(0.0, window.width() - 130.0));
+                    style.top = Val::Px(screen_y.clamp(0.0, window.height() - 100.0));
+                }
+
+                // Update text
+                for mut text in &mut upgrade_text {
+                    if tower.can_upgrade() {
+                        text.sections[0].value = format!("Upgrade ({}g)", tower.upgrade_cost());
+                    } else {
+                        text.sections[0].value = "MAX LEVEL".to_string();
+                    }
+                }
+                for mut text in &mut sell_text {
+                    text.sections[0].value = format!("Sell ({}g)", tower.sell_value());
+                }
+            } else {
+                style.display = Display::None;
+                selected_tower.0 = None;
+            }
+        } else {
+            style.display = Display::None;
+        }
+    }
+}
+
+fn tower_context_buttons(
+    mut upgrade_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<UpgradeButton>),
+    >,
+    mut sell_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<SellButton>, Without<UpgradeButton>),
+    >,
+    selected_tower: Res<SelectedPlacedTower>,
+    towers: Query<&Tower>,
+    economy: Res<PlayerEconomy>,
+    mut upgrade_events: EventWriter<UpgradeTowerEvent>,
+    mut sell_events: EventWriter<SellTowerEvent>,
+    mut selected_placed: ResMut<SelectedPlacedTower>,
+) {
+    for (interaction, mut color) in &mut upgrade_query {
+        match *interaction {
+            Interaction::Pressed => {
+                if let Some(tower_entity) = selected_tower.0 {
+                    if let Ok(tower) = towers.get(tower_entity) {
+                        if tower.can_upgrade() && economy.gold >= tower.upgrade_cost() {
+                            upgrade_events.send(UpgradeTowerEvent { tower: tower_entity });
+                        }
+                    }
+                }
+            }
+            Interaction::Hovered => {
+                *color = GameColors::BUTTON_HOVER.into();
+            }
+            Interaction::None => {
+                *color = GameColors::BUTTON_NORMAL.into();
+            }
+        }
+    }
+
+    for (interaction, mut color) in &mut sell_query {
+        match *interaction {
+            Interaction::Pressed => {
+                if let Some(tower_entity) = selected_tower.0 {
+                    sell_events.send(SellTowerEvent { tower: tower_entity });
+                    selected_placed.0 = None;
+                }
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.7, 0.3, 0.3).into();
+            }
+            Interaction::None => {
+                *color = Color::srgb(0.6, 0.2, 0.2).into();
+            }
+        }
+    }
 }
