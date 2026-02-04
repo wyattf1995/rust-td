@@ -304,7 +304,9 @@ impl Tower {
         self.damage = self.tower_type.damage() * damage_mult;
         self.range = self.tower_type.range() * range_mult;
         let attack_speed = self.tower_type.attack_speed() * speed_mult;
-        self.attack_cooldown = Timer::from_seconds(1.0 / attack_speed, TimerMode::Repeating);
+        // For towers that don't attack (like Buff), use a dummy timer
+        let cooldown_secs = if attack_speed > 0.0 { 1.0 / attack_speed } else { 1.0 };
+        self.attack_cooldown = Timer::from_seconds(cooldown_secs, TimerMode::Repeating);
     }
 
     /// Calculate stats for next level (for preview)
