@@ -49,12 +49,12 @@ pub enum EnemyType {
 impl EnemyType {
     pub fn health(&self) -> f32 {
         match self {
-            EnemyType::Basic => 100.0,
-            EnemyType::Fast => 68.0,
-            EnemyType::Tank => 340.0,
-            EnemyType::Armored => 250.0,
-            EnemyType::Flying => 85.0,
-            EnemyType::Boss => 2000.0,
+            EnemyType::Basic => 115.0,
+            EnemyType::Fast => 78.0,
+            EnemyType::Tank => 385.0,
+            EnemyType::Armored => 285.0,
+            EnemyType::Flying => 98.0,
+            EnemyType::Boss => 2300.0,
         }
     }
 
