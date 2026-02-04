@@ -49,33 +49,33 @@ impl EnemyType {
     pub fn health(&self) -> f32 {
         match self {
             EnemyType::Basic => 100.0,
-            EnemyType::Fast => 60.0,
-            EnemyType::Tank => 300.0,
-            EnemyType::Armored => 200.0,
-            EnemyType::Flying => 80.0,
-            EnemyType::Boss => 1000.0,
+            EnemyType::Fast => 70.0,
+            EnemyType::Tank => 400.0,
+            EnemyType::Armored => 280.0,
+            EnemyType::Flying => 90.0,
+            EnemyType::Boss => 2500.0,
         }
     }
 
     pub fn speed(&self) -> f32 {
         match self {
-            EnemyType::Basic => 50.0,
-            EnemyType::Fast => 90.0,
-            EnemyType::Tank => 30.0,
-            EnemyType::Armored => 35.0,
-            EnemyType::Flying => 70.0,
-            EnemyType::Boss => 25.0,
+            EnemyType::Basic => 55.0,
+            EnemyType::Fast => 100.0,
+            EnemyType::Tank => 32.0,
+            EnemyType::Armored => 38.0,
+            EnemyType::Flying => 85.0,
+            EnemyType::Boss => 28.0,
         }
     }
 
     pub fn reward(&self) -> u32 {
         match self {
-            EnemyType::Basic => 10,
-            EnemyType::Fast => 15,
-            EnemyType::Tank => 30,
-            EnemyType::Armored => 25,
-            EnemyType::Flying => 20,
-            EnemyType::Boss => 100,
+            EnemyType::Basic => 8,
+            EnemyType::Fast => 12,
+            EnemyType::Tank => 25,
+            EnemyType::Armored => 20,
+            EnemyType::Flying => 15,
+            EnemyType::Boss => 150,
         }
     }
 
@@ -194,84 +194,173 @@ pub struct WaveManager {
 impl Default for WaveManager {
     fn default() -> Self {
         let waves = vec![
+            // === EARLY GAME (Waves 1-5) ===
             // Wave 1: Introduction
             Wave {
-                enemies: vec![(EnemyType::Basic, 5)],
+                enemies: vec![(EnemyType::Basic, 6)],
                 spawn_delay: 1.0,
             },
-            // Wave 2: Fast enemies introduced
+            // Wave 2: A few more
             Wave {
-                enemies: vec![(EnemyType::Basic, 8), (EnemyType::Fast, 3)],
+                enemies: vec![(EnemyType::Basic, 10)],
                 spawn_delay: 0.9,
             },
-            // Wave 3: More pressure
+            // Wave 3: Fast enemies introduced
             Wave {
-                enemies: vec![(EnemyType::Basic, 10), (EnemyType::Fast, 5)],
+                enemies: vec![(EnemyType::Basic, 8), (EnemyType::Fast, 4)],
                 spawn_delay: 0.8,
             },
-            // Wave 4: Tanks introduced
+            // Wave 4: Speed pressure
             Wave {
-                enemies: vec![
-                    (EnemyType::Basic, 8),
-                    (EnemyType::Fast, 5),
-                    (EnemyType::Tank, 2),
-                ],
-                spawn_delay: 0.8,
-            },
-            // Wave 5: Armored enemies
-            Wave {
-                enemies: vec![
-                    (EnemyType::Basic, 10),
-                    (EnemyType::Fast, 6),
-                    (EnemyType::Armored, 3),
-                ],
+                enemies: vec![(EnemyType::Basic, 10), (EnemyType::Fast, 8)],
                 spawn_delay: 0.7,
             },
-            // Wave 6: Flying enemies
+            // Wave 5: Tanks introduced
             Wave {
                 enemies: vec![
                     (EnemyType::Basic, 12),
-                    (EnemyType::Fast, 8),
-                    (EnemyType::Flying, 4),
+                    (EnemyType::Fast, 6),
+                    (EnemyType::Tank, 3),
                 ],
                 spawn_delay: 0.7,
             },
-            // Wave 7: Mixed assault
+            // === MID GAME (Waves 6-10) ===
+            // Wave 6: Armored enemies
             Wave {
                 enemies: vec![
                     (EnemyType::Basic, 15),
-                    (EnemyType::Fast, 10),
-                    (EnemyType::Tank, 4),
-                    (EnemyType::Armored, 3),
+                    (EnemyType::Armored, 5),
                 ],
                 spawn_delay: 0.6,
             },
-            // Wave 8: Heavy wave
+            // Wave 7: Flying enemies
             Wave {
                 enemies: vec![
-                    (EnemyType::Tank, 6),
-                    (EnemyType::Armored, 5),
-                    (EnemyType::Flying, 4),
+                    (EnemyType::Basic, 12),
+                    (EnemyType::Fast, 10),
+                    (EnemyType::Flying, 6),
+                ],
+                spawn_delay: 0.6,
+            },
+            // Wave 8: Tank rush
+            Wave {
+                enemies: vec![
+                    (EnemyType::Tank, 8),
+                    (EnemyType::Armored, 4),
                 ],
                 spawn_delay: 0.7,
             },
-            // Wave 9: Pre-boss rush
+            // Wave 9: Speed swarm
             Wave {
                 enemies: vec![
-                    (EnemyType::Fast, 15),
+                    (EnemyType::Fast, 20),
                     (EnemyType::Flying, 8),
+                ],
+                spawn_delay: 0.4,
+            },
+            // Wave 10: Mini-boss
+            Wave {
+                enemies: vec![
+                    (EnemyType::Boss, 1),
+                    (EnemyType::Basic, 15),
+                    (EnemyType::Fast, 10),
+                ],
+                spawn_delay: 0.6,
+            },
+            // === LATE GAME (Waves 11-15) ===
+            // Wave 11: All types
+            Wave {
+                enemies: vec![
+                    (EnemyType::Basic, 20),
+                    (EnemyType::Fast, 12),
+                    (EnemyType::Tank, 5),
+                    (EnemyType::Armored, 4),
+                    (EnemyType::Flying, 6),
+                ],
+                spawn_delay: 0.5,
+            },
+            // Wave 12: Heavy assault
+            Wave {
+                enemies: vec![
+                    (EnemyType::Tank, 10),
+                    (EnemyType::Armored, 8),
+                    (EnemyType::Flying, 6),
+                ],
+                spawn_delay: 0.5,
+            },
+            // Wave 13: Speed nightmare
+            Wave {
+                enemies: vec![
+                    (EnemyType::Fast, 30),
+                    (EnemyType::Flying, 15),
+                ],
+                spawn_delay: 0.3,
+            },
+            // Wave 14: Armored battalion
+            Wave {
+                enemies: vec![
+                    (EnemyType::Armored, 15),
+                    (EnemyType::Tank, 8),
                     (EnemyType::Basic, 10),
                 ],
                 spawn_delay: 0.5,
             },
-            // Wave 10: Boss wave
+            // Wave 15: Second boss
             Wave {
                 enemies: vec![
-                    (EnemyType::Boss, 1),
-                    (EnemyType::Tank, 4),
-                    (EnemyType::Armored, 4),
+                    (EnemyType::Boss, 2),
+                    (EnemyType::Tank, 6),
+                    (EnemyType::Armored, 6),
                 ],
-                spawn_delay: 0.8,
+                spawn_delay: 0.6,
+            },
+            // === END GAME (Waves 16-20) ===
+            // Wave 16: Massive swarm
+            Wave {
+                enemies: vec![
+                    (EnemyType::Basic, 40),
+                    (EnemyType::Fast, 20),
+                ],
+                spawn_delay: 0.25,
+            },
+            // Wave 17: Elite forces
+            Wave {
+                enemies: vec![
+                    (EnemyType::Tank, 12),
+                    (EnemyType::Armored, 12),
+                    (EnemyType::Flying, 10),
+                ],
+                spawn_delay: 0.4,
+            },
+            // Wave 18: Air superiority
+            Wave {
+                enemies: vec![
+                    (EnemyType::Flying, 25),
+                    (EnemyType::Fast, 20),
+                ],
+                spawn_delay: 0.3,
+            },
+            // Wave 19: The gauntlet
+            Wave {
+                enemies: vec![
+                    (EnemyType::Basic, 30),
+                    (EnemyType::Fast, 25),
+                    (EnemyType::Tank, 10),
+                    (EnemyType::Armored, 10),
+                    (EnemyType::Flying, 10),
+                ],
+                spawn_delay: 0.3,
+            },
+            // Wave 20: Final stand - triple boss
+            Wave {
+                enemies: vec![
+                    (EnemyType::Boss, 3),
+                    (EnemyType::Tank, 8),
+                    (EnemyType::Armored, 8),
+                    (EnemyType::Flying, 8),
+                    (EnemyType::Fast, 15),
+                ],
+                spawn_delay: 0.4,
             },
         ];
 
@@ -326,9 +415,9 @@ impl WaveManager {
 
     /// Calculate wave completion bonus
     pub fn wave_bonus(&self) -> u32 {
-        let base_bonus = 20 + (self.current_wave as u32 * 10);
+        let base_bonus = 15 + (self.current_wave as u32 * 5);
         if self.perfect_wave {
-            base_bonus * 2  // Double bonus for perfect wave
+            (base_bonus as f32 * 1.5) as u32  // 50% bonus for perfect wave
         } else {
             base_bonus
         }

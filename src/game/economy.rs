@@ -22,8 +22,8 @@ pub struct PlayerEconomy {
 impl Default for PlayerEconomy {
     fn default() -> Self {
         Self {
-            gold: 200,
-            lives: 20,
+            gold: 150,
+            lives: 10,
             score: 0,
         }
     }
