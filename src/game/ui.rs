@@ -105,6 +105,12 @@ struct EndlessModeButton;
 #[derive(Component)]
 struct CloseMenuButton;
 
+#[derive(Component)]
+struct TowerStatsText;
+
+#[derive(Component)]
+struct TowerUpgradePreview;
+
 fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
     // Top bar - HUD
     commands
@@ -504,17 +510,17 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                 });
         });
 
-    // Tower context menu (initially hidden) - for upgrade/sell
+    // Tower context menu (initially hidden) - for upgrade/sell with stats
     commands
         .spawn((
             NodeBundle {
                 style: Style {
-                    width: Val::Px(130.0),
-                    height: Val::Px(120.0),
+                    width: Val::Px(180.0),
+                    height: Val::Px(220.0),
                     flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::SpaceEvenly,
-                    align_items: AlignItems::Center,
-                    padding: UiRect::all(Val::Px(8.0)),
+                    justify_content: JustifyContent::FlexStart,
+                    align_items: AlignItems::Stretch,
+                    padding: UiRect::all(Val::Px(10.0)),
                     position_type: PositionType::Absolute,
                     display: Display::None,
                     ..default()
@@ -556,16 +562,68 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                     ));
                 });
 
+            // Tower stats section
+            parent.spawn((
+                TextBundle::from_sections([
+                    TextSection::new(
+                        "Tower Stats\n",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 14.0,
+                            color: Color::WHITE,
+                        },
+                    ),
+                    TextSection::new(
+                        "DMG: 25.0\nRNG: 150\nSPD: 1.0/s\nLVL: 1/3",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 11.0,
+                            color: Color::srgba(0.8, 0.8, 0.8, 1.0),
+                        },
+                    ),
+                ]).with_style(Style {
+                    margin: UiRect::bottom(Val::Px(6.0)),
+                    ..default()
+                }),
+                TowerStatsText,
+            ));
+
+            // Upgrade preview section
+            parent.spawn((
+                TextBundle::from_sections([
+                    TextSection::new(
+                        "After Upgrade\n",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 12.0,
+                            color: GameColors::SUCCESS,
+                        },
+                    ),
+                    TextSection::new(
+                        "+25% DMG | +10% RNG | +15% SPD",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 10.0,
+                            color: Color::srgba(0.5, 0.9, 0.5, 0.9),
+                        },
+                    ),
+                ]).with_style(Style {
+                    margin: UiRect::bottom(Val::Px(8.0)),
+                    ..default()
+                }),
+                TowerUpgradePreview,
+            ));
+
             // Upgrade button
             parent
                 .spawn((
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(32.0),
+                            height: Val::Px(28.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
-                            margin: UiRect::top(Val::Px(20.0)),
+                            margin: UiRect::bottom(Val::Px(4.0)),
                             ..default()
                         },
                         background_color: GameColors::BUTTON_NORMAL.into(),
@@ -593,7 +651,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(32.0),
+                            height: Val::Px(28.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()
@@ -1015,8 +1073,10 @@ fn update_tower_context_menu(
     towers: Query<(Entity, &Tower)>,
     mut selected_tower: ResMut<SelectedPlacedTower>,
     mut context_menu: Query<(&mut Style, &Children), With<TowerContextMenu>>,
-    mut upgrade_text: Query<&mut Text, (With<UpgradeCostText>, Without<SellValueText>)>,
-    mut sell_text: Query<&mut Text, With<SellValueText>>,
+    mut upgrade_text: Query<&mut Text, (With<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>)>,
+    mut sell_text: Query<&mut Text, (With<SellValueText>, Without<UpgradeCostText>, Without<TowerStatsText>, Without<TowerUpgradePreview>)>,
+    mut stats_text: Query<&mut Text, (With<TowerStatsText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerUpgradePreview>)>,
+    mut preview_text: Query<&mut Text, (With<TowerUpgradePreview>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>)>,
     windows: Query<&Window>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -1082,21 +1142,60 @@ fn update_tower_context_menu(
                     let world_pos = GameMap::grid_to_world(tower.grid_x, tower.grid_y);
                     // Convert to screen space (approximate)
                     let screen_x = world_pos.x + window.width() / 2.0 + 40.0;
-                    let screen_y = window.height() / 2.0 - world_pos.y - 45.0;
-                    style.left = Val::Px(screen_x.clamp(0.0, window.width() - 130.0));
-                    style.top = Val::Px(screen_y.clamp(0.0, window.height() - 100.0));
+                    let screen_y = window.height() / 2.0 - world_pos.y - 60.0;
+                    style.left = Val::Px(screen_x.clamp(0.0, window.width() - 180.0));
+                    style.top = Val::Px(screen_y.clamp(0.0, window.height() - 220.0));
                 }
 
-                // Update text
+                // Calculate attack speed (attacks per second)
+                let attack_speed = tower.tower_type.attack_speed() * (1.0 + 0.15 * (tower.level - 1) as f32);
+
+                // Update stats text
+                for mut text in &mut stats_text {
+                    text.sections[0].value = format!("{} Lv{}\n", tower.tower_type.name(), tower.level);
+                    text.sections[1].value = format!(
+                        "DMG: {:.0}\nRNG: {:.0}\nSPD: {:.1}/s",
+                        tower.damage,
+                        tower.range,
+                        attack_speed
+                    );
+                }
+
+                // Update upgrade preview text
+                for mut text in &mut preview_text {
+                    if tower.can_upgrade() {
+                        let next_damage = tower.tower_type.damage() * (1.0 + 0.25 * tower.level as f32);
+                        let next_range = tower.tower_type.range() * (1.0 + 0.1 * tower.level as f32);
+                        let next_speed = tower.tower_type.attack_speed() * (1.0 + 0.15 * tower.level as f32);
+                        text.sections[0].value = format!("Lv{} Stats\n", tower.level + 1);
+                        text.sections[1].value = format!(
+                            "DMG: {:.0} (+{:.0})\nRNG: {:.0} (+{:.0})\nSPD: {:.2}/s (+{:.2})",
+                            next_damage, next_damage - tower.damage,
+                            next_range, next_range - tower.range,
+                            next_speed, next_speed - attack_speed
+                        );
+                    } else {
+                        text.sections[0].value = "MAX LEVEL\n".to_string();
+                        text.sections[1].value = "Fully upgraded!".to_string();
+                    }
+                }
+
+                // Update button text
                 for mut text in &mut upgrade_text {
                     if tower.can_upgrade() {
-                        text.sections[0].value = format!("Upgrade [U] ({}g)", tower.upgrade_cost());
+                        let can_afford = economy.gold >= tower.upgrade_cost();
+                        let cost_str = format!("{}g", tower.upgrade_cost());
+                        text.sections[0].value = if can_afford {
+                            format!("Upgrade [U] ({})", cost_str)
+                        } else {
+                            format!("Need {} gold", cost_str)
+                        };
                     } else {
                         text.sections[0].value = "MAX LEVEL".to_string();
                     }
                 }
                 for mut text in &mut sell_text {
-                    text.sections[0].value = format!("Sell [S] ({}g)", tower.sell_value());
+                    text.sections[0].value = format!("Sell [S] (+{}g)", tower.sell_value());
                 }
             } else {
                 style.display = Display::None;
