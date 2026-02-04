@@ -23,6 +23,9 @@ impl GameColors {
     pub const TOWER_SLOW: Color = Color::srgb(0.4, 0.8, 0.9);
     pub const TOWER_SNIPER: Color = Color::srgb(0.6, 0.2, 0.6);  // Purple
     pub const TOWER_RAPID: Color = Color::srgb(0.9, 0.8, 0.2);   // Yellow
+    pub const TOWER_CHAIN: Color = Color::srgb(0.3, 0.9, 1.0);   // Electric cyan
+    pub const TOWER_POISON: Color = Color::srgb(0.4, 0.8, 0.2);  // Toxic green
+    pub const TOWER_BUFF: Color = Color::srgb(1.0, 0.85, 0.4);   // Golden
     pub const TOWER_BARREL: Color = Color::srgb(0.2, 0.2, 0.3);
 
     // Enemy colors
@@ -54,6 +57,8 @@ impl GameColors {
     pub const PROJECTILE_SLOW: Color = Color::srgb(0.6, 0.9, 1.0);
     pub const PROJECTILE_SNIPER: Color = Color::srgb(0.8, 0.4, 0.9);  // Purple
     pub const PROJECTILE_RAPID: Color = Color::srgb(1.0, 0.9, 0.3);   // Yellow
+    pub const PROJECTILE_CHAIN: Color = Color::srgb(0.4, 0.95, 1.0);  // Electric blue
+    pub const PROJECTILE_POISON: Color = Color::srgb(0.5, 0.9, 0.3);  // Toxic green
 
     // UI button colors
     pub const BUTTON_NORMAL: Color = Color::srgb(0.2, 0.2, 0.3);
@@ -117,4 +122,8 @@ impl ShapeSizes {
     pub const DAMAGE_TEXT_SIZE: f32 = 16.0;
     pub const MUZZLE_FLASH: f32 = 15.0;
     pub const DEATH_EFFECT: f32 = 40.0;
+
+    // New tower effect sizes
+    pub const CHAIN_BOUNCE_RANGE: f32 = 100.0;
+    pub const BUFF_AURA_RANGE: f32 = 120.0;
 }

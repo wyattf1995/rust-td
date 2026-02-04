@@ -28,13 +28,12 @@ pub struct HoveredTile {
     pub position: Option<(usize, usize)>,
 }
 
-/// Grid dimensions - reduced height to avoid UI overlap
-pub const GRID_WIDTH: usize = 16;
-pub const GRID_HEIGHT: usize = 10;
+/// Grid dimensions - larger grid for more strategic options
+pub const GRID_WIDTH: usize = 18;
+pub const GRID_HEIGHT: usize = 11;
 pub const TILE_SIZE: f32 = ShapeSizes::TILE;
-/// Vertical offset to center grid between header (50px) and footer (~120px)
-/// Footer is 70px taller, so shift grid up by 35px
-pub const GRID_Y_OFFSET: f32 = 35.0;
+/// Vertical offset to center grid between header (50px) and footer (~115px)
+pub const GRID_Y_OFFSET: f32 = 28.0;
 
 /// Terrain types for visual variety
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -241,8 +240,8 @@ impl GameMap {
         let mut rng = rand::thread_rng();
         let terrain_types = [TerrainType::Rock, TerrainType::Water, TerrainType::Forest, TerrainType::Crystal];
 
-        // Choose 2-4 terrain clusters
-        let num_clusters = rng.gen_range(2..5);
+        // Choose 3-6 terrain clusters for denser map
+        let num_clusters = rng.gen_range(3..7);
 
         for _ in 0..num_clusters {
             // Pick a random center point
@@ -252,8 +251,8 @@ impl GameMap {
             // Pick a terrain type
             let terrain = terrain_types[rng.gen_range(0..terrain_types.len())];
 
-            // Create a cluster of 3-8 tiles
-            let cluster_size = rng.gen_range(3..9);
+            // Create a cluster of 4-10 tiles
+            let cluster_size = rng.gen_range(4..11);
             let mut placed = 0;
             let mut attempts = 0;
 
@@ -279,7 +278,7 @@ impl GameMap {
         }
 
         // Add some scattered individual obstacles
-        let scattered = rng.gen_range(5..13);
+        let scattered = rng.gen_range(8..16);
         for _ in 0..scattered {
             let x = rng.gen_range(0..GRID_WIDTH);
             let y = rng.gen_range(0..GRID_HEIGHT);

@@ -3,6 +3,8 @@ use bevy::prelude::*;
 use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
 
+use crate::loading::GameAssets;
+
 use super::{
     economy::PlayerEconomy,
     enemy::Enemy,
@@ -29,10 +31,13 @@ impl Plugin for TowerPlugin {
                     handle_tower_selling,
                     handle_tower_upgrade,
                     tower_targeting,
+                    update_buff_auras,
                     tower_attack,
                     update_tower_visuals,
                     update_range_indicators,
                     update_muzzle_flashes,
+                    update_level_badges,
+                    update_buff_aura_visuals,
                     tower_hotkeys,
                 )
                     .run_if(in_state(GameState::Playing)),
@@ -104,6 +109,9 @@ pub enum TowerType {
     Slow,   // Slows enemies
     Sniper, // Long range, high damage, slow
     Rapid,  // Short range, fast attacks
+    Chain,  // Lightning bounces between enemies
+    Poison, // Deals damage over time
+    Buff,   // Boosts nearby towers (doesn't attack)
 }
 
 impl TowerType {
@@ -114,6 +122,9 @@ impl TowerType {
             TowerType::Slow => 75,
             TowerType::Sniper => 150,
             TowerType::Rapid => 80,
+            TowerType::Chain => 120,
+            TowerType::Poison => 90,
+            TowerType::Buff => 200,
         }
     }
 
@@ -124,6 +135,9 @@ impl TowerType {
             TowerType::Slow => 10.0,
             TowerType::Sniper => 80.0,
             TowerType::Rapid => 8.0,
+            TowerType::Chain => 30.0,   // Per hit, bounces at 70%
+            TowerType::Poison => 12.0,  // Initial + DOT
+            TowerType::Buff => 0.0,     // Doesn't attack
         }
     }
 
@@ -134,6 +148,9 @@ impl TowerType {
             TowerType::Slow => 130.0,
             TowerType::Sniper => 280.0,
             TowerType::Rapid => 100.0,
+            TowerType::Chain => 140.0,
+            TowerType::Poison => 130.0,
+            TowerType::Buff => 120.0,   // Aura range
         }
     }
 
@@ -144,6 +161,9 @@ impl TowerType {
             TowerType::Slow => 1.5,
             TowerType::Sniper => 0.4,
             TowerType::Rapid => 4.0,
+            TowerType::Chain => 0.8,
+            TowerType::Poison => 1.2,
+            TowerType::Buff => 0.0,     // No attacks
         }
     }
 
@@ -154,6 +174,9 @@ impl TowerType {
             TowerType::Slow => GameColors::TOWER_SLOW,
             TowerType::Sniper => GameColors::TOWER_SNIPER,
             TowerType::Rapid => GameColors::TOWER_RAPID,
+            TowerType::Chain => GameColors::TOWER_CHAIN,
+            TowerType::Poison => GameColors::TOWER_POISON,
+            TowerType::Buff => GameColors::TOWER_BUFF,
         }
     }
 
@@ -164,6 +187,9 @@ impl TowerType {
             TowerType::Slow => "Slow",
             TowerType::Sniper => "Sniper",
             TowerType::Rapid => "Rapid",
+            TowerType::Chain => "Chain",
+            TowerType::Poison => "Poison",
+            TowerType::Buff => "Buff",
         }
     }
 
@@ -174,7 +200,15 @@ impl TowerType {
             TowerType::Slow => "Slows enemy movement",
             TowerType::Sniper => "Long range, high damage",
             TowerType::Rapid => "Fast attacks, short range",
+            TowerType::Chain => "Lightning bounces 3 times",
+            TowerType::Poison => "Deals damage over time",
+            TowerType::Buff => "+25% DMG to nearby towers",
         }
+    }
+
+    /// Whether this tower can attack enemies
+    pub fn can_attack(&self) -> bool {
+        !matches!(self, TowerType::Buff)
     }
 }
 
@@ -313,6 +347,25 @@ pub struct TowerBarrel {
     pub tower: Entity,
 }
 
+/// Tower level badge (shows upgrade level)
+#[derive(Component)]
+pub struct TowerLevelBadge {
+    pub tower: Entity,
+}
+
+/// Buff aura visual indicator
+#[derive(Component)]
+pub struct BuffAuraIndicator {
+    pub tower: Entity,
+}
+
+/// Tracks if a tower is being buffed
+#[derive(Component, Default)]
+pub struct BuffedStatus {
+    pub damage_multiplier: f32,
+    pub speed_multiplier: f32,
+}
+
 /// Event to place a tower
 #[derive(Event)]
 pub struct PlaceTowerEvent {
@@ -326,6 +379,7 @@ fn handle_tower_placement(
     mut events: EventReader<PlaceTowerEvent>,
     mut map: ResMut<GameMap>,
     mut economy: ResMut<PlayerEconomy>,
+    assets: Res<GameAssets>,
 ) {
     for event in events.read() {
         let cost = event.tower_type.cost();
@@ -392,6 +446,44 @@ fn handle_tower_placement(
             TowerBarrel { tower: tower_entity },
             GameEntity,
         ));
+
+        // Spawn level badge (bottom-right corner of tower)
+        let badge_offset = Vec2::new(12.0, -12.0);
+        commands.spawn((
+            Text2dBundle {
+                text: Text::from_section(
+                    "1",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 14.0,
+                        color: Color::WHITE,
+                    },
+                ).with_justify(JustifyText::Center),
+                transform: Transform::from_translation(
+                    (pos + badge_offset).extend(3.5)
+                ),
+                ..default()
+            },
+            TowerLevelBadge { tower: tower_entity },
+            GameEntity,
+        ));
+
+        // Spawn buff aura indicator for buff towers
+        if event.tower_type == TowerType::Buff {
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: Color::srgba(1.0, 0.85, 0.3, 0.15),
+                        custom_size: Some(Vec2::splat(ShapeSizes::BUFF_AURA_RANGE * 2.0)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(pos.extend(1.2)),
+                    ..default()
+                },
+                BuffAuraIndicator { tower: tower_entity },
+                GameEntity,
+            ));
+        }
     }
 }
 
@@ -457,12 +549,17 @@ fn tower_targeting(
 
 fn tower_attack(
     mut commands: Commands,
-    mut towers: Query<(&mut Tower, &Transform)>,
+    mut towers: Query<(&mut Tower, &Transform, Option<&BuffedStatus>)>,
     enemies: Query<&Transform, With<Enemy>>,
     time: Res<Time>,
     mut projectile_events: EventWriter<SpawnProjectileEvent>,
 ) {
-    for (mut tower, tower_transform) in &mut towers {
+    for (mut tower, tower_transform, buff_status) in &mut towers {
+        // Buff towers don't attack
+        if !tower.tower_type.can_attack() {
+            continue;
+        }
+
         tower.attack_cooldown.tick(time.delta());
 
         if let Some(target) = tower.target {
@@ -470,18 +567,28 @@ fn tower_attack(
                 if let Ok(_enemy_transform) = enemies.get(target) {
                     let start = tower_transform.translation.truncate();
 
+                    // Apply buff multiplier to damage
+                    let damage_mult = buff_status.map(|b| b.damage_multiplier).unwrap_or(1.0);
+                    let final_damage = tower.damage * damage_mult;
+
                     projectile_events.send(SpawnProjectileEvent {
                         start,
                         target,
-                        damage: tower.damage,
+                        damage: final_damage,
                         tower_type: tower.tower_type,
                     });
 
-                    // Spawn muzzle flash
+                    // Spawn muzzle flash (different color for different tower types)
+                    let flash_color = match tower.tower_type {
+                        TowerType::Chain => GameColors::PROJECTILE_CHAIN,
+                        TowerType::Poison => GameColors::PROJECTILE_POISON,
+                        _ => GameColors::MUZZLE_FLASH,
+                    };
+
                     commands.spawn((
                         SpriteBundle {
                             sprite: Sprite {
-                                color: GameColors::MUZZLE_FLASH,
+                                color: flash_color,
                                 custom_size: Some(Vec2::splat(ShapeSizes::MUZZLE_FLASH)),
                                 ..default()
                             },
@@ -553,6 +660,8 @@ fn handle_tower_selling(
     towers: Query<&Tower>,
     range_indicators: Query<(Entity, &RangeIndicator)>,
     barrels: Query<(Entity, &TowerBarrel)>,
+    badges: Query<(Entity, &TowerLevelBadge)>,
+    buff_indicators: Query<(Entity, &BuffAuraIndicator)>,
 ) {
     for event in events.read() {
         if let Ok(tower) = towers.get(event.tower) {
@@ -575,6 +684,20 @@ fn handle_tower_selling(
             // Despawn barrel
             for (entity, barrel) in &barrels {
                 if barrel.tower == event.tower {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
+
+            // Despawn level badge
+            for (entity, badge) in &badges {
+                if badge.tower == event.tower {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
+
+            // Despawn buff aura indicator
+            for (entity, indicator) in &buff_indicators {
+                if indicator.tower == event.tower {
                     commands.entity(entity).despawn_recursive();
                 }
             }
@@ -637,7 +760,7 @@ fn tower_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut selected: ResMut<SelectedTowerType>,
 ) {
-    // Number keys 1-5 select tower types
+    // Number keys 1-8 select tower types
     if keyboard.just_pressed(KeyCode::Digit1) {
         selected.0 = TowerType::Basic;
     } else if keyboard.just_pressed(KeyCode::Digit2) {
@@ -648,5 +771,101 @@ fn tower_hotkeys(
         selected.0 = TowerType::Sniper;
     } else if keyboard.just_pressed(KeyCode::Digit5) {
         selected.0 = TowerType::Rapid;
+    } else if keyboard.just_pressed(KeyCode::Digit6) {
+        selected.0 = TowerType::Chain;
+    } else if keyboard.just_pressed(KeyCode::Digit7) {
+        selected.0 = TowerType::Poison;
+    } else if keyboard.just_pressed(KeyCode::Digit8) {
+        selected.0 = TowerType::Buff;
+    }
+}
+
+fn update_level_badges(
+    towers: Query<(&Tower, &Transform)>,
+    mut badges: Query<(&TowerLevelBadge, &mut Text, &mut Transform), Without<Tower>>,
+) {
+    for (badge, mut text, mut badge_transform) in &mut badges {
+        if let Ok((tower, tower_transform)) = towers.get(badge.tower) {
+            // Update badge text to show current level
+            text.sections[0].value = format!("{}", tower.level);
+
+            // Keep badge position synced with tower (bottom-right corner)
+            let badge_offset = Vec2::new(12.0, -12.0);
+            badge_transform.translation.x = tower_transform.translation.x + badge_offset.x;
+            badge_transform.translation.y = tower_transform.translation.y + badge_offset.y;
+        }
+    }
+}
+
+/// Update buff status for all towers based on nearby buff towers
+fn update_buff_auras(
+    mut commands: Commands,
+    buff_towers: Query<(&Tower, &Transform)>,
+    mut other_towers: Query<(Entity, &Tower, &Transform, Option<&mut BuffedStatus>)>,
+) {
+    // Collect buff tower positions and ranges
+    let buff_sources: Vec<(Vec2, f32)> = buff_towers
+        .iter()
+        .filter(|(t, _)| t.tower_type == TowerType::Buff)
+        .map(|(t, transform)| (transform.translation.truncate(), t.range))
+        .collect();
+
+    // Update buff status for each tower
+    for (entity, tower, transform, buff_status) in &mut other_towers {
+        // Skip buff towers themselves
+        if tower.tower_type == TowerType::Buff {
+            continue;
+        }
+
+        let tower_pos = transform.translation.truncate();
+
+        // Check if tower is in range of any buff tower
+        let mut total_buff = 0.0;
+        for (buff_pos, buff_range) in &buff_sources {
+            if tower_pos.distance(*buff_pos) <= *buff_range {
+                // Each buff tower adds 25% damage (additive)
+                total_buff += 0.25;
+            }
+        }
+
+        if total_buff > 0.0 {
+            // Tower is being buffed
+            let new_status = BuffedStatus {
+                damage_multiplier: 1.0 + total_buff,
+                speed_multiplier: 1.0 + total_buff * 0.4, // 10% speed per buff tower
+            };
+            if let Some(mut status) = buff_status {
+                *status = new_status;
+            } else {
+                commands.entity(entity).insert(new_status);
+            }
+        } else if buff_status.is_some() {
+            // No longer buffed, remove status
+            commands.entity(entity).remove::<BuffedStatus>();
+        }
+    }
+}
+
+/// Visual pulse effect for buff aura indicators
+fn update_buff_aura_visuals(
+    towers: Query<(&Tower, &Transform)>,
+    mut indicators: Query<(&BuffAuraIndicator, &mut Sprite, &mut Transform), Without<Tower>>,
+    time: Res<Time>,
+) {
+    let pulse = (time.elapsed_seconds() * 2.0).sin() * 0.5 + 0.5;
+
+    for (indicator, mut sprite, mut transform) in &mut indicators {
+        if let Ok((tower, tower_transform)) = towers.get(indicator.tower) {
+            // Update position
+            transform.translation.x = tower_transform.translation.x;
+            transform.translation.y = tower_transform.translation.y;
+
+            // Update size based on tower range (which increases with upgrades)
+            sprite.custom_size = Some(Vec2::splat(tower.range * 2.0));
+
+            // Pulse alpha
+            let alpha = 0.1 + pulse * 0.08;
+            sprite.color = Color::srgba(1.0, 0.85, 0.3, alpha);
+        }
     }
 }

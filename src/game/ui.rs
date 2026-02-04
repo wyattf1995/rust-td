@@ -287,17 +287,17 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                 });
         });
 
-    // Bottom bar - Tower selection
+    // Bottom bar - Tower selection (touch-friendly)
     commands
         .spawn((
             NodeBundle {
                 style: Style {
                     width: Val::Percent(100.0),
-                    height: Val::Px(140.0),
-                    padding: UiRect::all(Val::Px(10.0)),
+                    height: Val::Px(115.0),
+                    padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(6.0), Val::Px(6.0)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
-                    column_gap: Val::Px(15.0),
+                    column_gap: Val::Px(4.0),
                     position_type: PositionType::Absolute,
                     bottom: Val::Px(0.0),
                     left: Val::Px(0.0),
@@ -309,14 +309,14 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
             GameEntity,
         ))
         .with_children(|parent| {
-            // Tower buttons with detailed info
-            for tower_type in [TowerType::Basic, TowerType::Splash, TowerType::Slow, TowerType::Sniper, TowerType::Rapid] {
+            // Tower buttons - compact for mobile (8 towers now)
+            for tower_type in [TowerType::Basic, TowerType::Splash, TowerType::Slow, TowerType::Sniper, TowerType::Rapid, TowerType::Chain, TowerType::Poison, TowerType::Buff] {
                 parent
                     .spawn((
                         NodeBundle {
                             style: Style {
-                                width: Val::Px(110.0),
-                                height: Val::Px(115.0),
+                                width: Val::Px(62.0),  // Narrower to fit 8
+                                height: Val::Px(100.0),
                                 border: UiRect::all(Val::Px(2.0)),
                                 ..default()
                             },
@@ -335,7 +335,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                                         flex_direction: FlexDirection::Column,
                                         justify_content: JustifyContent::SpaceEvenly,
                                         align_items: AlignItems::Center,
-                                        padding: UiRect::all(Val::Px(8.0)),
+                                        padding: UiRect::all(Val::Px(4.0)),
                                         ..default()
                                     },
                                     background_color: GameColors::BUTTON_NORMAL.into(),
@@ -344,104 +344,62 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                                 TowerButton(tower_type),
                             ))
                             .with_children(|parent| {
-                                // Top row: Icon + Name
-                                parent
-                                    .spawn(NodeBundle {
-                                        style: Style {
-                                            flex_direction: FlexDirection::Row,
-                                            align_items: AlignItems::Center,
-                                            column_gap: Val::Px(8.0),
-                                            ..default()
-                                        },
+                                // Tower icon
+                                parent.spawn(NodeBundle {
+                                    style: Style {
+                                        width: Val::Px(28.0),
+                                        height: Val::Px(28.0),
                                         ..default()
-                                    })
-                                    .with_children(|parent| {
-                                        // Tower icon
-                                        parent.spawn(NodeBundle {
-                                            style: Style {
-                                                width: Val::Px(24.0),
-                                                height: Val::Px(24.0),
-                                                ..default()
-                                            },
-                                            background_color: tower_type.color().into(),
-                                            ..default()
-                                        });
-                                        // Tower name
-                                        parent.spawn(TextBundle::from_section(
-                                            tower_type.name(),
-                                            TextStyle {
-                                                font: assets.font.clone(),
-                                                font_size: 16.0,
-                                                color: Color::WHITE,
-                                            },
-                                        ));
-                                    });
+                                    },
+                                    background_color: tower_type.color().into(),
+                                    ..default()
+                                });
 
-                                // Cost row
+                                // Tower name
                                 parent.spawn(TextBundle::from_section(
-                                    format!("{} gold", tower_type.cost()),
+                                    tower_type.name(),
                                     TextStyle {
                                         font: assets.font.clone(),
-                                        font_size: 18.0,
+                                        font_size: 12.0,
+                                        color: Color::WHITE,
+                                    },
+                                ));
+
+                                // Cost
+                                parent.spawn(TextBundle::from_section(
+                                    format!("{}g", tower_type.cost()),
+                                    TextStyle {
+                                        font: assets.font.clone(),
+                                        font_size: 13.0,
                                         color: GameColors::GOLD,
                                     },
                                 ));
 
-                                // Stats row
-                                parent
-                                    .spawn(NodeBundle {
-                                        style: Style {
-                                            flex_direction: FlexDirection::Column,
-                                            align_items: AlignItems::Center,
-                                            row_gap: Val::Px(2.0),
-                                            ..default()
-                                        },
-                                        ..default()
-                                    })
-                                    .with_children(|parent| {
-                                        // Damage
-                                        parent.spawn(TextBundle::from_section(
-                                            format!("DMG: {:.0}", tower_type.damage()),
-                                            TextStyle {
-                                                font: assets.font.clone(),
-                                                font_size: 11.0,
-                                                color: Color::srgba(1.0, 1.0, 1.0, 0.8),
-                                            },
-                                        ));
-                                        // Range & Speed
-                                        parent.spawn(TextBundle::from_section(
-                                            format!("RNG: {:.0} | SPD: {:.1}", tower_type.range(), tower_type.attack_speed()),
-                                            TextStyle {
-                                                font: assets.font.clone(),
-                                                font_size: 10.0,
-                                                color: Color::srgba(1.0, 1.0, 1.0, 0.6),
-                                            },
-                                        ));
-                                    });
+                                // Compact stats
+                                parent.spawn(TextBundle::from_section(
+                                    format!("D:{:.0}", tower_type.damage()),
+                                    TextStyle {
+                                        font: assets.font.clone(),
+                                        font_size: 9.0,
+                                        color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                                    },
+                                ));
                             });
                     });
             }
 
-            // Spacer
-            parent.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Px(20.0),
-                    ..default()
-                },
-                ..default()
-            });
-
-            // Info panel for selected tower
+            // Info panel for selected tower (compact)
             parent
                 .spawn((
                     NodeBundle {
                         style: Style {
-                            width: Val::Px(180.0),
-                            height: Val::Px(120.0),
+                            width: Val::Px(140.0),
+                            height: Val::Px(100.0),
                             flex_direction: FlexDirection::Column,
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
-                            padding: UiRect::all(Val::Px(10.0)),
+                            padding: UiRect::all(Val::Px(6.0)),
+                            margin: UiRect::horizontal(Val::Px(4.0)),
                             ..default()
                         },
                         background_color: Color::srgba(0.1, 0.1, 0.15, 0.9).into(),
@@ -456,15 +414,15 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                                 "Selected: Basic\n",
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 14.0,
+                                    font_size: 12.0,
                                     color: Color::WHITE,
                                 },
                             ),
                             TextSection::new(
-                                "Balanced single-target\ndamage tower",
+                                "Balanced damage",
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 12.0,
+                                    font_size: 10.0,
                                     color: Color::srgba(1.0, 1.0, 1.0, 0.7),
                                 },
                             ),
@@ -473,37 +431,29 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                     ));
                 });
 
-            // Spacer
-            parent.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Px(20.0),
-                    ..default()
-                },
-                ..default()
-            });
-
-            // Start Wave button
+            // Start Wave button (touch-friendly)
             parent
                 .spawn((
                     ButtonBundle {
                         style: Style {
-                            width: Val::Px(100.0),
-                            height: Val::Px(60.0),
+                            width: Val::Px(80.0),
+                            height: Val::Px(55.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()
                         },
                         background_color: GameColors::BUTTON_START.into(),
+                        border_radius: BorderRadius::all(Val::Px(6.0)),
                         ..default()
                     },
                     StartWaveButton,
                 ))
                 .with_children(|parent| {
                     parent.spawn(TextBundle::from_section(
-                        "START\nWAVE",
+                        "START",
                         TextStyle {
                             font: assets.font.clone(),
-                            font_size: 16.0,
+                            font_size: 14.0,
                             color: Color::WHITE,
                         },
                     ));
@@ -762,8 +712,18 @@ fn update_info_panel(
     if selected.is_changed() {
         for mut text in &mut query {
             let tower_type = selected.0;
-            text.sections[0].value = format!("Selected: {}\n", tower_type.name());
-            text.sections[1].value = tower_type.description().to_string();
+            text.sections[0].value = format!("{}\n", tower_type.name());
+            // Shorter description for compact display
+            text.sections[1].value = match tower_type {
+                TowerType::Basic => "Balanced DMG",
+                TowerType::Splash => "Area damage",
+                TowerType::Slow => "Slows enemies",
+                TowerType::Sniper => "Long range",
+                TowerType::Rapid => "Fast attacks",
+                TowerType::Chain => "Bounces 3x",
+                TowerType::Poison => "DOT damage",
+                TowerType::Buff => "+25% DMG aura",
+            }.to_string();
         }
     }
 }

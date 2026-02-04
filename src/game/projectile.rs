@@ -31,6 +31,8 @@ pub struct Projectile {
     pub speed: f32,
     pub tower_type: TowerType,
     pub predicted_pos: Option<Vec2>,  // For leading shots
+    pub chain_bounces: u32,           // Remaining bounces for chain lightning
+    pub hit_enemies: Vec<Entity>,     // Enemies already hit (for chain)
 }
 
 /// Trail particle
@@ -73,6 +75,9 @@ fn spawn_projectiles(
             TowerType::Slow => GameColors::PROJECTILE_SLOW,
             TowerType::Sniper => GameColors::PROJECTILE_SNIPER,
             TowerType::Rapid => GameColors::PROJECTILE_RAPID,
+            TowerType::Chain => GameColors::PROJECTILE_CHAIN,
+            TowerType::Poison => GameColors::PROJECTILE_POISON,
+            TowerType::Buff => GameColors::PROJECTILE_BASIC, // Buff doesn't shoot
         };
 
         let size = match event.tower_type {
@@ -81,6 +86,9 @@ fn spawn_projectiles(
             TowerType::Slow => ShapeSizes::PROJECTILE_SLOW,
             TowerType::Sniper => 14.0,  // Larger sniper bullet
             TowerType::Rapid => 5.0,    // Small rapid bullets
+            TowerType::Chain => 10.0,   // Medium chain lightning
+            TowerType::Poison => 9.0,   // Poison blob
+            TowerType::Buff => 0.0,     // Buff doesn't shoot
         };
 
         let projectile_speed = 400.0;
@@ -102,6 +110,9 @@ fn spawn_projectiles(
             None
         };
 
+        // Chain lightning starts with 3 bounces
+        let chain_bounces = if event.tower_type == TowerType::Chain { 3 } else { 0 };
+
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
@@ -118,6 +129,8 @@ fn spawn_projectiles(
                 speed: projectile_speed,
                 tower_type: event.tower_type,
                 predicted_pos,
+                chain_bounces,
+                hit_enemies: vec![],
             },
             GameEntity,
         ));
@@ -176,6 +189,9 @@ fn projectile_movement(
             TowerType::Slow => GameColors::PROJECTILE_SLOW.with_alpha(0.5),
             TowerType::Sniper => GameColors::PROJECTILE_SNIPER.with_alpha(0.5),
             TowerType::Rapid => GameColors::PROJECTILE_RAPID.with_alpha(0.5),
+            TowerType::Chain => GameColors::PROJECTILE_CHAIN.with_alpha(0.6),
+            TowerType::Poison => GameColors::PROJECTILE_POISON.with_alpha(0.5),
+            TowerType::Buff => GameColors::PROJECTILE_BASIC.with_alpha(0.5),
         };
 
         commands.spawn((
@@ -202,6 +218,9 @@ fn projectile_collision(
     mut enemies: Query<(Entity, &mut Enemy, &Transform)>,
     assets: Res<GameAssets>,
 ) {
+    // Collect chain bounce data to spawn after iteration
+    let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>)> = Vec::new();
+
     // Check projectile collisions
     for (proj_entity, projectile, proj_transform) in &projectiles {
         let proj_pos = proj_transform.translation.truncate();
@@ -223,6 +242,40 @@ fn projectile_collision(
                 // Apply slow effect for slow towers
                 if projectile.tower_type == TowerType::Slow {
                     enemy.apply_slow(2.0, 0.5);
+                }
+
+                // Apply poison effect
+                if projectile.tower_type == TowerType::Poison {
+                    // 8 DPS for 4 seconds (stacks)
+                    enemy.apply_poison(8.0, 4.0);
+
+                    // Spawn poison effect
+                    commands.spawn((
+                        SpriteBundle {
+                            sprite: Sprite {
+                                color: GameColors::PROJECTILE_POISON.with_alpha(0.4),
+                                custom_size: Some(Vec2::splat(30.0)),
+                                ..default()
+                            },
+                            transform: Transform::from_translation(enemy_pos.extend(3.8)),
+                            ..default()
+                        },
+                        SplashEffect {
+                            lifetime: Timer::from_seconds(0.3, TimerMode::Once),
+                        },
+                        GameEntity,
+                    ));
+                }
+
+                // Chain lightning bouncing
+                if projectile.tower_type == TowerType::Chain && projectile.chain_bounces > 0 {
+                    let mut hit_list = projectile.hit_enemies.clone();
+                    hit_list.push(enemy_entity);
+
+                    // Find next target for bounce (30% damage reduction per bounce)
+                    let bounce_damage = projectile.damage * 0.7;
+
+                    chain_bounces.push((enemy_pos, bounce_damage, hit_list));
                 }
 
                 // Splash damage
@@ -268,6 +321,62 @@ fn projectile_collision(
         } else {
             // Target doesn't exist anymore
             commands.entity(proj_entity).despawn_recursive();
+        }
+    }
+
+    // Spawn chain bounce projectiles
+    for (origin_pos, bounce_damage, hit_list) in chain_bounces {
+        // Find nearest enemy not in hit list
+        let mut best_target: Option<(Entity, f32)> = None;
+        let bounce_range = ShapeSizes::CHAIN_BOUNCE_RANGE;
+
+        for (entity, enemy, transform) in &enemies {
+            if hit_list.contains(&entity) || enemy.marked_dead || enemy.health <= 0.0 {
+                continue;
+            }
+
+            let enemy_pos = transform.translation.truncate();
+            let dist = origin_pos.distance(enemy_pos);
+
+            if dist <= bounce_range {
+                if let Some((_, best_dist)) = best_target {
+                    if dist < best_dist {
+                        best_target = Some((entity, dist));
+                    }
+                } else {
+                    best_target = Some((entity, dist));
+                }
+            }
+        }
+
+        if let Some((next_target, _)) = best_target {
+            // Spawn chain lightning visual effect (line from origin to new target)
+            if let Ok((_, _, next_transform)) = enemies.get(next_target) {
+                let next_pos = next_transform.translation.truncate();
+
+                // Spawn a quick lightning bolt effect
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: GameColors::PROJECTILE_CHAIN.with_alpha(0.6),
+                            custom_size: Some(Vec2::splat(8.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(origin_pos.extend(4.0)),
+                        ..default()
+                    },
+                    Projectile {
+                        target: next_target,
+                        damage: bounce_damage,
+                        speed: 600.0, // Faster bounce
+                        tower_type: TowerType::Chain,
+                        predicted_pos: Some(next_pos),
+                        chain_bounces: (hit_list.len() as u32).saturating_sub(1).min(2), // Reduce bounces
+                        hit_enemies: hit_list,
+                    },
+                    GameEntity,
+                ));
+            }
         }
     }
 }

@@ -22,6 +22,7 @@ impl Plugin for EnemyPlugin {
                 (
                     wave_spawner,
                     enemy_movement,
+                    poison_tick,
                     enemy_health_check,
                     update_health_bars,
                     handle_enemy_killed,
@@ -48,12 +49,12 @@ pub enum EnemyType {
 impl EnemyType {
     pub fn health(&self) -> f32 {
         match self {
-            EnemyType::Basic => 90.0,
-            EnemyType::Fast => 60.0,
-            EnemyType::Tank => 300.0,
-            EnemyType::Armored => 220.0,
-            EnemyType::Flying => 75.0,
-            EnemyType::Boss => 1800.0,
+            EnemyType::Basic => 100.0,
+            EnemyType::Fast => 68.0,
+            EnemyType::Tank => 340.0,
+            EnemyType::Armored => 250.0,
+            EnemyType::Flying => 85.0,
+            EnemyType::Boss => 2000.0,
         }
     }
 
@@ -128,6 +129,8 @@ pub struct Enemy {
     pub path_index: usize,
     pub slow_timer: Option<Timer>,
     pub marked_dead: bool,
+    pub poison_damage: f32,         // Damage per second from poison
+    pub poison_timer: Option<Timer>, // Duration of poison effect
 }
 
 impl Enemy {
@@ -142,12 +145,21 @@ impl Enemy {
             path_index: 0,
             slow_timer: None,
             marked_dead: false,
+            poison_damage: 0.0,
+            poison_timer: None,
         }
     }
 
     pub fn apply_slow(&mut self, duration: f32, slow_factor: f32) {
         self.speed = self.base_speed * slow_factor;
         self.slow_timer = Some(Timer::from_seconds(duration, TimerMode::Once));
+    }
+
+    pub fn apply_poison(&mut self, dps: f32, duration: f32) {
+        // Stack poison damage
+        self.poison_damage += dps;
+        // Refresh or extend duration
+        self.poison_timer = Some(Timer::from_seconds(duration, TimerMode::Once));
     }
 }
 
@@ -201,9 +213,9 @@ impl WaveManager {
     pub fn start_wave(&mut self) {
         let wave_num = self.current_wave + 1;
 
-        // Calculate health multiplier: gentler scaling
-        // Wave 1: 1.0x, Wave 10: ~1.5x, Wave 20: ~2.2x, Wave 50: ~4x
-        self.health_multiplier = 1.0 + (wave_num as f32).powf(1.1) * 0.04;
+        // Calculate health multiplier: moderate scaling
+        // Wave 1: 1.0x, Wave 10: ~1.6x, Wave 20: ~2.5x, Wave 50: ~4.5x
+        self.health_multiplier = 1.0 + (wave_num as f32).powf(1.12) * 0.045;
 
         // Calculate spawn delay: starts at 1.0s, decreases to minimum 0.3s
         let spawn_delay = (1.0 - (wave_num as f32 * 0.03)).max(0.3);
@@ -499,6 +511,42 @@ fn enemy_movement(
         let reach_distance = if enemy.enemy_type.is_flying() { 15.0 } else { 5.0 };
         if current_pos.distance(target_pos) < reach_distance {
             enemy.path_index = target_index;
+        }
+    }
+}
+
+/// Apply poison damage over time
+fn poison_tick(
+    mut enemies: Query<&mut Enemy>,
+    time: Res<Time>,
+) {
+    let delta = time.delta_seconds();
+
+    for mut enemy in &mut enemies {
+        if enemy.marked_dead {
+            continue;
+        }
+
+        // Get poison info before borrowing timer mutably
+        let poison_dps = enemy.poison_damage;
+
+        // Tick timer and check if finished
+        let should_clear = if let Some(ref mut timer) = enemy.poison_timer {
+            timer.tick(time.delta());
+            timer.finished()
+        } else {
+            continue; // No poison, skip
+        };
+
+        // Apply poison damage
+        if poison_dps > 0.0 {
+            enemy.health -= poison_dps * delta;
+        }
+
+        // Clear poison when timer expires
+        if should_clear {
+            enemy.poison_damage = 0.0;
+            enemy.poison_timer = None;
         }
     }
 }
