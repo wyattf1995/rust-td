@@ -237,11 +237,13 @@ pub struct Tower {
 impl Tower {
     pub fn new(tower_type: TowerType, grid_x: usize, grid_y: usize) -> Self {
         let attack_speed = tower_type.attack_speed();
+        // For towers that don't attack (like Buff), use a dummy timer
+        let cooldown_secs = if attack_speed > 0.0 { 1.0 / attack_speed } else { 1.0 };
         Self {
             tower_type,
             range: tower_type.range(),
             damage: tower_type.damage(),
-            attack_cooldown: Timer::from_seconds(1.0 / attack_speed, TimerMode::Repeating),
+            attack_cooldown: Timer::from_seconds(cooldown_secs, TimerMode::Repeating),
             target: None,
             grid_x,
             grid_y,
@@ -493,6 +495,12 @@ fn tower_targeting(
     spatial_grid: Res<SpatialGrid>,
 ) {
     for (mut tower, tower_transform) in &mut towers {
+        // Buff towers don't target enemies
+        if !tower.tower_type.can_attack() {
+            tower.target = None;
+            continue;
+        }
+
         let tower_pos = tower_transform.translation.truncate();
 
         // Use spatial grid to get nearby entities (much faster than checking all)
