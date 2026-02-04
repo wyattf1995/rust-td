@@ -130,7 +130,7 @@ impl TowerType {
 
     pub fn damage(&self) -> f32 {
         match self {
-            TowerType::Basic => 22.0,   // Nerfed from 25
+            TowerType::Basic => 25.0,   // Restored - cost nerf is enough
             TowerType::Splash => 15.0,
             TowerType::Slow => 10.0,
             TowerType::Sniper => 80.0,
