@@ -27,7 +27,9 @@ impl Plugin for GamePlugin {
             pool::PoolPlugin,
         ))
         .add_systems(OnEnter(GameState::Playing), setup_game)
-        .add_systems(OnExit(GameState::Playing), cleanup_game)
+        // Note: Don't cleanup on exit Playing - would destroy game when pausing
+        // Cleanup happens when entering Menu instead
+        .add_systems(OnEnter(GameState::Menu), cleanup_game)
         .add_systems(OnEnter(GameState::GameOver), setup_game_over)
         .add_systems(OnExit(GameState::GameOver), cleanup_game_over)
         .add_systems(OnEnter(GameState::Victory), setup_victory)

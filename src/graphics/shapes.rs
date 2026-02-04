@@ -36,7 +36,7 @@ impl GameColors {
     pub const TILE_BLOCKED: Color = Color::srgb(0.1, 0.1, 0.15);
     pub const TILE_HOVER: Color = Color::srgb(0.25, 0.25, 0.35);
     pub const PATH_INDICATOR: Color = Color::srgba(0.4, 0.4, 0.5, 0.5);
-    pub const RANGE_INDICATOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.15);
+    pub const RANGE_INDICATOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.35);
 
     // Projectile colors
     pub const PROJECTILE_BASIC: Color = Color::srgb(0.5, 0.8, 1.0);

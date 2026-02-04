@@ -845,8 +845,10 @@ fn speed_button_system(
 fn pause_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
+    selected_tower: Res<SelectedPlacedTower>,
 ) {
-    if keyboard.just_pressed(KeyCode::Escape) {
+    // Only pause if no tower is selected (Escape deselects tower first)
+    if keyboard.just_pressed(KeyCode::Escape) && selected_tower.0.is_none() {
         next_state.set(GameState::Paused);
     }
 }
