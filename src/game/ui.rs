@@ -647,9 +647,10 @@ fn update_wave_display(
 ) {
     for mut text in &mut query {
         let current = wave_manager.current_wave + 1;
-        let total = wave_manager.total_waves();
-        let status = if wave_manager.wave_active { " (Active)" } else { "" };
-        text.sections[0].value = format!("Wave {} / {}{}", current.min(total), total, status);
+        let status = if wave_manager.wave_active { " ⚔" } else { "" };
+        // Show health multiplier as difficulty indicator
+        let difficulty = format!(" ({}x)", format!("{:.1}", wave_manager.health_multiplier));
+        text.sections[0].value = format!("Wave {}{}{}", current, difficulty, status);
     }
 }
 

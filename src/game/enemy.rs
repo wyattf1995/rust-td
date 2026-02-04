@@ -170,300 +170,174 @@ pub struct DeathEffect {
     pub initial_size: f32,
 }
 
-/// Wave configuration
-#[derive(Clone)]
-pub struct Wave {
-    pub enemies: Vec<(EnemyType, u32)>, // (type, count)
-    pub spawn_delay: f32,
-}
-
-/// Wave manager
+/// Wave manager - infinite scaling survival mode
 #[derive(Resource)]
 pub struct WaveManager {
     pub current_wave: usize,
-    pub waves: Vec<Wave>,
     pub spawn_timer: Timer,
-    pub enemies_to_spawn: Vec<EnemyType>,
+    pub enemies_to_spawn: Vec<(EnemyType, f32)>, // (type, health_multiplier)
     pub wave_active: bool,
     pub enemies_alive: u32,
-    pub all_waves_complete: bool,
-    pub endless_mode: bool,
     pub perfect_wave: bool,  // No enemies escaped this wave
+    pub health_multiplier: f32, // Scales enemy HP each wave
 }
 
 impl Default for WaveManager {
     fn default() -> Self {
-        let waves = vec![
-            // === EARLY GAME (Waves 1-5) ===
-            // Wave 1: Introduction
-            Wave {
-                enemies: vec![(EnemyType::Basic, 6)],
-                spawn_delay: 1.0,
-            },
-            // Wave 2: A few more
-            Wave {
-                enemies: vec![(EnemyType::Basic, 10)],
-                spawn_delay: 0.9,
-            },
-            // Wave 3: Fast enemies introduced
-            Wave {
-                enemies: vec![(EnemyType::Basic, 8), (EnemyType::Fast, 4)],
-                spawn_delay: 0.8,
-            },
-            // Wave 4: Speed pressure
-            Wave {
-                enemies: vec![(EnemyType::Basic, 10), (EnemyType::Fast, 8)],
-                spawn_delay: 0.7,
-            },
-            // Wave 5: Tanks introduced
-            Wave {
-                enemies: vec![
-                    (EnemyType::Basic, 12),
-                    (EnemyType::Fast, 6),
-                    (EnemyType::Tank, 3),
-                ],
-                spawn_delay: 0.7,
-            },
-            // === MID GAME (Waves 6-10) ===
-            // Wave 6: Armored enemies
-            Wave {
-                enemies: vec![
-                    (EnemyType::Basic, 15),
-                    (EnemyType::Armored, 5),
-                ],
-                spawn_delay: 0.6,
-            },
-            // Wave 7: Flying enemies
-            Wave {
-                enemies: vec![
-                    (EnemyType::Basic, 12),
-                    (EnemyType::Fast, 10),
-                    (EnemyType::Flying, 6),
-                ],
-                spawn_delay: 0.6,
-            },
-            // Wave 8: Tank rush
-            Wave {
-                enemies: vec![
-                    (EnemyType::Tank, 8),
-                    (EnemyType::Armored, 4),
-                ],
-                spawn_delay: 0.7,
-            },
-            // Wave 9: Speed swarm
-            Wave {
-                enemies: vec![
-                    (EnemyType::Fast, 20),
-                    (EnemyType::Flying, 8),
-                ],
-                spawn_delay: 0.4,
-            },
-            // Wave 10: Mini-boss
-            Wave {
-                enemies: vec![
-                    (EnemyType::Boss, 1),
-                    (EnemyType::Basic, 15),
-                    (EnemyType::Fast, 10),
-                ],
-                spawn_delay: 0.6,
-            },
-            // === LATE GAME (Waves 11-15) ===
-            // Wave 11: All types
-            Wave {
-                enemies: vec![
-                    (EnemyType::Basic, 20),
-                    (EnemyType::Fast, 12),
-                    (EnemyType::Tank, 5),
-                    (EnemyType::Armored, 4),
-                    (EnemyType::Flying, 6),
-                ],
-                spawn_delay: 0.5,
-            },
-            // Wave 12: Heavy assault
-            Wave {
-                enemies: vec![
-                    (EnemyType::Tank, 10),
-                    (EnemyType::Armored, 8),
-                    (EnemyType::Flying, 6),
-                ],
-                spawn_delay: 0.5,
-            },
-            // Wave 13: Speed nightmare
-            Wave {
-                enemies: vec![
-                    (EnemyType::Fast, 30),
-                    (EnemyType::Flying, 15),
-                ],
-                spawn_delay: 0.3,
-            },
-            // Wave 14: Armored battalion
-            Wave {
-                enemies: vec![
-                    (EnemyType::Armored, 15),
-                    (EnemyType::Tank, 8),
-                    (EnemyType::Basic, 10),
-                ],
-                spawn_delay: 0.5,
-            },
-            // Wave 15: Second boss
-            Wave {
-                enemies: vec![
-                    (EnemyType::Boss, 2),
-                    (EnemyType::Tank, 6),
-                    (EnemyType::Armored, 6),
-                ],
-                spawn_delay: 0.6,
-            },
-            // === END GAME (Waves 16-20) ===
-            // Wave 16: Massive swarm
-            Wave {
-                enemies: vec![
-                    (EnemyType::Basic, 40),
-                    (EnemyType::Fast, 20),
-                ],
-                spawn_delay: 0.25,
-            },
-            // Wave 17: Elite forces
-            Wave {
-                enemies: vec![
-                    (EnemyType::Tank, 12),
-                    (EnemyType::Armored, 12),
-                    (EnemyType::Flying, 10),
-                ],
-                spawn_delay: 0.4,
-            },
-            // Wave 18: Air superiority
-            Wave {
-                enemies: vec![
-                    (EnemyType::Flying, 25),
-                    (EnemyType::Fast, 20),
-                ],
-                spawn_delay: 0.3,
-            },
-            // Wave 19: The gauntlet
-            Wave {
-                enemies: vec![
-                    (EnemyType::Basic, 30),
-                    (EnemyType::Fast, 25),
-                    (EnemyType::Tank, 10),
-                    (EnemyType::Armored, 10),
-                    (EnemyType::Flying, 10),
-                ],
-                spawn_delay: 0.3,
-            },
-            // Wave 20: Final stand - triple boss
-            Wave {
-                enemies: vec![
-                    (EnemyType::Boss, 3),
-                    (EnemyType::Tank, 8),
-                    (EnemyType::Armored, 8),
-                    (EnemyType::Flying, 8),
-                    (EnemyType::Fast, 15),
-                ],
-                spawn_delay: 0.4,
-            },
-        ];
-
         Self {
             current_wave: 0,
-            waves,
             spawn_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
             enemies_to_spawn: Vec::new(),
             wave_active: false,
             enemies_alive: 0,
-            all_waves_complete: false,
-            endless_mode: false,
             perfect_wave: true,
+            health_multiplier: 1.0,
         }
     }
 }
 
 impl WaveManager {
+    /// Generate and start the next wave - infinite scaling
     pub fn start_wave(&mut self) {
-        if self.current_wave >= self.waves.len() {
-            if self.endless_mode {
-                // Generate endless wave
-                self.generate_endless_wave();
-            } else {
-                self.all_waves_complete = true;
-                return;
-            }
-        }
+        let wave_num = self.current_wave + 1;
 
-        let wave = &self.waves[self.current_wave];
-        self.spawn_timer = Timer::from_seconds(wave.spawn_delay, TimerMode::Repeating);
+        // Calculate health multiplier: scales with wave^1.2
+        // Wave 1: 1.0x, Wave 10: ~2.5x, Wave 20: ~4.5x, Wave 50: ~10x
+        self.health_multiplier = 1.0 + (wave_num as f32).powf(1.2) * 0.08;
 
-        // Populate enemies to spawn
-        self.enemies_to_spawn.clear();
-        for (enemy_type, count) in &wave.enemies {
-            for _ in 0..*count {
-                self.enemies_to_spawn.push(*enemy_type);
-            }
-        }
+        // Calculate spawn delay: starts at 0.9s, decreases to minimum 0.15s
+        let spawn_delay = (0.9 - (wave_num as f32 * 0.025)).max(0.15);
+        self.spawn_timer = Timer::from_seconds(spawn_delay, TimerMode::Repeating);
+
+        // Generate enemies for this wave
+        self.enemies_to_spawn = self.generate_wave_enemies(wave_num);
 
         self.wave_active = true;
         self.perfect_wave = true;
     }
 
-    pub fn total_waves(&self) -> usize {
-        if self.endless_mode {
-            self.current_wave + 1
+    /// Procedurally generate enemies for a wave
+    fn generate_wave_enemies(&self, wave_num: usize) -> Vec<(EnemyType, f32)> {
+        let mut enemies = Vec::new();
+        let multiplier = self.health_multiplier;
+
+        // Base enemy count scaling: linear + polynomial
+        let base_count = 5.0 + (wave_num as f32 * 1.5) + (wave_num as f32).powf(1.3) * 0.5;
+
+        // Determine wave type based on wave number
+        let wave_type = wave_num % 5;
+        let is_boss_wave = wave_num % 5 == 0 && wave_num > 0;
+
+        if is_boss_wave {
+            // Boss wave every 5 waves
+            let boss_count = (wave_num / 5).min(5); // Cap at 5 bosses
+            for _ in 0..boss_count {
+                enemies.push((EnemyType::Boss, multiplier));
+            }
+            // Escort enemies
+            let escort_count = (base_count * 0.6) as usize;
+            for _ in 0..escort_count / 3 {
+                enemies.push((EnemyType::Tank, multiplier));
+                enemies.push((EnemyType::Armored, multiplier));
+                enemies.push((EnemyType::Fast, multiplier));
+            }
         } else {
-            self.waves.len()
+            match wave_type {
+                1 => {
+                    // Swarm wave - lots of weak enemies
+                    let count = (base_count * 1.5) as usize;
+                    for _ in 0..count {
+                        enemies.push((EnemyType::Basic, multiplier));
+                    }
+                    if wave_num >= 3 {
+                        for _ in 0..(count / 3) {
+                            enemies.push((EnemyType::Fast, multiplier));
+                        }
+                    }
+                }
+                2 => {
+                    // Speed wave - fast and flying
+                    let count = (base_count * 0.8) as usize;
+                    for _ in 0..count {
+                        enemies.push((EnemyType::Fast, multiplier));
+                    }
+                    if wave_num >= 7 {
+                        for _ in 0..(count / 2) {
+                            enemies.push((EnemyType::Flying, multiplier));
+                        }
+                    }
+                }
+                3 => {
+                    // Tank wave - heavy enemies
+                    let count = (base_count * 0.5) as usize;
+                    if wave_num >= 5 {
+                        for _ in 0..count {
+                            enemies.push((EnemyType::Tank, multiplier));
+                        }
+                    }
+                    if wave_num >= 6 {
+                        for _ in 0..(count / 2) {
+                            enemies.push((EnemyType::Armored, multiplier));
+                        }
+                    }
+                    // Filler basics
+                    for _ in 0..count {
+                        enemies.push((EnemyType::Basic, multiplier));
+                    }
+                }
+                4 | _ => {
+                    // Mixed wave - variety
+                    let count = (base_count * 0.7) as usize;
+                    for _ in 0..count {
+                        enemies.push((EnemyType::Basic, multiplier));
+                    }
+                    for _ in 0..(count / 2) {
+                        enemies.push((EnemyType::Fast, multiplier));
+                    }
+                    if wave_num >= 5 {
+                        for _ in 0..(count / 3) {
+                            enemies.push((EnemyType::Tank, multiplier));
+                        }
+                    }
+                    if wave_num >= 6 {
+                        for _ in 0..(count / 4) {
+                            enemies.push((EnemyType::Armored, multiplier));
+                        }
+                    }
+                    if wave_num >= 7 {
+                        for _ in 0..(count / 4) {
+                            enemies.push((EnemyType::Flying, multiplier));
+                        }
+                    }
+                }
+            }
         }
+
+        // Shuffle enemies for variety (simple deterministic shuffle based on wave)
+        let len = enemies.len();
+        for i in 0..len {
+            let swap_idx = (i + wave_num * 7) % len;
+            enemies.swap(i, swap_idx);
+        }
+
+        enemies
+    }
+
+    pub fn total_waves(&self) -> usize {
+        // Infinite mode - just show current progress
+        self.current_wave + 1
     }
 
     /// Calculate wave completion bonus
     pub fn wave_bonus(&self) -> u32 {
-        let base_bonus = 15 + (self.current_wave as u32 * 5);
+        let wave = self.current_wave as u32;
+        // Bonus scales with wave but with diminishing returns
+        let base_bonus = 15 + (wave * 3) + ((wave as f32).sqrt() * 5.0) as u32;
         if self.perfect_wave {
-            (base_bonus as f32 * 1.5) as u32  // 50% bonus for perfect wave
+            (base_bonus as f32 * 1.5) as u32
         } else {
             base_bonus
         }
-    }
-
-    fn generate_endless_wave(&mut self) {
-        // Generate progressively harder waves
-        let wave_num = self.current_wave + 1;
-        let difficulty = wave_num as u32;
-
-        let mut enemies = vec![];
-
-        // Base enemies scale with wave
-        enemies.push((EnemyType::Basic, 5 + difficulty * 2));
-        enemies.push((EnemyType::Fast, difficulty * 2));
-
-        // Tanks appear more frequently
-        if wave_num > 2 {
-            enemies.push((EnemyType::Tank, difficulty));
-        }
-
-        // Armored
-        if wave_num > 4 {
-            enemies.push((EnemyType::Armored, difficulty / 2));
-        }
-
-        // Flying
-        if wave_num > 6 {
-            enemies.push((EnemyType::Flying, difficulty / 2));
-        }
-
-        // Boss every 5 waves
-        if wave_num % 5 == 0 {
-            enemies.push((EnemyType::Boss, wave_num as u32 / 5));
-        }
-
-        let spawn_delay = (0.8 - (wave_num as f32 * 0.02)).max(0.3);
-
-        self.waves.push(Wave {
-            enemies,
-            spawn_delay,
-        });
-    }
-
-    pub fn toggle_endless_mode(&mut self) {
-        self.endless_mode = !self.endless_mode;
     }
 }
 
@@ -498,11 +372,15 @@ fn wave_spawner(
     wave_manager.spawn_timer.tick(time.delta());
 
     if wave_manager.spawn_timer.just_finished() {
-        if let Some(enemy_type) = wave_manager.enemies_to_spawn.pop() {
+        if let Some((enemy_type, health_mult)) = wave_manager.enemies_to_spawn.pop() {
             // Spawn at path start
             if let Some(&(x, y)) = map.path.first() {
                 let pos = GameMap::grid_to_world(x, y);
-                let enemy = Enemy::new(enemy_type);
+                let mut enemy = Enemy::new(enemy_type);
+                // Apply health multiplier from wave scaling
+                enemy.health *= health_mult;
+                enemy.max_health *= health_mult;
+
                 let size = enemy_type.size();
                 let color = enemy_type.color();
 
@@ -802,7 +680,6 @@ fn handle_enemy_escaped(
 fn check_wave_complete(
     mut wave_manager: ResMut<WaveManager>,
     mut economy: ResMut<PlayerEconomy>,
-    mut next_state: ResMut<NextState<GameState>>,
 ) {
     if wave_manager.wave_active
         && wave_manager.enemies_to_spawn.is_empty()
@@ -816,9 +693,7 @@ fn check_wave_complete(
         wave_manager.wave_active = false;
         wave_manager.current_wave += 1;
 
-        if wave_manager.current_wave >= wave_manager.waves.len() && !wave_manager.endless_mode {
-            wave_manager.all_waves_complete = true;
-            next_state.set(GameState::Victory);
-        }
+        // No victory condition - infinite survival mode!
+        // Game continues until player loses all lives
     }
 }
