@@ -482,8 +482,9 @@ fn enemy_movement(
         }
 
         // Get current and next path positions
-        if enemy.path_index >= map.path.len() - 1 {
-            // Enemy reached the end
+        // Guard against empty path (shouldn't happen, but prevents panic)
+        if map.path.len() < 2 || enemy.path_index >= map.path.len().saturating_sub(1) {
+            // Enemy reached the end or invalid path
             escaped_events.send(EnemyEscapedEvent { enemy: entity });
             enemy.marked_dead = true;
             continue;
@@ -494,12 +495,14 @@ fn enemy_movement(
         // Flying enemies take shortcuts - skip to a waypoint further ahead
         let target_index = if enemy.enemy_type.is_flying() {
             // Skip up to 5 waypoints ahead (creates diagonal movement)
-            let skip = 5.min(map.path.len() - 1 - enemy.path_index);
+            let skip = 5.min(map.path.len().saturating_sub(1).saturating_sub(enemy.path_index));
             enemy.path_index + skip
         } else {
             enemy.path_index + 1
         };
 
+        // Bounds check before accessing path
+        let target_index = target_index.min(map.path.len().saturating_sub(1));
         let (next_x, next_y) = map.path[target_index];
         let target_pos = GameMap::grid_to_world(next_x, next_y);
 
@@ -542,7 +545,7 @@ fn poison_tick(
 
         // Apply poison damage
         if poison_dps > 0.0 {
-            enemy.health -= poison_dps * delta;
+            enemy.health = (enemy.health - poison_dps * delta).max(0.0);
         }
 
         // Clear poison when timer expires
@@ -578,7 +581,12 @@ fn update_health_bars(
     for (health_bar, mut bar_transform, mut visibility) in &mut health_bars {
         if let Ok((enemy, enemy_transform)) = enemies.get(health_bar.enemy) {
             let size = enemy.enemy_type.size();
-            let health_pct = enemy.health / enemy.max_health;
+            // Guard against division by zero
+            let health_pct = if enemy.max_health > 0.0 {
+                (enemy.health / enemy.max_health).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
 
             // Cull health bars for full-health enemies (optimization + cleaner visuals)
             *visibility = if health_pct >= 1.0 {
@@ -595,7 +603,12 @@ fn update_health_bars(
     for (health_fill, mut fill_transform, mut sprite, mut visibility) in &mut health_fills {
         if let Ok((enemy, enemy_transform)) = enemies.get(health_fill.enemy) {
             let size = enemy.enemy_type.size();
-            let health_pct = (enemy.health / enemy.max_health).max(0.0);
+            // Guard against division by zero
+            let health_pct = if enemy.max_health > 0.0 {
+                (enemy.health / enemy.max_health).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
 
             // Cull health bars for full-health enemies
             *visibility = if health_pct >= 1.0 {
