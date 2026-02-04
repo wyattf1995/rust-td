@@ -117,7 +117,7 @@ pub enum TowerType {
 impl TowerType {
     pub fn cost(&self) -> u32 {
         match self {
-            TowerType::Basic => 65,     // Nerfed from 50
+            TowerType::Basic => 60,     // Nerfed from 50, adjusted from 65
             TowerType::Splash => 100,
             TowerType::Slow => 75,
             TowerType::Sniper => 150,
