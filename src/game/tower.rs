@@ -228,36 +228,76 @@ impl Tower {
     }
 
     pub fn upgrade_cost(&self) -> u32 {
-        if self.level >= 3 {
-            return 0; // Max level
-        }
-        // Each upgrade costs 60% of base cost, increasing per level
-        (self.tower_type.cost() as f32 * 0.6 * self.level as f32) as u32
+        // Infinite upgrades with exponentially increasing cost
+        // Level 2: 50% of base, Level 3: 75%, Level 4: 112%, Level 5: 168%...
+        let base = self.tower_type.cost() as f32;
+        (base * 0.5 * (1.5_f32).powf((self.level - 1) as f32)) as u32
     }
 
     fn upgrade_cost_total(&self) -> u32 {
         // Total spent on upgrades
         let mut total = 0;
+        let base = self.tower_type.cost() as f32;
         for lvl in 1..self.level {
-            total += (self.tower_type.cost() as f32 * 0.6 * lvl as f32) as u32;
+            total += (base * 0.5 * (1.5_f32).powf((lvl - 1) as f32)) as u32;
         }
         total
     }
 
     pub fn can_upgrade(&self) -> bool {
-        self.level < 3
+        true // Infinite upgrades now!
     }
 
     pub fn upgrade(&mut self) {
-        if self.level >= 3 {
-            return;
-        }
         self.level += 1;
-        // 25% boost per level
-        self.damage = self.tower_type.damage() * (1.0 + 0.25 * (self.level - 1) as f32);
-        self.range = self.tower_type.range() * (1.0 + 0.1 * (self.level - 1) as f32);
-        let attack_speed = self.tower_type.attack_speed() * (1.0 + 0.15 * (self.level - 1) as f32);
+        // Diminishing returns: each level adds less percentage
+        // Level 2: +20%, Level 3: +15%, Level 4: +12%, Level 5: +10%...
+        let level_bonus = 0.20 / (1.0 + (self.level - 2) as f32 * 0.15);
+
+        // Calculate cumulative multiplier
+        let mut damage_mult = 1.0;
+        let mut range_mult = 1.0;
+        let mut speed_mult = 1.0;
+        for lvl in 2..=self.level {
+            let bonus = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
+            damage_mult *= 1.0 + bonus;
+            range_mult *= 1.0 + bonus * 0.4;  // Range grows slower
+            speed_mult *= 1.0 + bonus * 0.6;  // Speed grows medium
+        }
+
+        self.damage = self.tower_type.damage() * damage_mult;
+        self.range = self.tower_type.range() * range_mult;
+        let attack_speed = self.tower_type.attack_speed() * speed_mult;
         self.attack_cooldown = Timer::from_seconds(1.0 / attack_speed, TimerMode::Repeating);
+    }
+
+    /// Calculate stats for next level (for preview)
+    pub fn preview_upgrade(&self) -> (f32, f32, f32) {
+        let next_level = self.level + 1;
+        let mut damage_mult = 1.0;
+        let mut range_mult = 1.0;
+        let mut speed_mult = 1.0;
+        for lvl in 2..=next_level {
+            let bonus = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
+            damage_mult *= 1.0 + bonus;
+            range_mult *= 1.0 + bonus * 0.4;
+            speed_mult *= 1.0 + bonus * 0.6;
+        }
+        (
+            self.tower_type.damage() * damage_mult,
+            self.tower_type.range() * range_mult,
+            self.tower_type.attack_speed() * speed_mult,
+        )
+    }
+
+    /// Get current attack speed
+    pub fn attack_speed(&self) -> f32 {
+        let mut speed_mult = 1.0;
+        for lvl in 2..=self.level {
+            let bonus = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
+            speed_mult *= 1.0 + bonus * 0.6;
+        }
+        self.tower_type.attack_speed() * speed_mult
     }
 }
 

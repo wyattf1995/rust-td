@@ -32,6 +32,9 @@ pub struct HoveredTile {
 pub const GRID_WIDTH: usize = 16;
 pub const GRID_HEIGHT: usize = 10;
 pub const TILE_SIZE: f32 = ShapeSizes::TILE;
+/// Vertical offset to center grid between header (50px) and footer (~120px)
+/// Footer is 70px taller, so shift grid up by 35px
+pub const GRID_Y_OFFSET: f32 = 35.0;
 
 /// Terrain types for visual variety
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -315,7 +318,7 @@ impl GameMap {
 
         Vec2::new(
             x as f32 * TILE_SIZE + TILE_SIZE / 2.0 - offset_x,
-            y as f32 * TILE_SIZE + TILE_SIZE / 2.0 - offset_y,
+            y as f32 * TILE_SIZE + TILE_SIZE / 2.0 - offset_y + GRID_Y_OFFSET,
         )
     }
 
@@ -325,7 +328,7 @@ impl GameMap {
         let offset_y = (GRID_HEIGHT as f32 * TILE_SIZE) / 2.0;
 
         let x = ((pos.x + offset_x) / TILE_SIZE).floor() as i32;
-        let y = ((pos.y + offset_y) / TILE_SIZE).floor() as i32;
+        let y = ((pos.y + offset_y - GRID_Y_OFFSET) / TILE_SIZE).floor() as i32;
 
         if x >= 0 && x < GRID_WIDTH as i32 && y >= 0 && y < GRID_HEIGHT as i32 {
             Some((x as usize, y as usize))

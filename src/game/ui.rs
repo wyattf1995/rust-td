@@ -515,104 +515,145 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
         .spawn((
             NodeBundle {
                 style: Style {
-                    width: Val::Px(180.0),
-                    height: Val::Px(220.0),
+                    width: Val::Px(200.0),
+                    height: Val::Auto,
                     flex_direction: FlexDirection::Column,
                     justify_content: JustifyContent::FlexStart,
                     align_items: AlignItems::Stretch,
-                    padding: UiRect::all(Val::Px(10.0)),
+                    padding: UiRect::all(Val::Px(12.0)),
                     position_type: PositionType::Absolute,
                     display: Display::None,
+                    border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
-                background_color: Color::srgba(0.1, 0.1, 0.15, 0.95).into(),
+                background_color: Color::srgba(0.08, 0.08, 0.12, 0.98).into(),
+                border_color: BorderColor(Color::srgba(0.3, 0.3, 0.4, 0.8)),
+                border_radius: BorderRadius::all(Val::Px(8.0)),
                 ..default()
             },
             TowerContextMenu,
             GameEntity,
         ))
         .with_children(|parent| {
-            // Close button (X)
+            // Header with tower name and close button
             parent
-                .spawn((
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Px(20.0),
-                            height: Val::Px(20.0),
-                            position_type: PositionType::Absolute,
-                            right: Val::Px(4.0),
-                            top: Val::Px(4.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        background_color: Color::srgba(0.5, 0.2, 0.2, 0.8).into(),
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::SpaceBetween,
+                        align_items: AlignItems::Center,
+                        margin: UiRect::bottom(Val::Px(8.0)),
                         ..default()
                     },
-                    CloseMenuButton,
-                ))
+                    ..default()
+                })
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "X",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 12.0,
-                            color: Color::WHITE,
-                        },
+                    // Tower name/level will be part of stats text
+                    parent.spawn(NodeBundle::default()); // Placeholder
+
+                    // Close button (X)
+                    parent
+                        .spawn((
+                            ButtonBundle {
+                                style: Style {
+                                    width: Val::Px(22.0),
+                                    height: Val::Px(22.0),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    ..default()
+                                },
+                                background_color: Color::srgba(0.4, 0.15, 0.15, 0.9).into(),
+                                border_radius: BorderRadius::all(Val::Px(4.0)),
+                                ..default()
+                            },
+                            CloseMenuButton,
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle::from_section(
+                                "X",
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 14.0,
+                                    color: Color::WHITE,
+                                },
+                            ));
+                        });
+                });
+
+            // Tower stats section with background
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        padding: UiRect::all(Val::Px(8.0)),
+                        margin: UiRect::bottom(Val::Px(8.0)),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.15, 0.15, 0.2, 0.8).into(),
+                    border_radius: BorderRadius::all(Val::Px(4.0)),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    parent.spawn((
+                        TextBundle::from_sections([
+                            TextSection::new(
+                                "Basic Tower Lv1\n",
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 13.0,
+                                    color: Color::WHITE,
+                                },
+                            ),
+                            TextSection::new(
+                                "DMG: 25  RNG: 150  SPD: 1.0/s",
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 11.0,
+                                    color: Color::srgba(0.7, 0.8, 0.9, 1.0),
+                                },
+                            ),
+                        ]),
+                        TowerStatsText,
                     ));
                 });
 
-            // Tower stats section
-            parent.spawn((
-                TextBundle::from_sections([
-                    TextSection::new(
-                        "Tower Stats\n",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 14.0,
-                            color: Color::WHITE,
-                        },
-                    ),
-                    TextSection::new(
-                        "DMG: 25.0\nRNG: 150\nSPD: 1.0/s\nLVL: 1/3",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 11.0,
-                            color: Color::srgba(0.8, 0.8, 0.8, 1.0),
-                        },
-                    ),
-                ]).with_style(Style {
-                    margin: UiRect::bottom(Val::Px(6.0)),
-                    ..default()
-                }),
-                TowerStatsText,
-            ));
-
             // Upgrade preview section
-            parent.spawn((
-                TextBundle::from_sections([
-                    TextSection::new(
-                        "After Upgrade\n",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 12.0,
-                            color: GameColors::SUCCESS,
-                        },
-                    ),
-                    TextSection::new(
-                        "+25% DMG | +10% RNG | +15% SPD",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 10.0,
-                            color: Color::srgba(0.5, 0.9, 0.5, 0.9),
-                        },
-                    ),
-                ]).with_style(Style {
-                    margin: UiRect::bottom(Val::Px(8.0)),
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        padding: UiRect::all(Val::Px(8.0)),
+                        margin: UiRect::bottom(Val::Px(8.0)),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.1, 0.2, 0.15, 0.8).into(),
+                    border_radius: BorderRadius::all(Val::Px(4.0)),
                     ..default()
-                }),
-                TowerUpgradePreview,
-            ));
+                })
+                .with_children(|parent| {
+                    parent.spawn((
+                        TextBundle::from_sections([
+                            TextSection::new(
+                                "Next Level\n",
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 11.0,
+                                    color: GameColors::SUCCESS,
+                                },
+                            ),
+                            TextSection::new(
+                                "DMG: 30 (+5)\nRNG: 165 (+15)\nSPD: 1.2/s (+0.2)",
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 10.0,
+                                    color: Color::srgba(0.6, 0.95, 0.6, 1.0),
+                                },
+                            ),
+                        ]),
+                        TowerUpgradePreview,
+                    ));
+                });
 
             // Upgrade button
             parent
@@ -620,13 +661,14 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(28.0),
+                            height: Val::Px(32.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
-                            margin: UiRect::bottom(Val::Px(4.0)),
+                            margin: UiRect::bottom(Val::Px(6.0)),
                             ..default()
                         },
-                        background_color: GameColors::BUTTON_NORMAL.into(),
+                        background_color: Color::srgb(0.2, 0.5, 0.3).into(),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
                         ..default()
                     },
                     UpgradeButton,
@@ -634,10 +676,10 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                 .with_children(|parent| {
                     parent.spawn((
                         TextBundle::from_section(
-                            "Upgrade [U]",
+                            "Upgrade [U] - 30g",
                             TextStyle {
                                 font: assets.font.clone(),
-                                font_size: 12.0,
+                                font_size: 13.0,
                                 color: Color::WHITE,
                             },
                         ),
@@ -651,12 +693,13 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(28.0),
+                            height: Val::Px(32.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()
                         },
-                        background_color: Color::srgb(0.6, 0.2, 0.2).into(),
+                        background_color: Color::srgb(0.5, 0.2, 0.2).into(),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
                         ..default()
                     },
                     SellButton,
@@ -664,10 +707,10 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                 .with_children(|parent| {
                     parent.spawn((
                         TextBundle::from_section(
-                            "Sell [S]",
+                            "Sell [S] +37g",
                             TextStyle {
                                 font: assets.font.clone(),
-                                font_size: 12.0,
+                                font_size: 13.0,
                                 color: Color::WHITE,
                             },
                         ),
@@ -1147,55 +1190,44 @@ fn update_tower_context_menu(
                     style.top = Val::Px(screen_y.clamp(0.0, window.height() - 220.0));
                 }
 
-                // Calculate attack speed (attacks per second)
-                let attack_speed = tower.tower_type.attack_speed() * (1.0 + 0.15 * (tower.level - 1) as f32);
+                // Get current attack speed
+                let attack_speed = tower.attack_speed();
 
                 // Update stats text
                 for mut text in &mut stats_text {
                     text.sections[0].value = format!("{} Lv{}\n", tower.tower_type.name(), tower.level);
                     text.sections[1].value = format!(
-                        "DMG: {:.0}\nRNG: {:.0}\nSPD: {:.1}/s",
+                        "DMG: {:.0}  RNG: {:.0}  SPD: {:.1}/s",
                         tower.damage,
                         tower.range,
                         attack_speed
                     );
                 }
 
-                // Update upgrade preview text
+                // Update upgrade preview text using the tower's preview method
                 for mut text in &mut preview_text {
-                    if tower.can_upgrade() {
-                        let next_damage = tower.tower_type.damage() * (1.0 + 0.25 * tower.level as f32);
-                        let next_range = tower.tower_type.range() * (1.0 + 0.1 * tower.level as f32);
-                        let next_speed = tower.tower_type.attack_speed() * (1.0 + 0.15 * tower.level as f32);
-                        text.sections[0].value = format!("Lv{} Stats\n", tower.level + 1);
-                        text.sections[1].value = format!(
-                            "DMG: {:.0} (+{:.0})\nRNG: {:.0} (+{:.0})\nSPD: {:.2}/s (+{:.2})",
-                            next_damage, next_damage - tower.damage,
-                            next_range, next_range - tower.range,
-                            next_speed, next_speed - attack_speed
-                        );
-                    } else {
-                        text.sections[0].value = "MAX LEVEL\n".to_string();
-                        text.sections[1].value = "Fully upgraded!".to_string();
-                    }
+                    let (next_damage, next_range, next_speed) = tower.preview_upgrade();
+                    text.sections[0].value = format!("Level {} Preview\n", tower.level + 1);
+                    text.sections[1].value = format!(
+                        "DMG: {:.0} (+{:.0})\nRNG: {:.0} (+{:.0})\nSPD: {:.2}/s (+{:.2})",
+                        next_damage, next_damage - tower.damage,
+                        next_range, next_range - tower.range,
+                        next_speed, next_speed - attack_speed
+                    );
                 }
 
                 // Update button text
+                let upgrade_cost = tower.upgrade_cost();
+                let can_afford = economy.gold >= upgrade_cost;
                 for mut text in &mut upgrade_text {
-                    if tower.can_upgrade() {
-                        let can_afford = economy.gold >= tower.upgrade_cost();
-                        let cost_str = format!("{}g", tower.upgrade_cost());
-                        text.sections[0].value = if can_afford {
-                            format!("Upgrade [U] ({})", cost_str)
-                        } else {
-                            format!("Need {} gold", cost_str)
-                        };
+                    text.sections[0].value = if can_afford {
+                        format!("Upgrade [U] - {}g", upgrade_cost)
                     } else {
-                        text.sections[0].value = "MAX LEVEL".to_string();
-                    }
+                        format!("Need {}g (have {})", upgrade_cost, economy.gold)
+                    };
                 }
                 for mut text in &mut sell_text {
-                    text.sections[0].value = format!("Sell [S] (+{}g)", tower.sell_value());
+                    text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
                 }
             } else {
                 style.display = Display::None;
@@ -1210,11 +1242,11 @@ fn update_tower_context_menu(
 fn tower_context_buttons(
     mut upgrade_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<UpgradeButton>, Without<SellButton>, Without<CloseMenuButton>),
+        (With<UpgradeButton>, Without<SellButton>, Without<CloseMenuButton>),
     >,
     mut sell_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<SellButton>, Without<UpgradeButton>, Without<CloseMenuButton>),
+        (With<SellButton>, Without<UpgradeButton>, Without<CloseMenuButton>),
     >,
     mut close_query: Query<
         (&Interaction, &mut BackgroundColor),
@@ -1233,31 +1265,50 @@ fn tower_context_buttons(
                 selected_tower.0 = None;
             }
             Interaction::Hovered => {
-                *color = Color::srgb(0.7, 0.3, 0.3).into();
+                *color = Color::srgb(0.6, 0.25, 0.25).into();
             }
             Interaction::None => {
-                *color = Color::srgba(0.5, 0.2, 0.2, 0.8).into();
+                *color = Color::srgba(0.4, 0.15, 0.15, 0.9).into();
             }
         }
     }
 
-    // Upgrade button
+    // Check if we can afford upgrade
+    let can_afford = if let Some(tower_entity) = selected_tower.0 {
+        if let Ok(tower) = towers.get(tower_entity) {
+            economy.gold >= tower.upgrade_cost()
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    // Upgrade button - color based on affordability
     for (interaction, mut color) in &mut upgrade_query {
         match *interaction {
             Interaction::Pressed => {
                 if let Some(tower_entity) = selected_tower.0 {
                     if let Ok(tower) = towers.get(tower_entity) {
-                        if tower.can_upgrade() && economy.gold >= tower.upgrade_cost() {
+                        if economy.gold >= tower.upgrade_cost() {
                             upgrade_events.send(UpgradeTowerEvent { tower: tower_entity });
                         }
                     }
                 }
             }
             Interaction::Hovered => {
-                *color = GameColors::BUTTON_HOVER.into();
+                if can_afford {
+                    *color = Color::srgb(0.25, 0.65, 0.4).into();
+                } else {
+                    *color = Color::srgb(0.35, 0.35, 0.4).into();
+                }
             }
             Interaction::None => {
-                *color = GameColors::BUTTON_NORMAL.into();
+                if can_afford {
+                    *color = Color::srgb(0.2, 0.5, 0.3).into();
+                } else {
+                    *color = Color::srgb(0.25, 0.25, 0.3).into();
+                }
             }
         }
     }
@@ -1272,10 +1323,10 @@ fn tower_context_buttons(
                 }
             }
             Interaction::Hovered => {
-                *color = Color::srgb(0.7, 0.3, 0.3).into();
+                *color = Color::srgb(0.65, 0.3, 0.3).into();
             }
             Interaction::None => {
-                *color = Color::srgb(0.6, 0.2, 0.2).into();
+                *color = Color::srgb(0.5, 0.2, 0.2).into();
             }
         }
     }

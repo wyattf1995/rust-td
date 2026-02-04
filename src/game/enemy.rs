@@ -48,12 +48,12 @@ pub enum EnemyType {
 impl EnemyType {
     pub fn health(&self) -> f32 {
         match self {
-            EnemyType::Basic => 100.0,
-            EnemyType::Fast => 70.0,
-            EnemyType::Tank => 400.0,
-            EnemyType::Armored => 280.0,
-            EnemyType::Flying => 90.0,
-            EnemyType::Boss => 2500.0,
+            EnemyType::Basic => 80.0,
+            EnemyType::Fast => 50.0,
+            EnemyType::Tank => 250.0,
+            EnemyType::Armored => 180.0,
+            EnemyType::Flying => 60.0,
+            EnemyType::Boss => 1500.0,
         }
     }
 
@@ -70,12 +70,12 @@ impl EnemyType {
 
     pub fn reward(&self) -> u32 {
         match self {
-            EnemyType::Basic => 8,
-            EnemyType::Fast => 12,
-            EnemyType::Tank => 25,
-            EnemyType::Armored => 20,
-            EnemyType::Flying => 15,
-            EnemyType::Boss => 150,
+            EnemyType::Basic => 10,
+            EnemyType::Fast => 15,
+            EnemyType::Tank => 35,
+            EnemyType::Armored => 30,
+            EnemyType::Flying => 20,
+            EnemyType::Boss => 200,
         }
     }
 
@@ -101,11 +101,11 @@ impl EnemyType {
         }
     }
 
-    /// Armor reduces damage taken (0.0 = no armor, 0.5 = 50% damage reduction)
+    /// Armor reduces damage taken (0.0 = no armor, 0.4 = 40% damage reduction)
     pub fn armor(&self) -> f32 {
         match self {
-            EnemyType::Armored => 0.5,
-            EnemyType::Boss => 0.3,
+            EnemyType::Armored => 0.4,
+            EnemyType::Boss => 0.2,
             _ => 0.0,
         }
     }
@@ -197,16 +197,16 @@ impl Default for WaveManager {
 }
 
 impl WaveManager {
-    /// Generate and start the next wave - infinite scaling
+    /// Generate and start the next wave - infinite scaling (gentler curve)
     pub fn start_wave(&mut self) {
         let wave_num = self.current_wave + 1;
 
-        // Calculate health multiplier: scales with wave^1.2
-        // Wave 1: 1.0x, Wave 10: ~2.5x, Wave 20: ~4.5x, Wave 50: ~10x
-        self.health_multiplier = 1.0 + (wave_num as f32).powf(1.2) * 0.08;
+        // Calculate health multiplier: gentler scaling
+        // Wave 1: 1.0x, Wave 10: ~1.5x, Wave 20: ~2.2x, Wave 50: ~4x
+        self.health_multiplier = 1.0 + (wave_num as f32).powf(1.1) * 0.04;
 
-        // Calculate spawn delay: starts at 0.9s, decreases to minimum 0.15s
-        let spawn_delay = (0.9 - (wave_num as f32 * 0.025)).max(0.15);
+        // Calculate spawn delay: starts at 1.0s, decreases to minimum 0.3s
+        let spawn_delay = (1.0 - (wave_num as f32 * 0.03)).max(0.3);
         self.spawn_timer = Timer::from_seconds(spawn_delay, TimerMode::Repeating);
 
         // Generate enemies for this wave
@@ -221,73 +221,92 @@ impl WaveManager {
         let mut enemies = Vec::new();
         let multiplier = self.health_multiplier;
 
-        // Base enemy count scaling: linear + polynomial
-        let base_count = 5.0 + (wave_num as f32 * 1.5) + (wave_num as f32).powf(1.3) * 0.5;
+        // Base enemy count scaling: gentler curve
+        // Wave 1: ~6, Wave 10: ~18, Wave 20: ~30
+        let base_count = 4.0 + (wave_num as f32 * 1.0) + (wave_num as f32).sqrt() * 2.0;
 
         // Determine wave type based on wave number
         let wave_type = wave_num % 5;
-        let is_boss_wave = wave_num % 5 == 0 && wave_num > 0;
+        let is_boss_wave = wave_num % 10 == 0 && wave_num > 0; // Boss every 10 waves now
 
         if is_boss_wave {
-            // Boss wave every 5 waves
-            let boss_count = (wave_num / 5).min(5); // Cap at 5 bosses
+            // Boss wave every 10 waves
+            let boss_count = (wave_num / 10).min(3); // Cap at 3 bosses
             for _ in 0..boss_count {
                 enemies.push((EnemyType::Boss, multiplier));
             }
-            // Escort enemies
-            let escort_count = (base_count * 0.6) as usize;
-            for _ in 0..escort_count / 3 {
-                enemies.push((EnemyType::Tank, multiplier));
-                enemies.push((EnemyType::Armored, multiplier));
+            // Fewer escort enemies
+            let escort_count = (base_count * 0.4) as usize;
+            for _ in 0..escort_count / 2 {
                 enemies.push((EnemyType::Fast, multiplier));
+                enemies.push((EnemyType::Basic, multiplier));
             }
         } else {
             match wave_type {
                 1 => {
                     // Swarm wave - lots of weak enemies
-                    let count = (base_count * 1.5) as usize;
+                    let count = (base_count * 1.2) as usize;
                     for _ in 0..count {
                         enemies.push((EnemyType::Basic, multiplier));
                     }
-                    if wave_num >= 3 {
-                        for _ in 0..(count / 3) {
+                    if wave_num >= 4 {
+                        for _ in 0..(count / 4) {
                             enemies.push((EnemyType::Fast, multiplier));
                         }
                     }
                 }
                 2 => {
-                    // Speed wave - fast and flying
-                    let count = (base_count * 0.8) as usize;
+                    // Speed wave - fast enemies
+                    let count = (base_count * 0.7) as usize;
                     for _ in 0..count {
                         enemies.push((EnemyType::Fast, multiplier));
                     }
-                    if wave_num >= 7 {
-                        for _ in 0..(count / 2) {
+                    // Some basics as filler
+                    for _ in 0..(count / 2) {
+                        enemies.push((EnemyType::Basic, multiplier));
+                    }
+                    if wave_num >= 12 {
+                        for _ in 0..(count / 3) {
                             enemies.push((EnemyType::Flying, multiplier));
                         }
                     }
                 }
                 3 => {
-                    // Tank wave - heavy enemies
-                    let count = (base_count * 0.5) as usize;
-                    if wave_num >= 5 {
-                        for _ in 0..count {
-                            enemies.push((EnemyType::Tank, multiplier));
-                        }
-                    }
-                    if wave_num >= 6 {
-                        for _ in 0..(count / 2) {
-                            enemies.push((EnemyType::Armored, multiplier));
-                        }
-                    }
-                    // Filler basics
+                    // Tank wave - heavy enemies (delayed introduction)
+                    let count = (base_count * 0.6) as usize;
+                    // Mostly basics early on
                     for _ in 0..count {
                         enemies.push((EnemyType::Basic, multiplier));
                     }
+                    if wave_num >= 8 {
+                        for _ in 0..(count / 3) {
+                            enemies.push((EnemyType::Tank, multiplier));
+                        }
+                    }
+                    if wave_num >= 13 {
+                        for _ in 0..(count / 4) {
+                            enemies.push((EnemyType::Armored, multiplier));
+                        }
+                    }
                 }
-                4 | _ => {
+                4 => {
                     // Mixed wave - variety
-                    let count = (base_count * 0.7) as usize;
+                    let count = (base_count * 0.8) as usize;
+                    for _ in 0..count {
+                        enemies.push((EnemyType::Basic, multiplier));
+                    }
+                    for _ in 0..(count / 3) {
+                        enemies.push((EnemyType::Fast, multiplier));
+                    }
+                    if wave_num >= 9 {
+                        for _ in 0..(count / 4) {
+                            enemies.push((EnemyType::Tank, multiplier));
+                        }
+                    }
+                }
+                _ => {
+                    // Mini-boss wave every 5 (but not 10, 20, etc.)
+                    let count = (base_count * 0.5) as usize;
                     for _ in 0..count {
                         enemies.push((EnemyType::Basic, multiplier));
                     }
@@ -295,18 +314,10 @@ impl WaveManager {
                         enemies.push((EnemyType::Fast, multiplier));
                     }
                     if wave_num >= 5 {
-                        for _ in 0..(count / 3) {
+                        // Add some tanks as mini-boss
+                        let tank_count = (wave_num / 5).min(4);
+                        for _ in 0..tank_count {
                             enemies.push((EnemyType::Tank, multiplier));
-                        }
-                    }
-                    if wave_num >= 6 {
-                        for _ in 0..(count / 4) {
-                            enemies.push((EnemyType::Armored, multiplier));
-                        }
-                    }
-                    if wave_num >= 7 {
-                        for _ in 0..(count / 4) {
-                            enemies.push((EnemyType::Flying, multiplier));
                         }
                     }
                 }
@@ -331,10 +342,10 @@ impl WaveManager {
     /// Calculate wave completion bonus
     pub fn wave_bonus(&self) -> u32 {
         let wave = self.current_wave as u32;
-        // Bonus scales with wave but with diminishing returns
-        let base_bonus = 15 + (wave * 3) + ((wave as f32).sqrt() * 5.0) as u32;
+        // Generous bonus to help player build up
+        let base_bonus = 25 + (wave * 5) + ((wave as f32).sqrt() * 8.0) as u32;
         if self.perfect_wave {
-            (base_bonus as f32 * 1.5) as u32
+            (base_bonus as f32 * 1.5) as u32  // 50% bonus for no leaks
         } else {
             base_bonus
         }
