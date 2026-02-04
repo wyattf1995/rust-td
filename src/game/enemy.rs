@@ -213,9 +213,9 @@ impl WaveManager {
     pub fn start_wave(&mut self) {
         let wave_num = self.current_wave + 1;
 
-        // Calculate health multiplier: moderate scaling
-        // Wave 1: 1.0x, Wave 10: ~1.6x, Wave 20: ~2.5x, Wave 50: ~4.5x
-        self.health_multiplier = 1.0 + (wave_num as f32).powf(1.12) * 0.045;
+        // Calculate health multiplier: stronger mid-game, steeper late-game
+        // Wave 1: 1.05x, Wave 10: ~1.85x, Wave 20: ~3.2x, Wave 50: ~7x
+        self.health_multiplier = 1.0 + (wave_num as f32).powf(1.25) * 0.05;
 
         // Calculate spawn delay: starts at 1.0s, decreases to minimum 0.3s
         let spawn_delay = (1.0 - (wave_num as f32 * 0.03)).max(0.3);
@@ -233,9 +233,9 @@ impl WaveManager {
         let mut enemies = Vec::new();
         let multiplier = self.health_multiplier;
 
-        // Base enemy count scaling: moderate curve
-        // Wave 1: ~8, Wave 10: ~22, Wave 20: ~38
-        let base_count = 5.0 + (wave_num as f32 * 1.2) + (wave_num as f32).sqrt() * 2.5;
+        // Base enemy count scaling: ramps up more in late game
+        // Wave 1: ~8, Wave 10: ~25, Wave 20: ~48, Wave 50: ~115
+        let base_count = 5.0 + (wave_num as f32 * 1.4) + (wave_num as f32).powf(1.15) * 1.5;
 
         // Determine wave type based on wave number
         let wave_type = wave_num % 5;
