@@ -60,23 +60,23 @@ impl EnemyType {
 
     pub fn speed(&self) -> f32 {
         match self {
-            EnemyType::Basic => 55.0,
-            EnemyType::Fast => 100.0,
-            EnemyType::Tank => 32.0,
-            EnemyType::Armored => 38.0,
-            EnemyType::Flying => 85.0,
-            EnemyType::Boss => 28.0,
+            EnemyType::Basic => 60.0,
+            EnemyType::Fast => 110.0,
+            EnemyType::Tank => 35.0,
+            EnemyType::Armored => 42.0,
+            EnemyType::Flying => 95.0,
+            EnemyType::Boss => 30.0,
         }
     }
 
     pub fn reward(&self) -> u32 {
         match self {
-            EnemyType::Basic => 8,
-            EnemyType::Fast => 12,
-            EnemyType::Tank => 30,
-            EnemyType::Armored => 25,
-            EnemyType::Flying => 15,
-            EnemyType::Boss => 175,
+            EnemyType::Basic => 5,
+            EnemyType::Fast => 8,
+            EnemyType::Tank => 20,
+            EnemyType::Armored => 16,
+            EnemyType::Flying => 10,
+            EnemyType::Boss => 120,
         }
     }
 
@@ -234,8 +234,10 @@ impl WaveManager {
         let multiplier = self.health_multiplier;
 
         // Base enemy count scaling: ramps up more in late game
-        // Wave 1: ~8, Wave 10: ~25, Wave 20: ~48, Wave 50: ~115
-        let base_count = 5.0 + (wave_num as f32 * 1.4) + (wave_num as f32).powf(1.15) * 1.5;
+        // Early waves (1-5) have fewer enemies to compensate for economy nerfs
+        let early_wave_factor = if wave_num <= 5 { 0.75 } else { 1.0 };
+        // Wave 1: ~5, Wave 5: ~10, Wave 10: ~25, Wave 20: ~48
+        let base_count = (5.0 + (wave_num as f32 * 1.4) + (wave_num as f32).powf(1.15) * 1.5) * early_wave_factor;
 
         // Determine wave type based on wave number
         let wave_type = wave_num % 5;
@@ -354,8 +356,8 @@ impl WaveManager {
     /// Calculate wave completion bonus
     pub fn wave_bonus(&self) -> u32 {
         let wave = self.current_wave as u32;
-        // Moderate bonus - scales with progression
-        let base_bonus = 20 + (wave * 4) + ((wave as f32).sqrt() * 5.0) as u32;
+        // Reduced bonus - scales with progression (nerfed from base 20)
+        let base_bonus = 12 + (wave * 3) + ((wave as f32).sqrt() * 4.0) as u32;
         if self.perfect_wave {
             (base_bonus as f32 * 1.5) as u32  // 50% bonus for no leaks
         } else {

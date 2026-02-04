@@ -117,11 +117,11 @@ pub enum TowerType {
 impl TowerType {
     pub fn cost(&self) -> u32 {
         match self {
-            TowerType::Basic => 50,
+            TowerType::Basic => 65,     // Nerfed from 50
             TowerType::Splash => 100,
             TowerType::Slow => 75,
             TowerType::Sniper => 150,
-            TowerType::Rapid => 80,
+            TowerType::Rapid => 100,    // Nerfed from 80
             TowerType::Chain => 120,
             TowerType::Poison => 90,
             TowerType::Buff => 200,
@@ -130,7 +130,7 @@ impl TowerType {
 
     pub fn damage(&self) -> f32 {
         match self {
-            TowerType::Basic => 25.0,
+            TowerType::Basic => 22.0,   // Nerfed from 25
             TowerType::Splash => 15.0,
             TowerType::Slow => 10.0,
             TowerType::Sniper => 80.0,
