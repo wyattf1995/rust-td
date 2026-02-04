@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use rand::Rng;
+use std::collections::HashSet;
 
 use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
@@ -10,8 +12,7 @@ pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<GameMap>()
-            .init_resource::<HoveredTile>()
+        app.init_resource::<HoveredTile>()
             .add_systems(OnEnter(GameState::Playing), setup_map)
             .add_systems(
                 Update,
@@ -27,17 +28,45 @@ pub struct HoveredTile {
     pub position: Option<(usize, usize)>,
 }
 
-/// Grid dimensions
+/// Grid dimensions - reduced height to avoid UI overlap
 pub const GRID_WIDTH: usize = 16;
-pub const GRID_HEIGHT: usize = 12;
+pub const GRID_HEIGHT: usize = 10;
 pub const TILE_SIZE: f32 = ShapeSizes::TILE;
+
+/// Terrain types for visual variety
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TerrainType {
+    Rock,
+    Water,
+    Forest,
+    Crystal,
+}
+
+impl TerrainType {
+    pub fn color(&self, variant: bool) -> Color {
+        match self {
+            TerrainType::Rock => {
+                if variant { GameColors::TERRAIN_ROCK } else { GameColors::TERRAIN_ROCK_DARK }
+            }
+            TerrainType::Water => {
+                if variant { GameColors::TERRAIN_WATER } else { GameColors::TERRAIN_WATER_LIGHT }
+            }
+            TerrainType::Forest => {
+                if variant { GameColors::TERRAIN_FOREST } else { GameColors::TERRAIN_FOREST_LIGHT }
+            }
+            TerrainType::Crystal => {
+                if variant { GameColors::TERRAIN_CRYSTAL } else { GameColors::TERRAIN_LAVA }
+            }
+        }
+    }
+}
 
 /// Tile types
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TileType {
     Empty,     // Can build towers
     Path,      // Enemy path
-    Blocked,   // Cannot build
+    Blocked(TerrainType),   // Cannot build - has terrain
     Tower,     // Has a tower
 }
 
@@ -50,84 +79,235 @@ pub struct GameMap {
 
 impl Default for GameMap {
     fn default() -> Self {
-        let mut tiles = [[TileType::Empty; GRID_HEIGHT]; GRID_WIDTH];
-
-        // Define a longer, more complex winding path
-        let path = vec![
-            // Start from left side, middle-ish
-            (0, 10),
-            (1, 10),
-            (2, 10),
-            (2, 9),
-            (2, 8),
-            (2, 7),
-            (3, 7),
-            (4, 7),
-            (5, 7),
-            (5, 8),
-            (5, 9),
-            (5, 10),
-            (6, 10),
-            (7, 10),
-            (7, 9),
-            (7, 8),
-            (7, 7),
-            (7, 6),
-            (7, 5),
-            (8, 5),
-            (9, 5),
-            (10, 5),
-            (10, 6),
-            (10, 7),
-            (10, 8),
-            (11, 8),
-            (12, 8),
-            (12, 7),
-            (12, 6),
-            (12, 5),
-            (12, 4),
-            (12, 3),
-            (11, 3),
-            (10, 3),
-            (9, 3),
-            (9, 2),
-            (9, 1),
-            (10, 1),
-            (11, 1),
-            (12, 1),
-            (13, 1),
-            (14, 1),
-            (14, 2),
-            (14, 3),
-            (14, 4),
-            (14, 5),
-            (15, 5),
-        ];
-
-        // Mark path tiles
-        for &(x, y) in &path {
-            tiles[x][y] = TileType::Path;
-        }
-
-        // Add some blocked/obstacle tiles for visual interest
-        let blocked_tiles = [
-            (3, 9), (4, 9), (3, 8),
-            (6, 8), (6, 9),
-            (8, 7), (9, 7), (8, 6),
-            (11, 5), (11, 6), (11, 7),
-            (13, 3), (13, 4),
-            (10, 2), (11, 2),
-        ];
-
-        for &(x, y) in &blocked_tiles {
-            tiles[x][y] = TileType::Blocked;
-        }
-
-        Self { tiles, path }
+        Self::generate_random()
     }
 }
 
 impl GameMap {
+    /// Generate a random map with procedural path and obstacles
+    pub fn generate_random() -> Self {
+        let mut tiles = [[TileType::Empty; GRID_HEIGHT]; GRID_WIDTH];
+
+        // Generate a winding path using simple random walk algorithm
+        let path = Self::generate_path();
+
+        // Mark path tiles
+        let path_set: HashSet<(usize, usize)> = path.iter().cloned().collect();
+        for &(x, y) in &path {
+            tiles[x][y] = TileType::Path;
+        }
+
+        // Generate random terrain obstacles
+        Self::generate_obstacles(&mut tiles, &path_set);
+
+        Self { tiles, path }
+    }
+
+    /// Generate a winding path from left to right with guaranteed snake pattern
+    fn generate_path() -> Vec<(usize, usize)> {
+        let mut rng = rand::thread_rng();
+        let mut path = Vec::new();
+
+        // Start on left edge
+        let start_y = rng.gen_range(2..(GRID_HEIGHT - 2));
+        path.push((0, start_y));
+
+        let mut x = 0usize;
+        let mut y = start_y;
+
+        // Track consecutive horizontal moves to force vertical wandering
+        let mut horizontal_streak = 0;
+        let max_horizontal = 2; // Force vertical move after this many horizontal moves
+
+        // Track current vertical direction for snake pattern
+        let mut going_up = rng.gen_bool(0.5);
+
+        while x < GRID_WIDTH - 1 {
+            let mut moved = false;
+
+            // If we've moved horizontally too much, force a vertical move
+            if horizontal_streak >= max_horizontal {
+                // Try to move vertically in current direction
+                let target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
+
+                // Check if we can move in preferred direction
+                let can_move_preferred = if going_up {
+                    target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
+                } else {
+                    y > 1 && !path.contains(&(x, target_y))
+                };
+
+                if can_move_preferred {
+                    y = target_y;
+                    path.push((x, y));
+                    horizontal_streak = 0;
+                    moved = true;
+                } else {
+                    // Hit edge, reverse direction and move the other way
+                    going_up = !going_up;
+                    let new_target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
+                    let can_reverse = if going_up {
+                        new_target_y < GRID_HEIGHT - 1 && !path.contains(&(x, new_target_y))
+                    } else {
+                        y > 1 && !path.contains(&(x, new_target_y))
+                    };
+
+                    if can_reverse {
+                        y = new_target_y;
+                        path.push((x, y));
+                        horizontal_streak = 0;
+                        moved = true;
+                    }
+                }
+            }
+
+            // If didn't move vertically, decide between horizontal and vertical
+            if !moved {
+                // Weight: 40% horizontal, 60% vertical to encourage winding
+                let move_horizontal = rng.gen_bool(0.4) || horizontal_streak == 0;
+
+                if move_horizontal && x + 1 < GRID_WIDTH {
+                    x += 1;
+                    path.push((x, y));
+                    horizontal_streak += 1;
+
+                    // After moving right, sometimes do a vertical run
+                    if rng.gen_bool(0.5) {
+                        let run_length = rng.gen_range(2..5);
+                        for _ in 0..run_length {
+                            let target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
+                            let can_move = if going_up {
+                                target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
+                            } else {
+                                y > 1 && !path.contains(&(x, target_y))
+                            };
+
+                            if can_move {
+                                y = target_y;
+                                path.push((x, y));
+                            } else {
+                                going_up = !going_up;
+                                break;
+                            }
+                        }
+                        horizontal_streak = 0;
+                    }
+                } else {
+                    // Try vertical move
+                    let target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
+                    let can_move = if going_up {
+                        target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
+                    } else {
+                        y > 1 && !path.contains(&(x, target_y))
+                    };
+
+                    if can_move {
+                        y = target_y;
+                        path.push((x, y));
+                        horizontal_streak = 0;
+                    } else {
+                        // Can't move vertically, try reversing
+                        going_up = !going_up;
+                        // Force horizontal if stuck
+                        if x + 1 < GRID_WIDTH {
+                            x += 1;
+                            path.push((x, y));
+                            horizontal_streak += 1;
+                        }
+                    }
+                }
+            }
+
+            // Prevent infinite loops
+            if path.len() > 150 {
+                break;
+            }
+        }
+
+        // Ensure we end at the right edge
+        while x < GRID_WIDTH - 1 {
+            x += 1;
+            path.push((x, y));
+        }
+
+        path
+    }
+
+    /// Generate random terrain obstacles avoiding the path
+    fn generate_obstacles(tiles: &mut [[TileType; GRID_HEIGHT]; GRID_WIDTH], path_set: &HashSet<(usize, usize)>) {
+        let mut rng = rand::thread_rng();
+        let terrain_types = [TerrainType::Rock, TerrainType::Water, TerrainType::Forest, TerrainType::Crystal];
+
+        // Choose 2-4 terrain clusters
+        let num_clusters = rng.gen_range(2..5);
+
+        for _ in 0..num_clusters {
+            // Pick a random center point
+            let center_x = rng.gen_range(2..(GRID_WIDTH - 2));
+            let center_y = rng.gen_range(1..(GRID_HEIGHT - 1));
+
+            // Pick a terrain type
+            let terrain = terrain_types[rng.gen_range(0..terrain_types.len())];
+
+            // Create a cluster of 3-8 tiles
+            let cluster_size = rng.gen_range(3..9);
+            let mut placed = 0;
+            let mut attempts = 0;
+
+            while placed < cluster_size && attempts < 50 {
+                // Random offset from center
+                let offset_x = rng.gen_range(-2..3);
+                let offset_y = rng.gen_range(-2..3);
+
+                let tx = (center_x as i32 + offset_x) as usize;
+                let ty = (center_y as i32 + offset_y) as usize;
+
+                // Check bounds and not on path
+                if tx < GRID_WIDTH && ty < GRID_HEIGHT
+                    && !path_set.contains(&(tx, ty))
+                    && !Self::is_adjacent_to_path(tx, ty, path_set)
+                    && tiles[tx][ty] == TileType::Empty
+                {
+                    tiles[tx][ty] = TileType::Blocked(terrain);
+                    placed += 1;
+                }
+                attempts += 1;
+            }
+        }
+
+        // Add some scattered individual obstacles
+        let scattered = rng.gen_range(5..13);
+        for _ in 0..scattered {
+            let x = rng.gen_range(0..GRID_WIDTH);
+            let y = rng.gen_range(0..GRID_HEIGHT);
+            let terrain = terrain_types[rng.gen_range(0..terrain_types.len())];
+
+            if !path_set.contains(&(x, y))
+                && !Self::is_adjacent_to_path(x, y, path_set)
+                && tiles[x][y] == TileType::Empty
+            {
+                tiles[x][y] = TileType::Blocked(terrain);
+            }
+        }
+    }
+
+    /// Check if a tile is directly adjacent to the path (buffer zone)
+    fn is_adjacent_to_path(x: usize, y: usize, path_set: &HashSet<(usize, usize)>) -> bool {
+        let neighbors = [
+            (x.wrapping_sub(1), y),
+            (x + 1, y),
+            (x, y.wrapping_sub(1)),
+            (x, y + 1),
+        ];
+
+        for (nx, ny) in neighbors {
+            if path_set.contains(&(nx, ny)) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Convert grid coordinates to world position (center of tile)
     pub fn grid_to_world(x: usize, y: usize) -> Vec2 {
         let offset_x = (GRID_WIDTH as f32 * TILE_SIZE) / 2.0;
@@ -184,11 +364,23 @@ pub struct MapTile {
     pub base_color: Color,
 }
 
+/// Terrain decoration sprite (second layer for visual depth)
+#[derive(Component)]
+pub struct TerrainDecoration;
+
 /// Range preview circle when hovering over buildable tile
 #[derive(Component)]
 pub struct TileRangePreview;
 
-fn setup_map(mut commands: Commands, map: Res<GameMap>) {
+fn setup_map(mut commands: Commands) {
+    // Generate a new random map each game
+    let map = GameMap::generate_random();
+
+    // Simple deterministic variation based on position
+    let variation_seed = |x: usize, y: usize| -> bool {
+        ((x * 7 + y * 13) % 3) == 0
+    };
+
     // Spawn grid tiles
     for x in 0..GRID_WIDTH {
         for y in 0..GRID_HEIGHT {
@@ -198,10 +390,11 @@ fn setup_map(mut commands: Commands, map: Res<GameMap>) {
             let color = match tile_type {
                 TileType::Path => GameColors::PATH,
                 TileType::Empty => GameColors::TILE_EMPTY,
-                TileType::Blocked => GameColors::TILE_BLOCKED,
+                TileType::Blocked(terrain) => terrain.color(variation_seed(x, y)),
                 TileType::Tower => GameColors::TILE_EMPTY,
             };
 
+            // Main tile sprite
             commands.spawn((
                 SpriteBundle {
                     sprite: Sprite {
@@ -215,6 +408,37 @@ fn setup_map(mut commands: Commands, map: Res<GameMap>) {
                 MapTile { x, y, base_color: color },
                 GameEntity,
             ));
+
+            // Add decoration overlay for terrain tiles
+            if let TileType::Blocked(terrain) = tile_type {
+                let decoration_color = match terrain {
+                    TerrainType::Rock => Color::srgba(0.4, 0.35, 0.3, 0.3),
+                    TerrainType::Water => Color::srgba(0.3, 0.5, 0.7, 0.25),
+                    TerrainType::Forest => Color::srgba(0.2, 0.4, 0.25, 0.3),
+                    TerrainType::Crystal => Color::srgba(0.5, 0.3, 0.6, 0.3),
+                };
+
+                // Inner decoration (smaller highlight)
+                let deco_size = TILE_SIZE * 0.5;
+                let offset_x = if variation_seed(x, y) { 5.0 } else { -5.0 };
+                let offset_y = if variation_seed(y, x) { 5.0 } else { -5.0 };
+
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: decoration_color,
+                            custom_size: Some(Vec2::splat(deco_size)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(
+                            Vec3::new(pos.x + offset_x, pos.y + offset_y, 0.1)
+                        ),
+                        ..default()
+                    },
+                    TerrainDecoration,
+                    GameEntity,
+                ));
+            }
         }
     }
 
@@ -290,6 +514,9 @@ fn setup_map(mut commands: Commands, map: Res<GameMap>) {
         TileRangePreview,
         GameEntity,
     ));
+
+    // Insert the generated map as a resource
+    commands.insert_resource(map);
 }
 
 fn tile_hover_system(
@@ -310,7 +537,7 @@ fn tile_hover_system(
         return;
     };
 
-    // Check if cursor is in UI area
+    // Check if cursor is in UI area (top HUD or bottom panel)
     let window_height = window.height();
     if cursor_pos.y > window_height - 140.0 || cursor_pos.y < 50.0 {
         hovered_tile.position = None;

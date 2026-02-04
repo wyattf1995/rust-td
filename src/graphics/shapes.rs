@@ -38,6 +38,16 @@ impl GameColors {
     pub const PATH_INDICATOR: Color = Color::srgba(0.4, 0.4, 0.5, 0.5);
     pub const RANGE_INDICATOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.35);
 
+    // Terrain obstacle colors (more interesting than plain black)
+    pub const TERRAIN_ROCK: Color = Color::srgb(0.25, 0.22, 0.2);       // Brown-gray rocks
+    pub const TERRAIN_ROCK_DARK: Color = Color::srgb(0.18, 0.16, 0.14); // Darker rock variant
+    pub const TERRAIN_WATER: Color = Color::srgb(0.15, 0.25, 0.4);      // Deep blue water
+    pub const TERRAIN_WATER_LIGHT: Color = Color::srgb(0.2, 0.35, 0.5); // Lighter water
+    pub const TERRAIN_FOREST: Color = Color::srgb(0.12, 0.22, 0.15);    // Dark forest green
+    pub const TERRAIN_FOREST_LIGHT: Color = Color::srgb(0.18, 0.3, 0.2);// Lighter forest
+    pub const TERRAIN_CRYSTAL: Color = Color::srgb(0.3, 0.2, 0.4);      // Purple crystal
+    pub const TERRAIN_LAVA: Color = Color::srgb(0.4, 0.15, 0.1);        // Dark lava/volcanic
+
     // Projectile colors
     pub const PROJECTILE_BASIC: Color = Color::srgb(0.5, 0.8, 1.0);
     pub const PROJECTILE_SPLASH: Color = Color::srgb(1.0, 0.6, 0.3);
