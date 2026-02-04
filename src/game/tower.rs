@@ -202,7 +202,7 @@ impl TowerType {
             TowerType::Rapid => "Fast attacks, short range",
             TowerType::Chain => "Lightning bounces 3 times",
             TowerType::Poison => "Deals damage over time",
-            TowerType::Buff => "+25% DMG to nearby towers",
+            TowerType::Buff => "Buffs nearby towers (scales)",
         }
     }
 
@@ -334,6 +334,25 @@ impl Tower {
             speed_mult *= 1.0 + bonus * 0.6;
         }
         self.tower_type.attack_speed() * speed_mult
+    }
+
+    /// Get buff percentage for Buff towers (returns 0 for other types)
+    pub fn buff_percentage(&self) -> f32 {
+        if self.tower_type != TowerType::Buff {
+            return 0.0;
+        }
+        let level_bonus: f32 = (1..self.level).map(|l| 0.05 / (1.0 + (l - 1) as f32 * 0.3)).sum();
+        0.25 + level_bonus
+    }
+
+    /// Get buff percentage at next level
+    pub fn buff_percentage_next(&self) -> f32 {
+        if self.tower_type != TowerType::Buff {
+            return 0.0;
+        }
+        let next_level = self.level + 1;
+        let level_bonus: f32 = (1..next_level).map(|l| 0.05 / (1.0 + (l - 1) as f32 * 0.3)).sum();
+        0.25 + level_bonus
     }
 }
 
@@ -811,11 +830,11 @@ fn update_buff_auras(
     buff_towers: Query<(&Tower, &Transform)>,
     mut other_towers: Query<(Entity, &Tower, &Transform, Option<&mut BuffedStatus>)>,
 ) {
-    // Collect buff tower positions and ranges
-    let buff_sources: Vec<(Vec2, f32)> = buff_towers
+    // Collect buff tower positions, ranges, and levels
+    let buff_sources: Vec<(Vec2, f32, u32)> = buff_towers
         .iter()
         .filter(|(t, _)| t.tower_type == TowerType::Buff)
-        .map(|(t, transform)| (transform.translation.truncate(), t.range))
+        .map(|(t, transform)| (transform.translation.truncate(), t.range, t.level))
         .collect();
 
     // Update buff status for each tower
@@ -829,10 +848,12 @@ fn update_buff_auras(
 
         // Check if tower is in range of any buff tower
         let mut total_buff = 0.0;
-        for (buff_pos, buff_range) in &buff_sources {
+        for (buff_pos, buff_range, buff_level) in &buff_sources {
             if tower_pos.distance(*buff_pos) <= *buff_range {
-                // Each buff tower adds 25% damage (additive)
-                total_buff += 0.25;
+                // Base 25% + 5% per level after 1 (with diminishing returns)
+                // Level 1: 25%, Level 2: 30%, Level 3: 34%, Level 4: 37%...
+                let level_bonus: f32 = (1..*buff_level).map(|l| 0.05 / (1.0 + (l - 1) as f32 * 0.3)).sum();
+                total_buff += 0.25 + level_bonus;
             }
         }
 
@@ -840,7 +861,7 @@ fn update_buff_auras(
             // Tower is being buffed
             let new_status = BuffedStatus {
                 damage_multiplier: 1.0 + total_buff,
-                speed_multiplier: 1.0 + total_buff * 0.4, // 10% speed per buff tower
+                speed_multiplier: 1.0 + total_buff * 0.4, // Speed scales too
             };
             if let Some(mut status) = buff_status {
                 *status = new_status;

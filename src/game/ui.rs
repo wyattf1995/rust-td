@@ -722,7 +722,7 @@ fn update_info_panel(
                 TowerType::Rapid => "Fast attacks",
                 TowerType::Chain => "Bounces 3x",
                 TowerType::Poison => "DOT damage",
-                TowerType::Buff => "+25% DMG aura",
+                TowerType::Buff => "Buffs towers",
             }.to_string();
         }
     }
@@ -1152,28 +1152,48 @@ fn update_tower_context_menu(
 
                 // Get current attack speed
                 let attack_speed = tower.attack_speed();
+                let is_buff_tower = tower.tower_type == TowerType::Buff;
 
                 // Update stats text
                 for mut text in &mut stats_text {
                     text.sections[0].value = format!("{} Lv{}\n", tower.tower_type.name(), tower.level);
-                    text.sections[1].value = format!(
-                        "DMG: {:.0}  RNG: {:.0}  SPD: {:.1}/s",
-                        tower.damage,
-                        tower.range,
-                        attack_speed
-                    );
+                    if is_buff_tower {
+                        let buff_pct = tower.buff_percentage() * 100.0;
+                        text.sections[1].value = format!(
+                            "BUFF: +{:.0}%  RNG: {:.0}",
+                            buff_pct,
+                            tower.range
+                        );
+                    } else {
+                        text.sections[1].value = format!(
+                            "DMG: {:.0}  RNG: {:.0}  SPD: {:.1}/s",
+                            tower.damage,
+                            tower.range,
+                            attack_speed
+                        );
+                    }
                 }
 
                 // Update upgrade preview text using the tower's preview method
                 for mut text in &mut preview_text {
                     let (next_damage, next_range, next_speed) = tower.preview_upgrade();
                     text.sections[0].value = format!("Level {} Preview\n", tower.level + 1);
-                    text.sections[1].value = format!(
-                        "DMG: {:.0} (+{:.0})\nRNG: {:.0} (+{:.0})\nSPD: {:.2}/s (+{:.2})",
-                        next_damage, next_damage - tower.damage,
-                        next_range, next_range - tower.range,
-                        next_speed, next_speed - attack_speed
-                    );
+                    if is_buff_tower {
+                        let curr_buff = tower.buff_percentage() * 100.0;
+                        let next_buff = tower.buff_percentage_next() * 100.0;
+                        text.sections[1].value = format!(
+                            "BUFF: +{:.0}% (+{:.0}%)\nRNG: {:.0} (+{:.0})",
+                            next_buff, next_buff - curr_buff,
+                            next_range, next_range - tower.range
+                        );
+                    } else {
+                        text.sections[1].value = format!(
+                            "DMG: {:.0} (+{:.0})\nRNG: {:.0} (+{:.0})\nSPD: {:.2}/s (+{:.2})",
+                            next_damage, next_damage - tower.damage,
+                            next_range, next_range - tower.range,
+                            next_speed, next_speed - attack_speed
+                        );
+                    }
                 }
 
                 // Update button text
