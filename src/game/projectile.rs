@@ -232,7 +232,7 @@ fn projectile_collision(
 
             if distance < 20.0 {
                 // Calculate damage with armor reduction
-                let armor = enemy.enemy_type.armor();
+                let armor = enemy.total_armor();
                 let actual_damage = projectile.damage * (1.0 - armor);
                 enemy.health = (enemy.health - actual_damage).max(0.0);
 
@@ -290,7 +290,7 @@ fn projectile_collision(
 
                         let other_pos = other_transform.translation.truncate();
                         if enemy_pos.distance(other_pos) < splash_radius {
-                            let other_armor = other_enemy.enemy_type.armor();
+                            let other_armor = other_enemy.total_armor();
                             let other_actual_damage = splash_damage * (1.0 - other_armor);
                             other_enemy.health = (other_enemy.health - other_actual_damage).max(0.0);
                             spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage);

@@ -4,7 +4,7 @@ use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
 
 use super::{
-    economy::PlayerEconomy,
+    economy::{PlayerEconomy, KillStreak},
     map::GameMap,
     GameEntity,
 };
@@ -131,6 +131,7 @@ pub struct Enemy {
     pub marked_dead: bool,
     pub poison_damage: f32,         // Damage per second from poison
     pub poison_timer: Option<Timer>, // Duration of poison effect
+    pub bonus_armor: f32,           // Extra armor from wave modifiers
 }
 
 impl Enemy {
@@ -147,7 +148,13 @@ impl Enemy {
             marked_dead: false,
             poison_damage: 0.0,
             poison_timer: None,
+            bonus_armor: 0.0,
         }
+    }
+
+    /// Get total armor (base + bonus)
+    pub fn total_armor(&self) -> f32 {
+        self.enemy_type.armor() + self.bonus_armor
     }
 
     pub fn apply_slow(&mut self, duration: f32, slow_factor: f32) {
@@ -182,6 +189,30 @@ pub struct DeathEffect {
     pub initial_size: f32,
 }
 
+/// Wave modifiers for variety
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WaveModifier {
+    None,
+    SpeedBoost,   // Enemies 50% faster
+    ArmoredWave,  // All enemies +25% armor
+    Swarm,        // 2x enemies, 50% HP each
+    Regen,        // Enemies heal 2% HP/sec
+    GoldRush,     // 2x gold, 1.5x enemy count
+}
+
+impl WaveModifier {
+    pub fn name(&self) -> &'static str {
+        match self {
+            WaveModifier::None => "",
+            WaveModifier::SpeedBoost => "SPEED BOOST",
+            WaveModifier::ArmoredWave => "ARMORED WAVE",
+            WaveModifier::Swarm => "SWARM",
+            WaveModifier::Regen => "REGENERATION",
+            WaveModifier::GoldRush => "GOLD RUSH",
+        }
+    }
+}
+
 /// Wave manager - infinite scaling survival mode
 #[derive(Resource)]
 pub struct WaveManager {
@@ -192,6 +223,9 @@ pub struct WaveManager {
     pub enemies_alive: u32,
     pub perfect_wave: bool,  // No enemies escaped this wave
     pub health_multiplier: f32, // Scales enemy HP each wave
+    pub last_interest: u32,  // Interest earned last wave (for UI)
+    pub last_bonus: u32,     // Bonus earned last wave (for UI)
+    pub current_modifier: WaveModifier, // Active wave modifier
 }
 
 impl Default for WaveManager {
@@ -204,6 +238,9 @@ impl Default for WaveManager {
             enemies_alive: 0,
             perfect_wave: true,
             health_multiplier: 1.0,
+            last_interest: 0,
+            last_bonus: 0,
+            current_modifier: WaveModifier::None,
         }
     }
 }
@@ -216,6 +253,24 @@ impl WaveManager {
         // Calculate health multiplier: stronger mid-game, steeper late-game
         // Wave 1: 1.05x, Wave 10: ~1.85x, Wave 20: ~3.2x, Wave 50: ~7x
         self.health_multiplier = 1.0 + (wave_num as f32).powf(1.25) * 0.05;
+
+        // Determine wave modifier (every 3rd wave after wave 5)
+        self.current_modifier = if wave_num >= 6 && wave_num % 3 == 0 {
+            match (wave_num / 3) % 5 {
+                0 => WaveModifier::SpeedBoost,
+                1 => WaveModifier::Swarm,
+                2 => WaveModifier::ArmoredWave,
+                3 => WaveModifier::GoldRush,
+                _ => WaveModifier::Regen,
+            }
+        } else {
+            WaveModifier::None
+        };
+
+        // Apply Swarm modifier: halve health, will double count in generate_wave_enemies
+        if self.current_modifier == WaveModifier::Swarm {
+            self.health_multiplier *= 0.5;
+        }
 
         // Calculate spawn delay: starts at 1.0s, decreases to minimum 0.3s
         let spawn_delay = (1.0 - (wave_num as f32 * 0.03)).max(0.3);
@@ -236,8 +291,18 @@ impl WaveManager {
         // Base enemy count scaling: ramps up more in late game
         // Early waves (1-5) have fewer enemies to compensate for economy nerfs
         let early_wave_factor = if wave_num <= 5 { 0.75 } else { 1.0 };
+
+        // Apply wave modifier to enemy count
+        let modifier_factor = match self.current_modifier {
+            WaveModifier::Swarm => 2.0,     // Double enemies (but half HP applied in start_wave)
+            WaveModifier::GoldRush => 1.5,  // 50% more enemies
+            _ => 1.0,
+        };
+
         // Wave 1: ~5, Wave 5: ~10, Wave 10: ~25, Wave 20: ~48
-        let base_count = (5.0 + (wave_num as f32 * 1.4) + (wave_num as f32).powf(1.15) * 1.5) * early_wave_factor;
+        let base_count = (5.0 + (wave_num as f32 * 1.4) + (wave_num as f32).powf(1.15) * 1.5)
+            * early_wave_factor
+            * modifier_factor;
 
         // Determine wave type based on wave number
         let wave_type = wave_num % 5;
@@ -406,6 +471,11 @@ fn wave_spawner(
                 enemy.health *= health_mult;
                 enemy.max_health *= health_mult;
 
+                // Apply ArmoredWave modifier (+25% armor)
+                if wave_manager.current_modifier == WaveModifier::ArmoredWave {
+                    enemy.bonus_armor = 0.25;
+                }
+
                 let size = enemy_type.size();
                 let color = enemy_type.color();
 
@@ -464,12 +534,27 @@ fn wave_spawner(
 fn enemy_movement(
     mut enemies: Query<(Entity, &mut Enemy, &mut Transform)>,
     map: Res<GameMap>,
+    wave_manager: Res<WaveManager>,
     time: Res<Time>,
     mut escaped_events: EventWriter<EnemyEscapedEvent>,
 ) {
+    let speed_modifier = if wave_manager.current_modifier == WaveModifier::SpeedBoost {
+        1.5 // 50% faster
+    } else {
+        1.0
+    };
+
+    let regen_active = wave_manager.current_modifier == WaveModifier::Regen;
+
     for (entity, mut enemy, mut transform) in &mut enemies {
         if enemy.health <= 0.0 || enemy.marked_dead {
             continue;
+        }
+
+        // Apply regen modifier (2% HP/sec)
+        if regen_active {
+            enemy.health = (enemy.health + enemy.max_health * 0.02 * time.delta_seconds())
+                .min(enemy.max_health);
         }
 
         // Update slow timer
@@ -507,7 +592,8 @@ fn enemy_movement(
         let target_pos = GameMap::grid_to_world(next_x, next_y);
 
         let direction = (target_pos - current_pos).normalize_or_zero();
-        let movement = direction * enemy.speed * time.delta_seconds();
+        // Apply speed modifier from wave
+        let movement = direction * enemy.speed * speed_modifier * time.delta_seconds();
 
         transform.translation.x += movement.x;
         transform.translation.y += movement.y;
@@ -639,12 +725,25 @@ fn handle_enemy_killed(
     mut events: EventReader<EnemyKilledEvent>,
     mut economy: ResMut<PlayerEconomy>,
     mut wave_manager: ResMut<WaveManager>,
+    mut kill_streak: ResMut<KillStreak>,
     health_bars: Query<(Entity, &HealthBar)>,
     health_fills: Query<(Entity, &HealthBarFill)>,
 ) {
+    // Gold Rush modifier gives 2x gold
+    let gold_rush_multiplier = if wave_manager.current_modifier == WaveModifier::GoldRush {
+        2.0
+    } else {
+        1.0
+    };
+
     for event in events.read() {
-        economy.gold += event.reward;
-        economy.score += event.reward;
+        // Register kill for combo system
+        kill_streak.register_kill();
+
+        // Apply combo multiplier and gold rush to gold reward
+        let multiplied_reward = (event.reward as f32 * kill_streak.multiplier() * gold_rush_multiplier) as u32;
+        economy.gold += multiplied_reward;
+        economy.score += multiplied_reward;
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
 
         // Spawn death effect
@@ -759,10 +858,18 @@ fn check_wave_complete(
         && wave_manager.enemies_to_spawn.is_empty()
         && wave_manager.enemies_alive == 0
     {
+        // Award interest on current gold (before bonus)
+        let interest = economy.calculate_interest();
+        economy.gold += interest;
+
         // Award wave completion bonus
         let bonus = wave_manager.wave_bonus();
         economy.gold += bonus;
         economy.score += bonus;
+
+        // Store interest and bonus for UI display
+        wave_manager.last_interest = interest;
+        wave_manager.last_bonus = bonus;
 
         wave_manager.wave_active = false;
         wave_manager.current_wave += 1;

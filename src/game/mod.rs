@@ -215,11 +215,18 @@ fn restart_button_system(
 
 fn restart_interaction(
     interaction_query: Query<&Interaction, (Changed<Interaction>, With<RestartButton>)>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
+    // Button click restart
     for interaction in &interaction_query {
         if *interaction == Interaction::Pressed {
             next_state.set(GameState::Menu);
         }
+    }
+
+    // Quick restart with R key
+    if keyboard.just_pressed(KeyCode::KeyR) {
+        next_state.set(GameState::Menu);
     }
 }

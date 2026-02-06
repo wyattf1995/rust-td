@@ -4,8 +4,8 @@ use crate::{loading::GameAssets, GameState, GameSpeed};
 use crate::graphics::shapes::GameColors;
 
 use super::{
-    economy::PlayerEconomy,
-    enemy::WaveManager,
+    economy::{PlayerEconomy, KillStreak},
+    enemy::{WaveManager, WaveModifier},
     map::{GameMap, HoveredTile, TileType},
     tower::{PlaceTowerEvent, SelectedTowerType, SelectedPlacedTower, SellTowerEvent, UpgradeTowerEvent, Tower, TowerType},
     GameEntity,
@@ -25,6 +25,7 @@ impl Plugin for GameUiPlugin {
                     update_lives_display,
                     update_wave_display,
                     update_score_display,
+                    update_combo_display,
                     tower_button_system,
                     start_wave_button,
                     handle_tile_click,
@@ -110,6 +111,18 @@ struct TowerStatsText;
 
 #[derive(Component)]
 struct TowerUpgradePreview;
+
+#[derive(Component)]
+struct ComboDisplay;
+
+#[derive(Component)]
+struct ComboText;
+
+#[derive(Component)]
+struct WaveModifierText;
+
+#[derive(Component)]
+struct TargetingButton;
 
 fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
     // Top bar - HUD
@@ -668,6 +681,44 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                     ));
                 });
         });
+
+    // Combo display (centered, initially hidden)
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(80.0),
+                    left: Val::Percent(50.0),
+                    margin: UiRect::left(Val::Px(-100.0)), // Center the 200px wide box
+                    width: Val::Px(200.0),
+                    height: Val::Px(60.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    flex_direction: FlexDirection::Column,
+                    display: Display::None, // Hidden by default
+                    ..default()
+                },
+                background_color: Color::srgba(0.0, 0.0, 0.0, 0.7).into(),
+                border_radius: BorderRadius::all(Val::Px(8.0)),
+                ..default()
+            },
+            ComboDisplay,
+            GameEntity,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_section(
+                    "COMBO x1",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 32.0,
+                        color: GameColors::GOLD,
+                    },
+                ),
+                ComboText,
+            ));
+        });
 }
 
 fn update_gold_display(
@@ -700,8 +751,49 @@ fn update_wave_display(
         let current = wave_manager.current_wave + 1;
         let status = if wave_manager.wave_active { " ⚔" } else { "" };
         // Show health multiplier as difficulty indicator
-        let difficulty = format!(" ({}x)", format!("{:.1}", wave_manager.health_multiplier));
-        text.sections[0].value = format!("Wave {}{}{}", current, difficulty, status);
+        let difficulty = format!(" ({:.1}x)", wave_manager.health_multiplier);
+
+        // Show wave modifier if active
+        let modifier = match wave_manager.current_modifier {
+            WaveModifier::None => String::new(),
+            WaveModifier::SpeedBoost => " [SPEED]".to_string(),
+            WaveModifier::ArmoredWave => " [ARMOR]".to_string(),
+            WaveModifier::Swarm => " [SWARM]".to_string(),
+            WaveModifier::Regen => " [REGEN]".to_string(),
+            WaveModifier::GoldRush => " [GOLD!]".to_string(),
+        };
+
+        text.sections[0].value = format!("Wave {}{}{}{}", current, difficulty, modifier, status);
+    }
+}
+
+fn update_combo_display(
+    kill_streak: Res<KillStreak>,
+    mut display_query: Query<&mut Style, With<ComboDisplay>>,
+    mut text_query: Query<&mut Text, With<ComboText>>,
+) {
+    for mut style in &mut display_query {
+        // Show combo display when streak is 3+
+        style.display = if kill_streak.count >= 3 && kill_streak.active {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    for mut text in &mut text_query {
+        if kill_streak.count >= 3 {
+            text.sections[0].value = format!("COMBO x{}", kill_streak.count);
+
+            // Color changes based on combo level
+            text.sections[0].style.color = if kill_streak.count >= 10 {
+                Color::srgb(1.0, 0.3, 0.3) // Red for 10+
+            } else if kill_streak.count >= 6 {
+                Color::srgb(1.0, 0.6, 0.0) // Orange for 6+
+            } else {
+                GameColors::GOLD // Yellow for 3+
+            };
+        }
     }
 }
 
