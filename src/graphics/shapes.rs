@@ -66,14 +66,14 @@ impl GameColors {
     /// Tile border/grid lines
     pub const TILE_BORDER: Color = Color::srgb(0.16, 0.17, 0.2);
 
-    /// Path base color (slightly lighter for visibility)
-    pub const PATH: Color = Color::srgb(0.14, 0.15, 0.18);
+    /// Path base color (warmer, more visible "road")
+    pub const PATH: Color = Color::srgb(0.18, 0.17, 0.20);
 
     /// Path lane markings
-    pub const PATH_LANE: Color = Color::srgb(0.25, 0.27, 0.32);
+    pub const PATH_LANE: Color = Color::srgb(0.30, 0.30, 0.36);
 
     /// Path direction indicators
-    pub const PATH_INDICATOR: Color = Color::srgba(0.4, 0.45, 0.5, 0.6);
+    pub const PATH_INDICATOR: Color = Color::srgba(0.45, 0.48, 0.55, 0.65);
 
     /// Hover states
     pub const TILE_HOVER_BUILD: Color = Color::srgb(0.15, 0.35, 0.2);   // Green tint
@@ -227,7 +227,7 @@ impl ShapeSizes {
     // MAP ELEMENTS
     // ==========================================================================
     pub const PATH_INDICATOR: f32 = 4.0;
-    pub const PATH_LANE_WIDTH: f32 = 2.0;
+    pub const PATH_LANE_WIDTH: f32 = 2.5;
     pub const SPAWN_INDICATOR: f32 = 16.0;
     pub const EXIT_INDICATOR: f32 = 16.0;
 

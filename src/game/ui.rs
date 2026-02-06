@@ -90,6 +90,18 @@ struct InfoPanel;
 struct InfoPanelText;
 
 #[derive(Component)]
+struct InfoPanelName;
+
+#[derive(Component)]
+struct InfoPanelDesc;
+
+#[derive(Component)]
+struct InfoPanelStats;
+
+#[derive(Component)]
+struct InfoPanelCost;
+
+#[derive(Component)]
 struct ScoreText;
 
 #[derive(Component)]
@@ -361,7 +373,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
             NodeBundle {
                 style: Style {
                     width: Val::Percent(100.0),
-                    height: Val::Px(115.0),
+                    height: Val::Px(122.0),
                     padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(6.0), Val::Px(6.0)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
@@ -383,8 +395,8 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     .spawn((
                         NodeBundle {
                             style: Style {
-                                width: Val::Px(62.0),  // Narrower to fit 8
-                                height: Val::Px(100.0),
+                                width: Val::Px(70.0),
+                                height: Val::Px(108.0),
                                 border: UiRect::all(Val::Px(2.0)),
                                 ..default()
                             },
@@ -443,30 +455,46 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                     },
                                 ));
 
-                                // Compact stats
-                                parent.spawn(TextBundle::from_section(
-                                    format!("D:{:.0}", tower_type.damage()),
-                                    TextStyle {
-                                        font: assets.font.clone(),
-                                        font_size: 9.0,
-                                        color: Color::srgba(1.0, 1.0, 1.0, 0.7),
-                                    },
-                                ));
+                                // 3-stat rows (or 2 for Buff tower)
+                                if tower_type == TowerType::Buff {
+                                    parent.spawn(TextBundle::from_section(
+                                        format!("BUFF +25%\nRNG {:.0}", tower_type.range()),
+                                        TextStyle {
+                                            font: assets.font.clone(),
+                                            font_size: 9.0,
+                                            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                                        },
+                                    ));
+                                } else {
+                                    parent.spawn(TextBundle::from_section(
+                                        format!(
+                                            "DMG {:.0}\nRNG {:.0}\nSPD {:.1}",
+                                            tower_type.damage(),
+                                            tower_type.range(),
+                                            tower_type.attack_speed()
+                                        ),
+                                        TextStyle {
+                                            font: assets.font.clone(),
+                                            font_size: 9.0,
+                                            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                                        },
+                                    ));
+                                }
                             });
                     });
             }
 
-            // Info panel for selected tower (compact)
+            // Info panel for selected tower
             parent
                 .spawn((
                     NodeBundle {
                         style: Style {
-                            width: Val::Px(140.0),
-                            height: Val::Px(100.0),
+                            width: Val::Px(175.0),
+                            height: Val::Px(108.0),
                             flex_direction: FlexDirection::Column,
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            padding: UiRect::all(Val::Px(6.0)),
+                            justify_content: JustifyContent::SpaceEvenly,
+                            align_items: AlignItems::FlexStart,
+                            padding: UiRect::all(Val::Px(8.0)),
                             margin: UiRect::horizontal(Val::Px(4.0)),
                             ..default()
                         },
@@ -476,26 +504,53 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     InfoPanel,
                 ))
                 .with_children(|parent| {
+                    // Tower name in accent color
                     parent.spawn((
-                        TextBundle::from_sections([
-                            TextSection::new(
-                                "Selected: Basic\n",
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 12.0,
-                                    color: Color::WHITE,
-                                },
-                            ),
-                            TextSection::new(
-                                "Balanced damage",
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 10.0,
-                                    color: Color::srgba(1.0, 1.0, 1.0, 0.7),
-                                },
-                            ),
-                        ]),
-                        InfoPanelText,
+                        TextBundle::from_section(
+                            "Basic",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 13.0,
+                                color: TowerType::Basic.color(),
+                            },
+                        ),
+                        InfoPanelName,
+                    ));
+                    // Description
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "Balanced single-target damage",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 9.0,
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.6),
+                            },
+                        ),
+                        InfoPanelDesc,
+                    ));
+                    // Stats
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "DMG: 25  RNG: 150\nSPD: 1.0/s",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 10.0,
+                                color: Color::srgb(0.7, 0.8, 0.95),
+                            },
+                        ),
+                        InfoPanelStats,
+                    ));
+                    // Cost
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "Cost: 50g",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 11.0,
+                                color: GameColors::GOLD,
+                            },
+                        ),
+                        InfoPanelCost,
                     ));
                 });
 
@@ -832,8 +887,8 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     left: Val::Px(10.0),
                     top: Val::Px(60.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(6.0),
-                    padding: UiRect::all(Val::Px(6.0)),
+                    row_gap: Val::Px(8.0),
+                    padding: UiRect::all(Val::Px(8.0)),
                     ..default()
                 },
                 background_color: Color::srgba(0.0, 0.0, 0.0, 0.6).into(),
@@ -865,46 +920,67 @@ fn spawn_ability_button(
         .spawn((
             ButtonBundle {
                 style: Style {
-                    width: Val::Px(60.0),
-                    height: Val::Px(50.0),
+                    width: Val::Px(66.0),
+                    height: Val::Px(58.0),
                     flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::Center,
+                    justify_content: JustifyContent::SpaceBetween,
                     align_items: AlignItems::Center,
-                    padding: UiRect::all(Val::Px(4.0)),
+                    padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(4.0), Val::Px(4.0)),
+                    border: UiRect::all(Val::Px(1.5)),
                     ..default()
                 },
                 background_color: color.with_alpha(0.3).into(),
+                border_color: BorderColor(Color::NONE),
                 border_radius: BorderRadius::all(Val::Px(6.0)),
                 ..default()
             },
             AbilityButton(ability),
         ))
         .with_children(|btn| {
-            // Key hint
-            btn.spawn(TextBundle::from_section(
-                format!("[{}]", key),
-                TextStyle {
-                    font: assets.font.clone(),
-                    font_size: 12.0,
-                    color: Color::WHITE,
+            // Top row: key badge left-aligned in dark chip
+            btn.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    align_items: AlignItems::FlexStart,
+                    ..default()
                 },
-            ));
-            // Ability name
+                ..default()
+            }).with_children(|row| {
+                row.spawn(NodeBundle {
+                    style: Style {
+                        padding: UiRect::new(Val::Px(4.0), Val::Px(4.0), Val::Px(1.0), Val::Px(1.0)),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.0, 0.0, 0.0, 0.5).into(),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    ..default()
+                }).with_children(|chip| {
+                    chip.spawn(TextBundle::from_section(
+                        key,
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 11.0,
+                            color: Color::srgba(1.0, 1.0, 1.0, 0.85),
+                        },
+                    ));
+                });
+            });
+            // Center: ability name
             btn.spawn(TextBundle::from_section(
                 name,
                 TextStyle {
                     font: assets.font.clone(),
-                    font_size: 11.0,
+                    font_size: 13.0,
                     color,
                 },
             ));
-            // Cooldown text
+            // Bottom: status text
             btn.spawn((
                 TextBundle::from_section(
                     "Ready",
                     TextStyle {
                         font: assets.font.clone(),
-                        font_size: 10.0,
+                        font_size: 11.0,
                         color: GameColors::SUCCESS,
                     },
                 ),
@@ -991,10 +1067,10 @@ fn update_combo_display(
 
 fn update_ability_display(
     abilities: Res<PlayerAbilities>,
-    mut button_query: Query<(&AbilityButton, &mut BackgroundColor)>,
+    mut button_query: Query<(&AbilityButton, &mut BackgroundColor, &mut BorderColor)>,
     mut cooldown_text_query: Query<(&AbilityCooldownText, &mut Text)>,
 ) {
-    for (button, mut bg_color) in &mut button_query {
+    for (button, mut bg_color, mut border_color) in &mut button_query {
         let (ready, active, remaining) = match button.0 {
             AbilityType::Freeze => (
                 abilities.freeze_ready,
@@ -1026,10 +1102,13 @@ fn update_ability_display(
 
         if ready {
             *bg_color = base_color.with_alpha(0.5).into();
+            *border_color = BorderColor(base_color.with_alpha(0.6));
         } else if active {
             *bg_color = base_color.with_alpha(0.8).into();
+            *border_color = BorderColor(base_color.with_alpha(0.8));
         } else {
             *bg_color = base_color.with_alpha(0.2).into();
+            *border_color = BorderColor(Color::NONE);
         }
     }
 
@@ -1096,7 +1175,7 @@ fn update_ability_tooltips(
             NodeBundle {
                 style: Style {
                     position_type: PositionType::Absolute,
-                    left: Val::Px(82.0),
+                    left: Val::Px(100.0),
                     top: Val::Px(60.0),
                     padding: UiRect::all(Val::Px(8.0)),
                     flex_direction: FlexDirection::Column,
@@ -1133,23 +1212,41 @@ fn update_ability_tooltips(
 
 fn update_info_panel(
     selected: Res<SelectedTowerType>,
-    mut query: Query<&mut Text, With<InfoPanelText>>,
+    mut name_query: Query<&mut Text, (With<InfoPanelName>, Without<InfoPanelDesc>, Without<InfoPanelStats>, Without<InfoPanelCost>)>,
+    mut desc_query: Query<&mut Text, (With<InfoPanelDesc>, Without<InfoPanelName>, Without<InfoPanelStats>, Without<InfoPanelCost>)>,
+    mut stats_query: Query<&mut Text, (With<InfoPanelStats>, Without<InfoPanelName>, Without<InfoPanelDesc>, Without<InfoPanelCost>)>,
+    mut cost_query: Query<&mut Text, (With<InfoPanelCost>, Without<InfoPanelName>, Without<InfoPanelDesc>, Without<InfoPanelStats>)>,
 ) {
     if selected.is_changed() {
-        for mut text in &mut query {
-            let tower_type = selected.0;
-            text.sections[0].value = format!("{}\n", tower_type.name());
-            // Shorter description for compact display
-            text.sections[1].value = match tower_type {
-                TowerType::Basic => "Balanced DMG",
-                TowerType::Splash => "Area damage",
-                TowerType::Slow => "Slows enemies",
-                TowerType::Sniper => "Long range",
-                TowerType::Rapid => "Fast attacks",
-                TowerType::Chain => "Bounces 3x",
-                TowerType::Poison => "DOT damage",
-                TowerType::Buff => "Buffs towers",
-            }.to_string();
+        let tower_type = selected.0;
+
+        for mut text in &mut name_query {
+            text.sections[0].value = tower_type.name().to_string();
+            text.sections[0].style.color = tower_type.color();
+        }
+
+        for mut text in &mut desc_query {
+            text.sections[0].value = tower_type.description().to_string();
+        }
+
+        for mut text in &mut stats_query {
+            if tower_type == TowerType::Buff {
+                text.sections[0].value = format!(
+                    "BUFF: +25%  RNG: {:.0}",
+                    tower_type.range()
+                );
+            } else {
+                text.sections[0].value = format!(
+                    "DMG: {:.0}  RNG: {:.0}\nSPD: {:.1}/s",
+                    tower_type.damage(),
+                    tower_type.range(),
+                    tower_type.attack_speed()
+                );
+            }
+        }
+
+        for mut text in &mut cost_query {
+            text.sections[0].value = format!("Cost: {}g", tower_type.cost());
         }
     }
 }
@@ -1188,7 +1285,7 @@ fn update_tower_selection(
     if selected.is_changed() {
         for (border, mut color) in &mut borders {
             if border.0 == selected.0 {
-                *color = BorderColor(Color::WHITE);
+                *color = BorderColor(border.0.color());
             } else {
                 *color = BorderColor(Color::NONE);
             }

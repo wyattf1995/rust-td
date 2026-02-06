@@ -198,10 +198,14 @@ fn handle_freeze_ability(
             let original_speed = enemy.speed;
             enemy.speed = 0.0;
 
-            commands.entity(entity).insert(Frozen {
-                timer: Timer::from_seconds(3.0, TimerMode::Once),
-                original_speed,
-            });
+            if let Some(mut entity_commands) = commands.get_entity(entity) {
+                entity_commands.insert(Frozen {
+                    timer: Timer::from_seconds(3.0, TimerMode::Once),
+                    original_speed,
+                });
+            } else {
+                continue;
+            }
 
             // Spawn freeze visual effect on each enemy
             commands.spawn((
@@ -288,7 +292,9 @@ fn update_freeze_effects(
         sprite.color = GameColors::ABILITY_FREEZE.with_alpha(alpha);
 
         if effect.lifetime.finished() {
-            commands.entity(entity).despawn_recursive();
+            if let Some(entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn_recursive();
+            }
         }
     }
 
@@ -299,7 +305,9 @@ fn update_freeze_effects(
         if frozen.timer.finished() {
             // Restore speed
             enemy.speed = frozen.original_speed;
-            commands.entity(entity).remove::<Frozen>();
+            if let Some(mut entity_commands) = commands.get_entity(entity) {
+                entity_commands.remove::<Frozen>();
+            }
         }
     }
 }
@@ -338,7 +346,9 @@ fn update_artillery_target(
         sprite.color = GameColors::ABILITY_NUKE.with_alpha(alpha);
 
         if strike.lifetime.finished() {
-            commands.entity(entity).despawn_recursive();
+            if let Some(entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn_recursive();
+            }
         }
     }
 
@@ -374,7 +384,9 @@ fn update_artillery_target(
     } else {
         // Remove cursor when not targeting
         for (entity, _) in &cursor_query {
-            commands.entity(entity).despawn_recursive();
+            if let Some(entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn_recursive();
+            }
         }
     }
 }
