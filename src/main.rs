@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod analytics;
 mod game;
 mod graphics;
 mod loading;
@@ -69,6 +70,7 @@ fn main() {
         .init_resource::<GameSpeed>()
         .init_resource::<UiScale>()
         .add_plugins((
+            analytics::AnalyticsPlugin,
             loading::LoadingPlugin,
             menu::MenuPlugin,
             game::GamePlugin,

@@ -1,0 +1,99 @@
+//! Lightweight analytics module for Neon Command
+//! Privacy-first: anonymous sessions, no PII, no cookies
+
+use bevy::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+/// Analytics resource holding session info
+#[derive(Resource)]
+pub struct Analytics {
+    pub session_id: String,
+    pub game_version: &'static str,
+}
+
+impl Default for Analytics {
+    fn default() -> Self {
+        Self {
+            session_id: generate_session_id(),
+            game_version: env!("CARGO_PKG_VERSION"),
+        }
+    }
+}
+
+/// Generate a random session ID (not persisted)
+fn generate_session_id() -> String {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    format!("{:016x}", rng.gen::<u64>())
+}
+
+// JavaScript interop for WASM builds
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = ["window", "neonAnalytics"], js_name = trackEvent)]
+    fn js_track_event(event_name: &str, properties_json: &str);
+
+    #[wasm_bindgen(js_namespace = ["window", "neonAnalytics"], js_name = isEnabled)]
+    fn js_analytics_enabled() -> bool;
+}
+
+/// Track an analytics event
+#[allow(unused_variables)]
+pub fn track_event(event: &str, properties: &[(&str, &str)]) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        // Check if analytics is available and enabled
+        if js_analytics_enabled() {
+            // Build JSON manually to avoid serde dependency
+            let mut json = String::from("{");
+            for (i, (key, value)) in properties.iter().enumerate() {
+                if i > 0 {
+                    json.push(',');
+                }
+                json.push_str(&format!("\"{}\":\"{}\"", key, value));
+            }
+            json.push('}');
+
+            js_track_event(event, &json);
+        }
+    }
+
+    // In non-WASM builds, just log to console for debugging
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        bevy::log::info!("[Analytics] {} {:?}", event, properties);
+    }
+}
+
+/// Track event with the analytics resource context
+pub fn track_with_context(analytics: &Analytics, event: &str, extra_props: &[(&str, &str)]) {
+    let session_id = analytics.session_id.as_str();
+    let version = analytics.game_version;
+
+    // Combine base properties with extra properties
+    let mut all_props: Vec<(&str, &str)> = vec![
+        ("session_id", session_id),
+        ("game_version", version),
+    ];
+    all_props.extend_from_slice(extra_props);
+
+    track_event(event, &all_props);
+}
+
+/// Plugin to initialize analytics
+pub struct AnalyticsPlugin;
+
+impl Plugin for AnalyticsPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<Analytics>()
+            .add_systems(Startup, track_session_start);
+    }
+}
+
+/// Track session start on app initialization
+fn track_session_start(analytics: Res<Analytics>) {
+    track_with_context(&analytics, "session_started", &[]);
+}

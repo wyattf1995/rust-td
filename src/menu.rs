@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::{loading::GameAssets, GameState};
+use crate::{analytics::{Analytics, track_with_context}, loading::GameAssets, GameState};
 
 pub struct MenuPlugin;
 
@@ -293,9 +293,11 @@ fn button_system(
 fn button_interaction(
     interaction_query: Query<&Interaction, (Changed<Interaction>, With<PlayButton>)>,
     mut next_state: ResMut<NextState<GameState>>,
+    analytics: Res<Analytics>,
 ) {
     for interaction in &interaction_query {
         if *interaction == Interaction::Pressed {
+            track_with_context(&analytics, "game_started", &[]);
             next_state.set(GameState::Playing);
         }
     }

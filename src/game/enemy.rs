@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::analytics::{Analytics, track_with_context};
 use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
 
@@ -1007,6 +1008,7 @@ fn handle_enemy_escaped(
 fn check_wave_complete(
     mut wave_manager: ResMut<WaveManager>,
     mut economy: ResMut<PlayerEconomy>,
+    analytics: Res<Analytics>,
 ) {
     if wave_manager.wave_active
         && wave_manager.enemies_to_spawn.is_empty()
@@ -1025,8 +1027,26 @@ fn check_wave_complete(
         wave_manager.last_interest = interest;
         wave_manager.last_bonus = bonus;
 
+        let completed_wave = wave_manager.current_wave;
+
         wave_manager.wave_active = false;
         wave_manager.current_wave += 1;
+
+        // Track milestone waves (5, 10, 15, 20...) to measure progression
+        if completed_wave % 5 == 0 || completed_wave == 1 {
+            let wave_str = completed_wave.to_string();
+            let score_str = economy.score.to_string();
+            let gold_str = economy.gold.to_string();
+            track_with_context(
+                &analytics,
+                "wave_completed",
+                &[
+                    ("wave", &wave_str),
+                    ("score", &score_str),
+                    ("gold", &gold_str),
+                ],
+            );
+        }
 
         // No victory condition - infinite survival mode!
         // Game continues until player loses all lives

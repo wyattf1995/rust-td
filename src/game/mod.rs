@@ -10,6 +10,7 @@ pub mod spatial;
 pub mod tower;
 pub mod ui;
 
+use crate::analytics::{Analytics, track_with_context};
 use crate::GameState;
 use crate::graphics::shapes::GameColors;
 
@@ -66,7 +67,25 @@ fn cleanup_game(mut commands: Commands, query: Query<Entity, With<GameEntity>>) 
     }
 }
 
-fn setup_game_over(mut commands: Commands, assets: Res<crate::loading::GameAssets>) {
+fn setup_game_over(
+    mut commands: Commands,
+    assets: Res<crate::loading::GameAssets>,
+    analytics: Res<Analytics>,
+    wave_manager: Res<enemy::WaveManager>,
+    economy: Res<economy::PlayerEconomy>,
+) {
+    // Track game over event with stats
+    let wave_reached = wave_manager.current_wave.to_string();
+    let score = economy.score.to_string();
+    track_with_context(
+        &analytics,
+        "game_over",
+        &[
+            ("wave_reached", &wave_reached),
+            ("score", &score),
+        ],
+    );
+
     commands
         .spawn((
             NodeBundle {

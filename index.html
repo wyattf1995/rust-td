@@ -182,6 +182,65 @@
                 setTimeout(() => loader.remove(), 500);
             }
         };
+
+        // Neon Command Analytics - Privacy-first, no cookies, no PII
+        window.neonAnalytics = (function() {
+            const ANALYTICS_ENDPOINT = null; // Set to your endpoint, e.g., '/api/events' or Plausible URL
+            const DEBUG = true; // Console log events in dev
+
+            // Browser context (collected once)
+            const context = {
+                screen_width: window.screen.width,
+                screen_height: window.screen.height,
+                viewport_width: window.innerWidth,
+                viewport_height: window.innerHeight,
+                is_mobile: window.innerWidth < 800 || 'ontouchstart' in window,
+                platform: 'web',
+                referrer: document.referrer || 'direct',
+                timestamp: Date.now()
+            };
+
+            function trackEvent(eventName, propertiesJson) {
+                try {
+                    const props = JSON.parse(propertiesJson || '{}');
+                    const event = {
+                        event: eventName,
+                        ...context,
+                        ...props,
+                        timestamp: Date.now()
+                    };
+
+                    if (DEBUG) {
+                        console.log('[Analytics]', eventName, event);
+                    }
+
+                    // Send to endpoint if configured
+                    if (ANALYTICS_ENDPOINT) {
+                        fetch(ANALYTICS_ENDPOINT, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(event),
+                            keepalive: true // Ensure sent even on page close
+                        }).catch(() => {}); // Silently fail
+                    }
+
+                    // Plausible integration (if loaded)
+                    if (window.plausible) {
+                        window.plausible(eventName, { props });
+                    }
+                } catch (e) {
+                    if (DEBUG) console.warn('[Analytics] Error:', e);
+                }
+            }
+
+            function isEnabled() {
+                // Respect Do Not Track
+                if (navigator.doNotTrack === '1') return false;
+                return true;
+            }
+
+            return { trackEvent, isEnabled };
+        })();
     </script>
 </body>
 </html>
