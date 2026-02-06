@@ -978,7 +978,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     left: Val::Px(10.0),
                     top: Val::Px(60.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(8.0),
+                    row_gap: Val::Px(6.0),
                     padding: UiRect::all(Val::Px(8.0)),
                     ..default()
                 },
@@ -990,12 +990,15 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
             GameEntity,
         ))
         .with_children(|parent| {
-            // Freeze ability [Q]
-            spawn_ability_button(parent, &assets, AbilityType::Freeze, "Q", "Freeze", GameColors::ABILITY_FREEZE);
-            // Gold Rush ability [W]
-            spawn_ability_button(parent, &assets, AbilityType::GoldRush, "W", "Gold", GameColors::ABILITY_GOLD_RUSH);
-            // Artillery ability [E]
-            spawn_ability_button(parent, &assets, AbilityType::Artillery, "E", "Arty", GameColors::ABILITY_NUKE);
+            spawn_ability_button(parent, &assets, AbilityType::Freeze, "Q", "Freeze",
+                "All enemies 3s", "CD: 45s",
+                GameColors::ABILITY_FREEZE);
+            spawn_ability_button(parent, &assets, AbilityType::GoldRush, "W", "Gold Rush",
+                "2x gold 10s", "CD: 60s",
+                GameColors::ABILITY_GOLD_RUSH);
+            spawn_ability_button(parent, &assets, AbilityType::Artillery, "E", "Artillery",
+                "400 dmg AOE", "CD: 90s",
+                GameColors::ABILITY_NUKE);
         });
 }
 
@@ -1005,22 +1008,23 @@ fn spawn_ability_button(
     ability: AbilityType,
     key: &str,
     name: &str,
+    stat_line: &str,
+    cooldown_line: &str,
     color: Color,
 ) {
     parent
         .spawn((
             ButtonBundle {
                 style: Style {
-                    width: Val::Px(66.0),
-                    height: Val::Px(58.0),
+                    width: Val::Px(110.0),
                     flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::SpaceBetween,
-                    align_items: AlignItems::Center,
-                    padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(4.0), Val::Px(4.0)),
+                    align_items: AlignItems::FlexStart,
+                    padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(6.0), Val::Px(6.0)),
                     border: UiRect::all(Val::Px(1.5)),
+                    row_gap: Val::Px(2.0),
                     ..default()
                 },
-                background_color: color.with_alpha(0.3).into(),
+                background_color: color.with_alpha(0.2).into(),
                 border_color: BorderColor(Color::NONE),
                 border_radius: BorderRadius::all(Val::Px(6.0)),
                 ..default()
@@ -1028,15 +1032,18 @@ fn spawn_ability_button(
             AbilityButton(ability),
         ))
         .with_children(|btn| {
-            // Top row: key badge left-aligned in dark chip
+            // Top row: key badge + ability name
             btn.spawn(NodeBundle {
                 style: Style {
                     width: Val::Percent(100.0),
-                    align_items: AlignItems::FlexStart,
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(6.0),
                     ..default()
                 },
                 ..default()
             }).with_children(|row| {
+                // Key badge
                 row.spawn(NodeBundle {
                     style: Style {
                         padding: UiRect::new(Val::Px(4.0), Val::Px(4.0), Val::Px(1.0), Val::Px(1.0)),
@@ -1055,28 +1062,58 @@ fn spawn_ability_button(
                         },
                     ));
                 });
-            });
-            // Center: ability name
-            btn.spawn(TextBundle::from_section(
-                name,
-                TextStyle {
-                    font: assets.font.clone(),
-                    font_size: 13.0,
-                    color,
-                },
-            ));
-            // Bottom: status text
-            btn.spawn((
-                TextBundle::from_section(
-                    "Ready",
+                // Ability name
+                row.spawn(TextBundle::from_section(
+                    name,
                     TextStyle {
                         font: assets.font.clone(),
-                        font_size: 11.0,
-                        color: GameColors::SUCCESS,
+                        font_size: 13.0,
+                        color,
                     },
-                ),
-                AbilityCooldownText(ability),
+                ));
+            });
+
+            // Stat line
+            btn.spawn(TextBundle::from_section(
+                stat_line,
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 9.0,
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.6),
+                },
             ));
+
+            // Cooldown + status row
+            btn.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                ..default()
+            }).with_children(|row| {
+                row.spawn(TextBundle::from_section(
+                    cooldown_line,
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 9.0,
+                        color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                    },
+                ));
+                row.spawn((
+                    TextBundle::from_section(
+                        "Ready",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 11.0,
+                            color: GameColors::SUCCESS,
+                        },
+                    ),
+                    AbilityCooldownText(ability),
+                ));
+            });
         });
 }
 
