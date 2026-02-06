@@ -40,7 +40,6 @@ impl Plugin for TowerPlugin {
                     update_muzzle_flashes,
                     update_level_badges,
                     update_buff_aura_visuals,
-                    update_cooldown_overlays,
                     tower_hotkeys,
                 )
                     .run_if(in_state(GameState::Playing)),
@@ -394,11 +393,6 @@ pub struct TowerCore {
     pub tower: Entity,
 }
 
-/// Tower cooldown overlay (shrinks as cooldown completes)
-#[derive(Component)]
-pub struct TowerCooldownOverlay {
-    pub tower: Entity,
-}
 
 /// Tracks if a tower is being buffed
 #[derive(Component, Default)]
@@ -549,23 +543,6 @@ fn handle_tower_placement(
             TowerBarrel { tower: tower_entity },
             GameEntity,
         ));
-
-        // Spawn cooldown overlay (shrinks as tower recharges)
-        if event.tower_type.can_attack() {
-            commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::srgba(0.0, 0.0, 0.0, 0.0),
-                        custom_size: Some(Vec2::new(ShapeSizes::TOWER, ShapeSizes::TOWER)),
-                        ..default()
-                    },
-                    transform: Transform::from_translation(pos.extend(2.3)),
-                    ..default()
-                },
-                TowerCooldownOverlay { tower: tower_entity },
-                GameEntity,
-            ));
-        }
 
         // Spawn level badge with background (bottom-right corner of tower)
         let badge_offset = Vec2::new(14.0, -14.0);
@@ -818,7 +795,6 @@ fn handle_tower_selling(
     badges: Query<(Entity, &TowerLevelBadge)>,
     buff_indicators: Query<(Entity, &BuffAuraIndicator)>,
     tower_cores: Query<(Entity, &TowerCore)>,
-    cooldown_overlays: Query<(Entity, &TowerCooldownOverlay)>,
 ) {
     for event in events.read() {
         if let Ok(tower) = towers.get(event.tower) {
@@ -866,12 +842,6 @@ fn handle_tower_selling(
                 }
             }
 
-            // Despawn cooldown overlay
-            for (entity, overlay) in &cooldown_overlays {
-                if overlay.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
-                }
-            }
         }
     }
 }
@@ -1152,31 +1122,3 @@ fn update_buff_aura_visuals(
     }
 }
 
-/// Visual cooldown overlay that shrinks from top to bottom as tower recharges
-fn update_cooldown_overlays(
-    towers: Query<(&Tower, &Transform)>,
-    mut overlays: Query<(&TowerCooldownOverlay, &mut Sprite, &mut Transform), Without<Tower>>,
-) {
-    for (overlay, mut sprite, mut overlay_transform) in &mut overlays {
-        if let Ok((tower, tower_transform)) = towers.get(overlay.tower) {
-            let fraction = tower.attack_cooldown.fraction();
-            // fraction: 0.0 = just started/reset, approaches 1.0 = ready to fire
-
-            if fraction >= 0.95 {
-                // Ready to fire, hide overlay
-                sprite.color = Color::srgba(0.0, 0.0, 0.0, 0.0);
-            } else {
-                // Show overlay proportional to remaining cooldown
-                let remaining = 1.0 - fraction;
-                let overlay_height = ShapeSizes::TOWER * remaining;
-                sprite.custom_size = Some(Vec2::new(ShapeSizes::TOWER, overlay_height));
-                sprite.color = Color::srgba(0.0, 0.0, 0.0, 0.35);
-
-                // Offset Y so it shrinks from top down
-                let y_offset = (ShapeSizes::TOWER - overlay_height) / 2.0;
-                overlay_transform.translation.x = tower_transform.translation.x;
-                overlay_transform.translation.y = tower_transform.translation.y + y_offset;
-            }
-        }
-    }
-}
