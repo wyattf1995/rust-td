@@ -994,7 +994,7 @@ fn update_buff_auras(
             if let Some(mut status) = buff_status {
                 *status = new_status;
             } else {
-                commands.entity(entity).insert(new_status);
+                commands.entity(entity).try_insert(new_status);
             }
         } else if buff_status.is_some() {
             // No longer buffed, remove status

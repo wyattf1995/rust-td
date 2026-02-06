@@ -200,14 +200,10 @@ fn handle_freeze_ability(
             let original_speed = enemy.speed;
             enemy.speed = 0.0;
 
-            if let Some(mut entity_commands) = commands.get_entity(entity) {
-                entity_commands.insert(Frozen {
-                    timer: Timer::from_seconds(3.0, TimerMode::Once),
-                    original_speed,
-                });
-            } else {
-                continue;
-            }
+            commands.entity(entity).try_insert(Frozen {
+                timer: Timer::from_seconds(3.0, TimerMode::Once),
+                original_speed,
+            });
 
             // Spawn freeze visual effect on each enemy
             commands.spawn((
