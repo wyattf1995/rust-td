@@ -105,131 +105,60 @@ impl GameMap {
         Self { tiles, path }
     }
 
-    /// Generate a winding path from left to right with guaranteed snake pattern
+    /// Generate a winding path from left to right using a clean snake/zigzag pattern.
+    /// The path alternates between horizontal runs and vertical runs, creating
+    /// clear S-curves that always read as a single continuous path.
     fn generate_path() -> Vec<(usize, usize)> {
         let mut rng = rand::thread_rng();
         let mut path = Vec::new();
 
-        // Start on left edge
+        // Start on left edge at a random Y position (avoid very top/bottom)
         let start_y = rng.gen_range(2..(GRID_HEIGHT - 2));
-        path.push((0, start_y));
-
         let mut x = 0usize;
         let mut y = start_y;
+        path.push((x, y));
 
-        // Track consecutive horizontal moves to force vertical wandering
-        let mut horizontal_streak = 0;
-        let max_horizontal = 2; // Force vertical move after this many horizontal moves
-
-        // Track current vertical direction for snake pattern
+        // Direction for vertical segments: true = moving toward higher Y
         let mut going_up = rng.gen_bool(0.5);
 
         while x < GRID_WIDTH - 1 {
-            let mut moved = false;
-
-            // If we've moved horizontally too much, force a vertical move
-            if horizontal_streak >= max_horizontal {
-                // Try to move vertically in current direction
-                let target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
-
-                // Check if we can move in preferred direction
-                let can_move_preferred = if going_up {
-                    target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
-                } else {
-                    y > 1 && !path.contains(&(x, target_y))
-                };
-
-                if can_move_preferred {
-                    y = target_y;
-                    path.push((x, y));
-                    horizontal_streak = 0;
-                    moved = true;
-                } else {
-                    // Hit edge, reverse direction and move the other way
-                    going_up = !going_up;
-                    let new_target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
-                    let can_reverse = if going_up {
-                        new_target_y < GRID_HEIGHT - 1 && !path.contains(&(x, new_target_y))
-                    } else {
-                        y > 1 && !path.contains(&(x, new_target_y))
-                    };
-
-                    if can_reverse {
-                        y = new_target_y;
-                        path.push((x, y));
-                        horizontal_streak = 0;
-                        moved = true;
-                    }
-                }
+            // --- Horizontal run: move right 2-4 tiles ---
+            let h_run = rng.gen_range(2..=4).min(GRID_WIDTH - 1 - x);
+            for _ in 0..h_run {
+                x += 1;
+                path.push((x, y));
             }
 
-            // If didn't move vertically, decide between horizontal and vertical
-            if !moved {
-                // Weight: 40% horizontal, 60% vertical to encourage winding
-                let move_horizontal = rng.gen_bool(0.4) || horizontal_streak == 0;
-
-                if move_horizontal && x + 1 < GRID_WIDTH {
-                    x += 1;
-                    path.push((x, y));
-                    horizontal_streak += 1;
-
-                    // After moving right, sometimes do a vertical run
-                    if rng.gen_bool(0.5) {
-                        let run_length = rng.gen_range(2..5);
-                        for _ in 0..run_length {
-                            let target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
-                            let can_move = if going_up {
-                                target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
-                            } else {
-                                y > 1 && !path.contains(&(x, target_y))
-                            };
-
-                            if can_move {
-                                y = target_y;
-                                path.push((x, y));
-                            } else {
-                                going_up = !going_up;
-                                break;
-                            }
-                        }
-                        horizontal_streak = 0;
-                    }
-                } else {
-                    // Try vertical move
-                    let target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
-                    let can_move = if going_up {
-                        target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
-                    } else {
-                        y > 1 && !path.contains(&(x, target_y))
-                    };
-
-                    if can_move {
-                        y = target_y;
-                        path.push((x, y));
-                        horizontal_streak = 0;
-                    } else {
-                        // Can't move vertically, try reversing
-                        going_up = !going_up;
-                        // Force horizontal if stuck
-                        if x + 1 < GRID_WIDTH {
-                            x += 1;
-                            path.push((x, y));
-                            horizontal_streak += 1;
-                        }
-                    }
-                }
-            }
-
-            // Prevent infinite loops
-            if path.len() > 150 {
+            // If we've reached the right edge, we're done
+            if x >= GRID_WIDTH - 1 {
                 break;
             }
-        }
 
-        // Ensure we end at the right edge
-        while x < GRID_WIDTH - 1 {
-            x += 1;
-            path.push((x, y));
+            // --- Vertical run: move up or down 3-6 tiles ---
+            let max_up = GRID_HEIGHT - 1 - y; // room to go up (higher Y)
+            let max_down = y;                  // room to go down (lower Y)
+
+            // Pick direction: prefer current direction, but flip if no room
+            if going_up && max_up < 2 {
+                going_up = false;
+            } else if !going_up && max_down < 2 {
+                going_up = true;
+            }
+
+            let max_run = if going_up { max_up } else { max_down };
+            let v_run = rng.gen_range(2..=5).min(max_run);
+
+            for _ in 0..v_run {
+                if going_up {
+                    y += 1;
+                } else {
+                    y -= 1;
+                }
+                path.push((x, y));
+            }
+
+            // Alternate vertical direction for next turn
+            going_up = !going_up;
         }
 
         path
