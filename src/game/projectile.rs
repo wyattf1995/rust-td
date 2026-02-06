@@ -6,6 +6,7 @@ use crate::loading::GameAssets;
 
 use super::{
     enemy::Enemy,
+    spatial::SpatialGrid,
     tower::TowerType,
     GameEntity,
 };
@@ -225,6 +226,7 @@ fn projectile_collision(
     projectiles: Query<(Entity, &Projectile, &Transform)>,
     mut enemies: Query<(Entity, &mut Enemy, &Transform)>,
     assets: Res<GameAssets>,
+    spatial_grid: Res<SpatialGrid>,
 ) {
     // Collect chain bounce data to spawn after iteration
     let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32)> = Vec::new();
@@ -289,22 +291,24 @@ fn projectile_collision(
                     chain_bounces.push((enemy_pos, bounce_damage, hit_list, remaining_bounces));
                 }
 
-                // Splash damage
+                // Splash damage (spatial grid narrows search to nearby enemies)
                 if projectile.tower_type == TowerType::Splash {
                     let splash_radius = ShapeSizes::SPLASH_RADIUS;
                     let splash_damage = projectile.damage * 0.5;
 
-                    for (other_entity, mut other_enemy, other_transform) in &mut enemies {
+                    let nearby = spatial_grid.query_range(enemy_pos, splash_radius);
+                    for other_entity in nearby {
                         if other_entity == enemy_entity {
                             continue;
                         }
-
-                        let other_pos = other_transform.translation.truncate();
-                        if enemy_pos.distance(other_pos) < splash_radius {
-                            let other_armor = other_enemy.total_armor();
-                            let other_actual_damage = splash_damage * (1.0 - other_armor);
-                            other_enemy.health = (other_enemy.health - other_actual_damage).max(0.0);
-                            spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage);
+                        if let Ok((_, mut other_enemy, other_transform)) = enemies.get_mut(other_entity) {
+                            let other_pos = other_transform.translation.truncate();
+                            if enemy_pos.distance(other_pos) < splash_radius {
+                                let other_armor = other_enemy.total_armor();
+                                let other_actual_damage = splash_damage * (1.0 - other_armor);
+                                other_enemy.health = (other_enemy.health - other_actual_damage).max(0.0);
+                                spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage);
+                            }
                         }
                     }
 
@@ -335,27 +339,33 @@ fn projectile_collision(
         }
     }
 
-    // Spawn chain bounce projectiles
+    // Spawn chain bounce projectiles (spatial grid narrows search to nearby enemies)
     for (origin_pos, bounce_damage, hit_list, remaining_bounces) in chain_bounces {
         // Find nearest enemy not in hit list
         let mut best_target: Option<(Entity, f32)> = None;
         let bounce_range = ShapeSizes::CHAIN_BOUNCE_RANGE;
 
-        for (entity, enemy, transform) in &enemies {
-            if hit_list.contains(&entity) || enemy.marked_dead || enemy.health <= 0.0 {
+        let nearby = spatial_grid.query_range(origin_pos, bounce_range);
+        for entity in nearby {
+            if hit_list.contains(&entity) {
                 continue;
             }
+            if let Ok((_, enemy, transform)) = enemies.get(entity) {
+                if enemy.marked_dead || enemy.health <= 0.0 {
+                    continue;
+                }
 
-            let enemy_pos = transform.translation.truncate();
-            let dist = origin_pos.distance(enemy_pos);
+                let enemy_pos = transform.translation.truncate();
+                let dist = origin_pos.distance(enemy_pos);
 
-            if dist <= bounce_range {
-                if let Some((_, best_dist)) = best_target {
-                    if dist < best_dist {
+                if dist <= bounce_range {
+                    if let Some((_, best_dist)) = best_target {
+                        if dist < best_dist {
+                            best_target = Some((entity, dist));
+                        }
+                    } else {
                         best_target = Some((entity, dist));
                     }
-                } else {
-                    best_target = Some((entity, dist));
                 }
             }
         }

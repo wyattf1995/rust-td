@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::collections::HashMap;
 
 use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
@@ -233,6 +234,10 @@ pub struct Tower {
     pub grid_y: usize,
     pub level: u32,
     pub targeting: TargetingPriority,
+    /// Cached cumulative speed multiplier (updated on upgrade, avoids O(level) recalc)
+    cached_speed_mult: f32,
+    /// Cached buff percentage for Buff towers (updated on upgrade, avoids O(level) recalc)
+    cached_buff_pct: f32,
 }
 
 impl Tower {
@@ -250,6 +255,8 @@ impl Tower {
             grid_y,
             level: 1,
             targeting: TargetingPriority::default(),
+            cached_speed_mult: 1.0,
+            cached_buff_pct: if tower_type == TowerType::Buff { 0.25 } else { 0.0 },
         }
     }
 
@@ -287,75 +294,72 @@ impl Tower {
 
     pub fn upgrade(&mut self) {
         self.level += 1;
-        // Diminishing returns: each level adds less percentage
-        // Level 2: +20%, Level 3: +15%, Level 4: +12%, Level 5: +10%...
-        let level_bonus = 0.20 / (1.0 + (self.level - 2) as f32 * 0.15);
 
-        // Calculate cumulative multiplier
+        // Incrementally update cached speed multiplier with this level's bonus
+        let bonus = 0.20 / (1.0 + (self.level - 2) as f32 * 0.15);
+        self.cached_speed_mult *= 1.0 + bonus * 0.6;
+
+        // Calculate cumulative damage and range multipliers
         let mut damage_mult = 1.0;
         let mut range_mult = 1.0;
-        let mut speed_mult = 1.0;
         for lvl in 2..=self.level {
-            let bonus = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
-            damage_mult *= 1.0 + bonus;
-            range_mult *= 1.0 + bonus * 0.4;  // Range grows slower
-            speed_mult *= 1.0 + bonus * 0.6;  // Speed grows medium
+            let b = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
+            damage_mult *= 1.0 + b;
+            range_mult *= 1.0 + b * 0.4;
         }
 
         self.damage = self.tower_type.damage() * damage_mult;
         self.range = self.tower_type.range() * range_mult;
-        let attack_speed = self.tower_type.attack_speed() * speed_mult;
+        let attack_speed = self.tower_type.attack_speed() * self.cached_speed_mult;
         // For towers that don't attack (like Buff), use a dummy timer
         let cooldown_secs = if attack_speed > 0.0 { 1.0 / attack_speed } else { 1.0 };
         self.attack_cooldown = Timer::from_seconds(cooldown_secs, TimerMode::Repeating);
+
+        // Update cached buff percentage
+        if self.tower_type == TowerType::Buff {
+            let level_bonus: f32 = (1..self.level).map(|l| 0.05 / (1.0 + (l - 1) as f32 * 0.3)).sum();
+            self.cached_buff_pct = 0.25 + level_bonus;
+        }
     }
 
-    /// Calculate stats for next level (for preview)
+    /// Calculate stats for next level (for preview — must compute from scratch)
     pub fn preview_upgrade(&self) -> (f32, f32, f32) {
         let next_level = self.level + 1;
+        let bonus = 0.20 / (1.0 + (next_level - 2) as f32 * 0.15);
+        let next_speed_mult = self.cached_speed_mult * (1.0 + bonus * 0.6);
+
         let mut damage_mult = 1.0;
         let mut range_mult = 1.0;
-        let mut speed_mult = 1.0;
         for lvl in 2..=next_level {
-            let bonus = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
-            damage_mult *= 1.0 + bonus;
-            range_mult *= 1.0 + bonus * 0.4;
-            speed_mult *= 1.0 + bonus * 0.6;
+            let b = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
+            damage_mult *= 1.0 + b;
+            range_mult *= 1.0 + b * 0.4;
         }
         (
             self.tower_type.damage() * damage_mult,
             self.tower_type.range() * range_mult,
-            self.tower_type.attack_speed() * speed_mult,
+            self.tower_type.attack_speed() * next_speed_mult,
         )
     }
 
-    /// Get current attack speed
+    /// Get current attack speed (O(1) — uses cached multiplier)
     pub fn attack_speed(&self) -> f32 {
-        let mut speed_mult = 1.0;
-        for lvl in 2..=self.level {
-            let bonus = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
-            speed_mult *= 1.0 + bonus * 0.6;
-        }
-        self.tower_type.attack_speed() * speed_mult
+        self.tower_type.attack_speed() * self.cached_speed_mult
     }
 
-    /// Get buff percentage for Buff towers (returns 0 for other types)
+    /// Get buff percentage for Buff towers (O(1) — uses cached value)
     pub fn buff_percentage(&self) -> f32 {
-        if self.tower_type != TowerType::Buff {
-            return 0.0;
-        }
-        let level_bonus: f32 = (1..self.level).map(|l| 0.05 / (1.0 + (l - 1) as f32 * 0.3)).sum();
-        0.25 + level_bonus
+        self.cached_buff_pct
     }
 
-    /// Get buff percentage at next level
+    /// Get buff percentage at next level (must compute the delta)
     pub fn buff_percentage_next(&self) -> f32 {
         if self.tower_type != TowerType::Buff {
             return 0.0;
         }
         let next_level = self.level + 1;
-        let level_bonus: f32 = (1..next_level).map(|l| 0.05 / (1.0 + (l - 1) as f32 * 0.3)).sum();
-        0.25 + level_bonus
+        let next_bonus = 0.05 / (1.0 + (next_level - 2) as f32 * 0.3);
+        self.cached_buff_pct + next_bonus
     }
 }
 
@@ -950,11 +954,11 @@ fn update_buff_auras(
     buff_towers: Query<(&Tower, &Transform)>,
     mut other_towers: Query<(Entity, &Tower, &Transform, Option<&TowerSynergies>, Option<&mut BuffedStatus>)>,
 ) {
-    // Collect buff tower positions, ranges, and levels
-    let buff_sources: Vec<(Vec2, f32, u32)> = buff_towers
+    // Collect buff tower positions, ranges, and pre-computed buff percentages
+    let buff_sources: Vec<(Vec2, f32, f32)> = buff_towers
         .iter()
         .filter(|(t, _)| t.tower_type == TowerType::Buff)
-        .map(|(t, transform)| (transform.translation.truncate(), t.range, t.level))
+        .map(|(t, transform)| (transform.translation.truncate(), t.range, t.buff_percentage()))
         .collect();
 
     // Update buff status for each tower
@@ -968,12 +972,9 @@ fn update_buff_auras(
 
         // Check if tower is in range of any buff tower
         let mut total_buff = 0.0;
-        for (buff_pos, buff_range, buff_level) in &buff_sources {
+        for (buff_pos, buff_range, buff_pct) in &buff_sources {
             if tower_pos.distance(*buff_pos) <= *buff_range {
-                // Base 25% + 5% per level after 1 (with diminishing returns)
-                // Level 1: 25%, Level 2: 30%, Level 3: 34%, Level 4: 37%...
-                let level_bonus: f32 = (1..*buff_level).map(|l| 0.05 / (1.0 + (l - 1) as f32 * 0.3)).sum();
-                total_buff += 0.25 + level_bonus;
+                total_buff += buff_pct;
             }
         }
 
@@ -1004,11 +1005,11 @@ fn update_buff_auras(
 fn update_tower_synergies(
     mut towers: Query<(Entity, &Tower, &mut TowerSynergies)>,
 ) {
-    // Collect all tower positions and types first
-    let tower_data: Vec<(Entity, usize, usize, TowerType)> = towers
-        .iter()
-        .map(|(e, t, _)| (e, t.grid_x, t.grid_y, t.tower_type))
-        .collect();
+    // Build grid-indexed lookup: O(T) instead of scanning all towers per neighbor
+    let mut tower_grid: HashMap<(usize, usize), (Entity, TowerType)> = HashMap::new();
+    for (entity, tower, _) in towers.iter() {
+        tower_grid.insert((tower.grid_x, tower.grid_y), (entity, tower.tower_type));
+    }
 
     // Check adjacency and calculate synergies for each tower
     for (entity, tower, mut synergies) in &mut towers {
@@ -1030,15 +1031,15 @@ fn update_tower_synergies(
             (-1, 1),  (0, 1),  (1, 1),
         ];
 
-        // Find adjacent tower types
-        let mut adjacent_types: Vec<TowerType> = Vec::new();
+        // Find adjacent tower types via O(1) grid lookup per neighbor
+        let mut adjacent_types: Vec<TowerType> = Vec::with_capacity(8);
         for (ox, oy) in adjacent_offsets {
             let check_x = grid_x as i32 + ox;
             let check_y = grid_y as i32 + oy;
 
             if check_x >= 0 && check_y >= 0 {
-                for (other_entity, other_x, other_y, other_type) in &tower_data {
-                    if *other_entity != entity && *other_x == check_x as usize && *other_y == check_y as usize {
+                if let Some((other_entity, other_type)) = tower_grid.get(&(check_x as usize, check_y as usize)) {
+                    if *other_entity != entity {
                         adjacent_types.push(*other_type);
                     }
                 }

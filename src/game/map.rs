@@ -108,11 +108,13 @@ impl GameMap {
     /// Generate a winding path from left to right with guaranteed snake pattern
     fn generate_path() -> Vec<(usize, usize)> {
         let mut rng = rand::thread_rng();
-        let mut path = Vec::new();
+        let mut path = Vec::with_capacity(120);
+        let mut path_set = HashSet::with_capacity(120); // O(1) membership checks
 
         // Start on left edge
         let start_y = rng.gen_range(2..(GRID_HEIGHT - 2));
         path.push((0, start_y));
+        path_set.insert((0, start_y));
 
         let mut x = 0usize;
         let mut y = start_y;
@@ -134,14 +136,15 @@ impl GameMap {
 
                 // Check if we can move in preferred direction
                 let can_move_preferred = if going_up {
-                    target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
+                    target_y < GRID_HEIGHT - 1 && !path_set.contains(&(x, target_y))
                 } else {
-                    y > 1 && !path.contains(&(x, target_y))
+                    y > 1 && !path_set.contains(&(x, target_y))
                 };
 
                 if can_move_preferred {
                     y = target_y;
                     path.push((x, y));
+                    path_set.insert((x, y));
                     horizontal_streak = 0;
                     moved = true;
                 } else {
@@ -149,14 +152,15 @@ impl GameMap {
                     going_up = !going_up;
                     let new_target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
                     let can_reverse = if going_up {
-                        new_target_y < GRID_HEIGHT - 1 && !path.contains(&(x, new_target_y))
+                        new_target_y < GRID_HEIGHT - 1 && !path_set.contains(&(x, new_target_y))
                     } else {
-                        y > 1 && !path.contains(&(x, new_target_y))
+                        y > 1 && !path_set.contains(&(x, new_target_y))
                     };
 
                     if can_reverse {
                         y = new_target_y;
                         path.push((x, y));
+                        path_set.insert((x, y));
                         horizontal_streak = 0;
                         moved = true;
                     }
@@ -171,6 +175,7 @@ impl GameMap {
                 if move_horizontal && x + 1 < GRID_WIDTH {
                     x += 1;
                     path.push((x, y));
+                    path_set.insert((x, y));
                     horizontal_streak += 1;
 
                     // After moving right, sometimes do a vertical run
@@ -179,14 +184,15 @@ impl GameMap {
                         for _ in 0..run_length {
                             let target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
                             let can_move = if going_up {
-                                target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
+                                target_y < GRID_HEIGHT - 1 && !path_set.contains(&(x, target_y))
                             } else {
-                                y > 1 && !path.contains(&(x, target_y))
+                                y > 1 && !path_set.contains(&(x, target_y))
                             };
 
                             if can_move {
                                 y = target_y;
                                 path.push((x, y));
+                                path_set.insert((x, y));
                             } else {
                                 going_up = !going_up;
                                 break;
@@ -198,14 +204,15 @@ impl GameMap {
                     // Try vertical move
                     let target_y = if going_up { y + 1 } else { y.saturating_sub(1) };
                     let can_move = if going_up {
-                        target_y < GRID_HEIGHT - 1 && !path.contains(&(x, target_y))
+                        target_y < GRID_HEIGHT - 1 && !path_set.contains(&(x, target_y))
                     } else {
-                        y > 1 && !path.contains(&(x, target_y))
+                        y > 1 && !path_set.contains(&(x, target_y))
                     };
 
                     if can_move {
                         y = target_y;
                         path.push((x, y));
+                        path_set.insert((x, y));
                         horizontal_streak = 0;
                     } else {
                         // Can't move vertically, try reversing
@@ -214,6 +221,7 @@ impl GameMap {
                         if x + 1 < GRID_WIDTH {
                             x += 1;
                             path.push((x, y));
+                            path_set.insert((x, y));
                             horizontal_streak += 1;
                         }
                     }
@@ -230,6 +238,7 @@ impl GameMap {
         while x < GRID_WIDTH - 1 {
             x += 1;
             path.push((x, y));
+            path_set.insert((x, y));
         }
 
         path

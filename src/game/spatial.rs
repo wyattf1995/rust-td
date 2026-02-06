@@ -39,10 +39,10 @@ impl SpatialGrid {
 
     /// Get all entities within a given range of a position
     pub fn query_range(&self, center: Vec2, range: f32) -> Vec<Entity> {
-        let mut result = Vec::new();
-
         // Calculate cell range to check
         let cells_to_check = (range / CELL_SIZE).ceil() as i32 + 1;
+        let side = (cells_to_check * 2 + 1) as usize;
+        let mut result = Vec::with_capacity(side * side * 2);
         let center_cell = Self::world_to_cell(center);
 
         for dx in -cells_to_check..=cells_to_check {
@@ -58,8 +58,11 @@ impl SpatialGrid {
     }
 
     /// Clear the grid (called at start of each update)
+    /// Keeps allocated memory in cell Vecs to avoid reallocation
     pub fn clear(&mut self) {
-        self.cells.clear();
+        for entities in self.cells.values_mut() {
+            entities.clear();
+        }
         self.entity_cells.clear();
     }
 

@@ -946,13 +946,13 @@ fn update_wave_display(
         let difficulty = format!(" ({:.1}x)", wave_manager.health_multiplier);
 
         // Show wave modifier if active
-        let modifier = match wave_manager.current_modifier {
-            WaveModifier::None => String::new(),
-            WaveModifier::SpeedBoost => " [SPEED]".to_string(),
-            WaveModifier::ArmoredWave => " [ARMOR]".to_string(),
-            WaveModifier::Swarm => " [SWARM]".to_string(),
-            WaveModifier::Regen => " [REGEN]".to_string(),
-            WaveModifier::GoldRush => " [GOLD!]".to_string(),
+        let modifier: &str = match wave_manager.current_modifier {
+            WaveModifier::None => "",
+            WaveModifier::SpeedBoost => " [SPEED]",
+            WaveModifier::ArmoredWave => " [ARMOR]",
+            WaveModifier::Swarm => " [SWARM]",
+            WaveModifier::Regen => " [REGEN]",
+            WaveModifier::GoldRush => " [GOLD!]",
         };
 
         text.sections[0].value = format!("Wave {}{}{}{}", current, difficulty, modifier, status);
@@ -1662,10 +1662,13 @@ fn update_tower_context_menu(
                 for mut text in &mut synergy_text {
                     if let Some(syn) = synergies {
                         if !syn.active.is_empty() {
-                            let synergy_strs: Vec<String> = syn.active.iter()
-                                .map(|s| format!("⚡ {}: {}", s.name(), s.description()))
-                                .collect();
-                            text.sections[0].value = synergy_strs.join("\n");
+                            use std::fmt::Write;
+                            let mut result = String::new();
+                            for (i, s) in syn.active.iter().enumerate() {
+                                if i > 0 { result.push('\n'); }
+                                let _ = write!(result, "\u{26A1} {}: {}", s.name(), s.description());
+                            }
+                            text.sections[0].value = result;
                         } else {
                             text.sections[0].value = String::new();
                         }

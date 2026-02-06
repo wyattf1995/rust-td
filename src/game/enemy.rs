@@ -315,7 +315,6 @@ impl WaveManager {
 
     /// Procedurally generate enemies for a wave
     fn generate_wave_enemies(&self, wave_num: usize) -> Vec<(EnemyType, f32)> {
-        let mut enemies = Vec::new();
         let multiplier = self.health_multiplier;
 
         // Base enemy count scaling: ramps up more in late game
@@ -333,6 +332,8 @@ impl WaveManager {
         let base_count = (5.0 + (wave_num as f32 * 1.4) + (wave_num as f32).powf(1.15) * 1.5)
             * early_wave_factor
             * modifier_factor;
+
+        let mut enemies = Vec::with_capacity((base_count * 1.5) as usize + 5);
 
         // Determine wave type based on wave number
         let wave_type = wave_num % 5;
