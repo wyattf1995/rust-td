@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install wasm target and trunk
 RUN rustup target add wasm32-unknown-unknown
-RUN cargo install trunk --locked
+RUN curl -fsSL https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf - -C /usr/local/bin
 
 WORKDIR /app
 
