@@ -769,10 +769,13 @@ fn update_tile_visuals(
     mut tiles: Query<(&MapTile, &mut Sprite)>,
     mut range_preview: Query<(&mut Sprite, &mut Transform), (With<TileRangePreview>, Without<MapTile>)>,
     towers: Query<&Tower>,
+    abilities: Res<super::abilities::PlayerAbilities>,
 ) {
-    // Update tile colors based on hover
+    // Update tile colors based on hover (suppress during artillery targeting)
     for (tile, mut sprite) in &mut tiles {
-        if let Some((hx, hy)) = hovered_tile.position {
+        if abilities.artillery_targeting {
+            sprite.color = tile.base_color;
+        } else if let Some((hx, hy)) = hovered_tile.position {
             if tile.x == hx && tile.y == hy {
                 // Tile is hovered
                 let tile_type = map.tiles[tile.x][tile.y];
@@ -794,9 +797,11 @@ fn update_tile_visuals(
         }
     }
 
-    // Update range preview
+    // Update range preview (hide during artillery targeting)
     for (mut preview_sprite, mut preview_transform) in &mut range_preview {
-        if let Some((hx, hy)) = hovered_tile.position {
+        if abilities.artillery_targeting {
+            preview_sprite.color = Color::NONE;
+        } else if let Some((hx, hy)) = hovered_tile.position {
             let tile_type = map.tiles[hx][hy];
 
             if tile_type == TileType::Empty {

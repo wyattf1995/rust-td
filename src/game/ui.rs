@@ -1743,12 +1743,11 @@ fn update_score_display(
 }
 
 fn speed_button_system(
-    mut interaction_query: Query<
+    mut button_query: Query<
         (&Interaction, &mut BackgroundColor, &mut BorderColor, &SpeedButton, &Children),
-        Changed<Interaction>,
+        With<SpeedButton>,
     >,
     mut game_speed: ResMut<GameSpeed>,
-    mut all_speed_buttons: Query<(&SpeedButton, &mut BackgroundColor, &mut BorderColor, &Children), Without<Interaction>>,
     mut text_query: Query<&mut Text>,
     mut time: ResMut<Time<Virtual>>,
 ) {
@@ -1756,54 +1755,45 @@ fn speed_button_system(
     let inactive_bg: BackgroundColor = GameColors::BUTTON_NORMAL.into();
     let hover_bg: BackgroundColor = GameColors::BUTTON_HOVER.into();
 
-    for (interaction, mut color, mut border, speed_button, children) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                game_speed.0 = speed_button.0;
-                time.set_relative_speed(speed_button.0);
-                *color = active_bg;
-                *border = BorderColor(GameColors::PRIMARY);
+    // First pass: detect press and update game speed
+    let mut new_speed: Option<f32> = None;
+    for (interaction, _, _, speed_button, _) in &button_query {
+        if *interaction == Interaction::Pressed {
+            new_speed = Some(speed_button.0);
+        }
+    }
 
-                // Update text color for this button
-                for &child in children.iter() {
-                    if let Ok(mut text) = text_query.get_mut(child) {
-                        text.sections[0].style.color = GameColors::PRIMARY;
-                    }
-                }
+    if let Some(speed) = new_speed {
+        game_speed.0 = speed;
+        time.set_relative_speed(speed);
+    }
 
-                // Update all other buttons
-                for (btn, mut btn_color, mut btn_border, btn_children) in &mut all_speed_buttons {
-                    if btn.0 == speed_button.0 {
-                        *btn_color = active_bg;
-                        *btn_border = BorderColor(GameColors::PRIMARY);
-                        for &child in btn_children.iter() {
-                            if let Ok(mut text) = text_query.get_mut(child) {
-                                text.sections[0].style.color = GameColors::PRIMARY;
-                            }
-                        }
-                    } else {
-                        *btn_color = inactive_bg;
-                        *btn_border = BorderColor(Color::NONE);
-                        for &child in btn_children.iter() {
-                            if let Ok(mut text) = text_query.get_mut(child) {
-                                text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.65);
-                            }
-                        }
-                    }
+    // Second pass: update all button visuals based on current game speed
+    for (interaction, mut color, mut border, speed_button, children) in &mut button_query {
+        let is_active = speed_button.0 == game_speed.0;
+
+        if is_active {
+            *color = active_bg;
+            *border = BorderColor(GameColors::PRIMARY);
+            for &child in children.iter() {
+                if let Ok(mut text) = text_query.get_mut(child) {
+                    text.sections[0].style.color = GameColors::PRIMARY;
                 }
             }
-            Interaction::Hovered => {
-                if game_speed.0 != speed_button.0 {
-                    *color = hover_bg;
+        } else if *interaction == Interaction::Hovered {
+            *color = hover_bg;
+            *border = BorderColor(Color::NONE);
+            for &child in children.iter() {
+                if let Ok(mut text) = text_query.get_mut(child) {
+                    text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.65);
                 }
             }
-            Interaction::None => {
-                if game_speed.0 == speed_button.0 {
-                    *color = active_bg;
-                    *border = BorderColor(GameColors::PRIMARY);
-                } else {
-                    *color = inactive_bg;
-                    *border = BorderColor(Color::NONE);
+        } else {
+            *color = inactive_bg;
+            *border = BorderColor(Color::NONE);
+            for &child in children.iter() {
+                if let Ok(mut text) = text_query.get_mut(child) {
+                    text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.65);
                 }
             }
         }
