@@ -29,6 +29,7 @@ impl Plugin for GamePlugin {
             pool::PoolPlugin,
             abilities::AbilitiesPlugin,
         ))
+        .init_resource::<ScreenShake>()
         .add_systems(OnEnter(GameState::Playing), setup_game)
         // Note: Don't cleanup on exit Playing - would destroy game when pausing
         // Cleanup happens when entering Menu instead
@@ -39,6 +40,10 @@ impl Plugin for GamePlugin {
         .add_systems(OnExit(GameState::Victory), cleanup_victory)
         .add_systems(
             Update,
+            update_screen_shake.run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(
+            Update,
             (restart_button_system, restart_interaction)
                 .run_if(in_state(GameState::GameOver).or_else(in_state(GameState::Victory))),
         );
@@ -47,6 +52,12 @@ impl Plugin for GamePlugin {
 
 #[derive(Component)]
 pub struct GameEntity;
+
+/// Screen shake resource for camera trauma
+#[derive(Resource, Default)]
+pub struct ScreenShake {
+    pub trauma: f32,
+}
 
 /// Marker resource: present while a game session is active.
 /// Prevents OnEnter(Playing) init systems from re-running when resuming from pause.
@@ -236,6 +247,37 @@ fn restart_button_system(
             Interaction::None => {
                 *color = GameColors::PRIMARY.into();
             }
+        }
+    }
+}
+
+fn update_screen_shake(
+    mut screen_shake: ResMut<ScreenShake>,
+    mut camera_query: Query<&mut Transform, With<Camera2d>>,
+    time: Res<Time>,
+) {
+    if screen_shake.trauma > 0.01 {
+        // Decay trauma
+        screen_shake.trauma *= 0.92_f32.powf(time.delta_seconds() * 60.0);
+
+        let t = time.elapsed_seconds();
+        let offset_x = screen_shake.trauma * (t * 50.0).sin() * 3.0;
+        let offset_y = screen_shake.trauma * (t * 40.0).cos() * 3.0;
+
+        // Clamp offset
+        let offset_x = offset_x.clamp(-5.0, 5.0);
+        let offset_y = offset_y.clamp(-5.0, 5.0);
+
+        for mut transform in &mut camera_query {
+            transform.translation.x = offset_x;
+            transform.translation.y = offset_y;
+        }
+    } else {
+        screen_shake.trauma = 0.0;
+        // Reset camera to origin
+        for mut transform in &mut camera_query {
+            transform.translation.x = 0.0;
+            transform.translation.y = 0.0;
         }
     }
 }

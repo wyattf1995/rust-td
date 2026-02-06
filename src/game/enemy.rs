@@ -4,11 +4,14 @@ use crate::analytics::{Analytics, track_with_context};
 use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
 
+use crate::loading::GameAssets;
+
 use super::{
     abilities::PlayerAbilities,
     economy::{PlayerEconomy, KillStreak},
     map::GameMap,
     GameEntity,
+    ScreenShake,
 };
 
 pub struct EnemyPlugin;
@@ -33,6 +36,9 @@ impl Plugin for EnemyPlugin {
                     handle_enemy_escaped,
                     check_wave_complete,
                     update_death_effects,
+                    update_gold_numbers,
+                    update_enemy_status_visuals,
+                    update_flying_shadows,
                 )
                     .run_if(in_state(GameState::Playing)),
             );
@@ -210,6 +216,13 @@ pub struct HealthBarFill {
 pub struct DeathEffect {
     pub lifetime: Timer,
     pub initial_size: f32,
+}
+
+/// Floating gold number when enemy killed
+#[derive(Component)]
+pub struct GoldNumber {
+    pub lifetime: Timer,
+    pub velocity: Vec2,
 }
 
 /// Wave modifiers for variety
@@ -549,6 +562,25 @@ fn wave_spawner(
                     ))
                     .id();
 
+                // Spawn flying shadow for flying enemies
+                if enemy_type.is_flying() {
+                    commands.spawn((
+                        SpriteBundle {
+                            sprite: Sprite {
+                                color: Color::srgba(0.0, 0.0, 0.0, 0.3),
+                                custom_size: Some(Vec2::splat(size)),
+                                ..default()
+                            },
+                            transform: Transform::from_translation(
+                                Vec3::new(pos.x + 4.0, pos.y - 4.0, 2.9)
+                            ),
+                            ..default()
+                        },
+                        FlyingShadow { enemy: enemy_entity },
+                        GameEntity,
+                    ));
+                }
+
                 // Spawn health bar background
                 commands.spawn((
                     SpriteBundle {
@@ -784,8 +816,11 @@ fn handle_enemy_killed(
     mut kill_streak: ResMut<KillStreak>,
     mut splitter_events: EventWriter<SpawnMiniSplittersEvent>,
     abilities: Res<PlayerAbilities>,
+    assets: Res<GameAssets>,
+    mut screen_shake: ResMut<ScreenShake>,
     health_bars: Query<(Entity, &HealthBar)>,
     health_fills: Query<(Entity, &HealthBarFill)>,
+    shadows: Query<(Entity, &FlyingShadow)>,
 ) {
     // Gold Rush modifier gives 2x gold (from wave OR ability)
     let wave_gold_rush = wave_manager.current_modifier == WaveModifier::GoldRush;
@@ -800,11 +835,42 @@ fn handle_enemy_killed(
         // Register kill for combo system
         kill_streak.register_kill();
 
+        // Screen shake on high combo
+        if kill_streak.count >= 10 {
+            screen_shake.trauma = (screen_shake.trauma + 0.15).min(1.0);
+        }
+
         // Apply combo multiplier and gold rush to gold reward
         let multiplied_reward = (event.reward as f32 * kill_streak.multiplier() * gold_rush_multiplier) as u32;
         economy.gold += multiplied_reward;
         economy.score += multiplied_reward;
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
+
+        // Spawn gold earned toast
+        {
+            let pos = event.position.truncate();
+            let offset_x = (rand_simple(pos.x) - 0.5) * 16.0;
+            let velocity = Vec2::new(offset_x, 35.0);
+            commands.spawn((
+                Text2dBundle {
+                    text: Text::from_section(
+                        format!("+{}g", multiplied_reward),
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 14.0,
+                            color: GameColors::GOLD_TEXT,
+                        },
+                    ),
+                    transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 20.0, 10.0)),
+                    ..default()
+                },
+                GoldNumber {
+                    lifetime: Timer::from_seconds(0.7, TimerMode::Once),
+                    velocity,
+                },
+                GameEntity,
+            ));
+        }
 
         // If this was a Splitter, spawn mini-splitters
         if event.enemy_type.is_splitter() {
@@ -848,6 +914,15 @@ fn handle_enemy_killed(
         }
         for (entity, fill) in &health_fills {
             if fill.enemy == event.enemy {
+                if let Some(entity_commands) = commands.get_entity(entity) {
+                    entity_commands.despawn_recursive();
+                }
+            }
+        }
+
+        // Despawn flying shadow
+        for (entity, shadow) in &shadows {
+            if shadow.enemy == event.enemy {
                 if let Some(entity_commands) = commands.get_entity(entity) {
                     entity_commands.despawn_recursive();
                 }
@@ -974,6 +1049,7 @@ fn handle_enemy_escaped(
     mut next_state: ResMut<NextState<GameState>>,
     health_bars: Query<(Entity, &HealthBar)>,
     health_fills: Query<(Entity, &HealthBarFill)>,
+    shadows: Query<(Entity, &FlyingShadow)>,
 ) {
     for event in events.read() {
         economy.lives = economy.lives.saturating_sub(1);
@@ -995,6 +1071,15 @@ fn handle_enemy_escaped(
         }
         for (entity, fill) in &health_fills {
             if fill.enemy == event.enemy {
+                if let Some(entity_commands) = commands.get_entity(entity) {
+                    entity_commands.despawn_recursive();
+                }
+            }
+        }
+
+        // Despawn flying shadow
+        for (entity, shadow) in &shadows {
+            if shadow.enemy == event.enemy {
                 if let Some(entity_commands) = commands.get_entity(entity) {
                     entity_commands.despawn_recursive();
                 }
@@ -1052,5 +1137,92 @@ fn check_wave_complete(
 
         // No victory condition - infinite survival mode!
         // Game continues until player loses all lives
+    }
+}
+
+// Simple pseudo-random based on position (deterministic)
+fn rand_simple(seed: f32) -> f32 {
+    ((seed * 12.9898).sin() * 43758.5453).fract()
+}
+
+fn update_gold_numbers(
+    mut commands: Commands,
+    mut numbers: Query<(Entity, &mut GoldNumber, &mut Transform, &mut Text)>,
+    time: Res<Time>,
+) {
+    for (entity, mut number, mut transform, mut text) in &mut numbers {
+        number.lifetime.tick(time.delta());
+
+        // Move upward
+        transform.translation.x += number.velocity.x * time.delta_seconds();
+        transform.translation.y += number.velocity.y * time.delta_seconds();
+
+        // Slow down velocity
+        number.velocity *= 0.95;
+
+        // Fade out
+        let alpha = 1.0 - number.lifetime.fraction();
+        if let Some(section) = text.sections.get_mut(0) {
+            section.style.color = GameColors::GOLD_TEXT.with_alpha(alpha);
+        }
+
+        if number.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+/// Tint enemies based on active status effects (poison/slow)
+fn update_enemy_status_visuals(
+    mut enemies: Query<(&Enemy, &mut Sprite)>,
+) {
+    for (enemy, mut sprite) in &mut enemies {
+        if enemy.marked_dead {
+            continue;
+        }
+
+        let base_color = enemy.enemy_type.color();
+
+        if enemy.poison_timer.is_some() {
+            // Blend 30% toward poison green
+            let poison = GameColors::PROJECTILE_POISON;
+            sprite.color = Color::srgb(
+                base_color.to_srgba().red * 0.7 + poison.to_srgba().red * 0.3,
+                base_color.to_srgba().green * 0.7 + poison.to_srgba().green * 0.3,
+                base_color.to_srgba().blue * 0.7 + poison.to_srgba().blue * 0.3,
+            );
+        } else if enemy.slow_timer.is_some() {
+            // Blend 30% toward ice cyan
+            let slow = GameColors::TOWER_SLOW;
+            sprite.color = Color::srgb(
+                base_color.to_srgba().red * 0.7 + slow.to_srgba().red * 0.3,
+                base_color.to_srgba().green * 0.7 + slow.to_srgba().green * 0.3,
+                base_color.to_srgba().blue * 0.7 + slow.to_srgba().blue * 0.3,
+            );
+        } else {
+            sprite.color = base_color;
+        }
+    }
+}
+
+/// Flying enemy shadow component
+#[derive(Component)]
+pub struct FlyingShadow {
+    pub enemy: Entity,
+}
+
+fn update_flying_shadows(
+    mut commands: Commands,
+    enemies: Query<&Transform, With<Enemy>>,
+    mut shadows: Query<(Entity, &FlyingShadow, &mut Transform), Without<Enemy>>,
+) {
+    for (shadow_entity, shadow, mut shadow_transform) in &mut shadows {
+        if let Ok(enemy_transform) = enemies.get(shadow.enemy) {
+            shadow_transform.translation.x = enemy_transform.translation.x + 4.0;
+            shadow_transform.translation.y = enemy_transform.translation.y - 4.0;
+        } else {
+            // Enemy despawned, clean up shadow
+            commands.entity(shadow_entity).despawn_recursive();
+        }
     }
 }

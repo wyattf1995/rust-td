@@ -22,6 +22,7 @@ impl Plugin for GameUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<UiClicked>()
             .init_resource::<UiZones>()
+            .init_resource::<LifeLostFlash>()
             .add_systems(OnEnter(GameState::Playing), setup_ui)
             .add_systems(OnEnter(GameState::Paused), setup_pause_menu)
             .add_systems(OnExit(GameState::Paused), cleanup_pause_menu)
@@ -45,12 +46,15 @@ impl Plugin for GameUiPlugin {
                     (
                         update_gold_display,
                         update_lives_display,
+                        update_life_flash,
                         update_wave_display,
                         update_score_display,
                         update_combo_display,
                         update_ability_display,
                         update_ability_tooltips,
                         update_tower_selection,
+                        update_tower_affordability,
+                        update_wave_announcement,
                         update_info_panel,
                         pause_input,
                     ),
@@ -173,6 +177,19 @@ pub struct BottomTowerBar;
 pub struct UiZones {
     pub top_bar_height: f32,
     pub bottom_bar_height: f32,
+}
+
+/// Wave announcement overlay
+#[derive(Component)]
+struct WaveAnnouncement {
+    lifetime: Timer,
+}
+
+/// Resource to track life-lost flash effect
+#[derive(Resource, Default)]
+struct LifeLostFlash {
+    timer: Option<Timer>,
+    previous_lives: u32,
 }
 
 #[derive(Component)]
@@ -410,7 +427,8 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
         ))
         .with_children(|parent| {
             // Tower buttons - compact for mobile (8 towers now)
-            for tower_type in [TowerType::Basic, TowerType::Splash, TowerType::Slow, TowerType::Sniper, TowerType::Rapid, TowerType::Chain, TowerType::Poison, TowerType::Buff] {
+            for (idx, tower_type) in [TowerType::Basic, TowerType::Splash, TowerType::Slow, TowerType::Sniper, TowerType::Rapid, TowerType::Chain, TowerType::Poison, TowerType::Buff].iter().enumerate() {
+                let tower_type = *tower_type;
                 parent
                     .spawn((
                         NodeBundle {
@@ -447,6 +465,22 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                 TowerButton(tower_type),
                             ))
                             .with_children(|parent| {
+                                // Keyboard shortcut label
+                                parent.spawn(TextBundle::from_section(
+                                    format!("{}", idx + 1),
+                                    TextStyle {
+                                        font: assets.font.clone(),
+                                        font_size: 10.0,
+                                        color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                                    },
+                                ).with_style(Style {
+                                    align_self: AlignSelf::FlexStart,
+                                    position_type: PositionType::Absolute,
+                                    top: Val::Px(2.0),
+                                    left: Val::Px(4.0),
+                                    ..default()
+                                }));
+
                                 // Tower icon
                                 parent.spawn(NodeBundle {
                                     style: Style {
@@ -1029,10 +1063,42 @@ fn update_gold_display(
 fn update_lives_display(
     economy: Res<PlayerEconomy>,
     mut query: Query<&mut Text, With<LivesText>>,
+    mut flash: ResMut<LifeLostFlash>,
 ) {
     if economy.is_changed() {
+        // Detect life loss and trigger flash
+        if flash.previous_lives > 0 && economy.lives < flash.previous_lives {
+            flash.timer = Some(Timer::from_seconds(0.4, TimerMode::Once));
+        }
+        flash.previous_lives = economy.lives;
+
         for mut text in &mut query {
             text.sections[0].value = format!("{}", economy.lives);
+        }
+    }
+}
+
+fn update_life_flash(
+    mut flash: ResMut<LifeLostFlash>,
+    mut query: Query<&mut Text, With<LivesText>>,
+    time: Res<Time>,
+) {
+    if let Some(ref mut timer) = flash.timer {
+        timer.tick(time.delta());
+        let progress = timer.fraction();
+
+        for mut text in &mut query {
+            // Lerp from bright red back to primary color
+            let flash_color = GameColors::HEALTH_LOW;
+            let normal_color = GameColors::PRIMARY;
+            let r = flash_color.to_srgba().red + (normal_color.to_srgba().red - flash_color.to_srgba().red) * progress;
+            let g = flash_color.to_srgba().green + (normal_color.to_srgba().green - flash_color.to_srgba().green) * progress;
+            let b = flash_color.to_srgba().blue + (normal_color.to_srgba().blue - flash_color.to_srgba().blue) * progress;
+            text.sections[0].style.color = Color::srgb(r, g, b);
+        }
+
+        if timer.finished() {
+            flash.timer = None;
         }
     }
 }
@@ -1319,12 +1385,54 @@ fn update_tower_selection(
     }
 }
 
+fn update_tower_affordability(
+    economy: Res<PlayerEconomy>,
+    button_query: Query<(&TowerButton, &Interaction, &Children)>,
+    mut text_query: Query<&mut Text>,
+) {
+    for (tower_button, interaction, children) in &button_query {
+        let can_afford = economy.gold >= tower_button.0.cost();
+
+        // Don't dim if button is being interacted with
+        if *interaction != Interaction::None {
+            continue;
+        }
+
+        // Find the cost text child (last text child, which shows "Xg")
+        // Children order: shortcut label, tower icon, tower name, cost text, stats text
+        let mut text_children: Vec<Entity> = Vec::new();
+        for &child in children.iter() {
+            if text_query.get(child).is_ok() {
+                text_children.push(child);
+            }
+        }
+
+        // Cost text is typically the 3rd text child (index 2 after shortcut label, name)
+        // But we want to dim the cost text specifically
+        for (i, &child) in text_children.iter().enumerate() {
+            if let Ok(mut text) = text_query.get_mut(child) {
+                if i == 2 {
+                    // Cost text
+                    text.sections[0].style.color = if can_afford {
+                        GameColors::GOLD
+                    } else {
+                        GameColors::HEALTH_LOW
+                    };
+                }
+            }
+        }
+    }
+}
+
 fn start_wave_button(
+    mut commands: Commands,
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<StartWaveButton>),
     >,
     mut wave_manager: ResMut<WaveManager>,
+    assets: Res<GameAssets>,
+    existing_announcements: Query<Entity, With<WaveAnnouncement>>,
 ) {
     for (interaction, mut color) in &mut interaction_query {
         match *interaction {
@@ -1332,6 +1440,60 @@ fn start_wave_button(
                 *color = GameColors::BUTTON_START_PRESSED.into();
                 if !wave_manager.wave_active {
                     wave_manager.start_wave();
+
+                    // Despawn any existing announcement
+                    for entity in &existing_announcements {
+                        commands.entity(entity).despawn_recursive();
+                    }
+
+                    // Spawn wave announcement
+                    let wave_num = wave_manager.current_wave + 1;
+                    let modifier_name = wave_manager.current_modifier.name();
+
+                    commands.spawn((
+                        NodeBundle {
+                            style: Style {
+                                position_type: PositionType::Absolute,
+                                top: Val::Percent(35.0),
+                                left: Val::Percent(50.0),
+                                margin: UiRect::left(Val::Px(-120.0)),
+                                width: Val::Px(240.0),
+                                flex_direction: FlexDirection::Column,
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                padding: UiRect::all(Val::Px(12.0)),
+                                ..default()
+                            },
+                            background_color: Color::srgba(0.0, 0.0, 0.0, 0.0).into(),
+                            ..default()
+                        },
+                        WaveAnnouncement {
+                            lifetime: Timer::from_seconds(1.5, TimerMode::Once),
+                        },
+                        GameEntity,
+                    )).with_children(|parent| {
+                        parent.spawn(TextBundle::from_section(
+                            format!("WAVE {}", wave_num),
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 40.0,
+                                color: GameColors::PRIMARY,
+                            },
+                        ));
+                        if !modifier_name.is_empty() {
+                            parent.spawn(TextBundle::from_section(
+                                modifier_name,
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 18.0,
+                                    color: GameColors::GOLD,
+                                },
+                            ).with_style(Style {
+                                margin: UiRect::top(Val::Px(4.0)),
+                                ..default()
+                            }));
+                        }
+                    });
                 }
             }
             Interaction::Hovered => {
@@ -1340,6 +1502,43 @@ fn start_wave_button(
             Interaction::None => {
                 *color = GameColors::BUTTON_START.into();
             }
+        }
+    }
+}
+
+fn update_wave_announcement(
+    mut commands: Commands,
+    mut announcements: Query<(Entity, &mut WaveAnnouncement, &Children)>,
+    mut text_query: Query<&mut Text>,
+    time: Res<Time>,
+) {
+    for (entity, mut announcement, children) in &mut announcements {
+        announcement.lifetime.tick(time.delta());
+        let progress = announcement.lifetime.fraction();
+
+        // Fade out text alpha
+        let alpha = if progress < 0.3 {
+            // Fade in quickly
+            progress / 0.3
+        } else if progress > 0.7 {
+            // Fade out
+            1.0 - (progress - 0.7) / 0.3
+        } else {
+            1.0
+        };
+
+        // Update all child text alphas
+        for &child in children.iter() {
+            if let Ok(mut text) = text_query.get_mut(child) {
+                if let Some(section) = text.sections.get_mut(0) {
+                    let base_color = section.style.color;
+                    section.style.color = base_color.with_alpha(alpha);
+                }
+            }
+        }
+
+        if announcement.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
         }
     }
 }

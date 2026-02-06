@@ -17,7 +17,7 @@ impl Plugin for MapPlugin {
             .add_systems(OnEnter(GameState::Playing), setup_map)
             .add_systems(
                 Update,
-                (tile_hover_system, update_tile_visuals)
+                (tile_hover_system, update_tile_visuals, update_path_flow_dots, update_spawn_exit_markers)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -384,6 +384,19 @@ pub struct TerrainDecoration;
 #[derive(Component)]
 pub struct TileRangePreview;
 
+/// Animated dot flowing along the path
+#[derive(Component)]
+pub struct PathFlowDot {
+    pub progress: f32,  // 0.0 to 1.0 along the path
+    pub speed: f32,
+}
+
+/// Spawn/exit marker for pulsing animation
+#[derive(Component)]
+pub struct SpawnExitMarker {
+    pub is_spawn: bool,
+}
+
 fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
     // Skip if resuming from pause (game already active)
     if active.is_some() {
@@ -580,6 +593,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                 transform: Transform::from_translation(pos.extend(0.9)),
                 ..default()
             },
+            SpawnExitMarker { is_spawn: true },
             GameEntity,
         ));
         // Inner marker
@@ -593,6 +607,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                 transform: Transform::from_translation(pos.extend(1.0)),
                 ..default()
             },
+            SpawnExitMarker { is_spawn: true },
             GameEntity,
         ));
     }
@@ -611,6 +626,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                 transform: Transform::from_translation(pos.extend(0.9)),
                 ..default()
             },
+            SpawnExitMarker { is_spawn: false },
             GameEntity,
         ));
         // Inner marker
@@ -624,6 +640,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                 transform: Transform::from_translation(pos.extend(1.0)),
                 ..default()
             },
+            SpawnExitMarker { is_spawn: false },
             GameEntity,
         ));
     }
@@ -642,6 +659,68 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
         TileRangePreview,
         GameEntity,
     ));
+
+    // Spawn path flow dots (animated indicators showing enemy direction)
+    for i in 0..5 {
+        let progress = i as f32 / 5.0;
+        commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: GameColors::PATH_INDICATOR.with_alpha(0.2),
+                    custom_size: Some(Vec2::splat(4.0)),
+                    ..default()
+                },
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.6)),
+                ..default()
+            },
+            PathFlowDot {
+                progress,
+                speed: 0.15,
+            },
+            GameEntity,
+        ));
+    }
+
+    // Feature #11: Add extra terrain accent sprites for visual variety
+    for x in 0..GRID_WIDTH {
+        for y in 0..GRID_HEIGHT {
+            if let TileType::Blocked(terrain) = map.tiles[x][y] {
+                let pos = GameMap::grid_to_world(x, y);
+                // Position-based pseudo-random for subtle color variation
+                let seed = (x * 17 + y * 31) as f32;
+                let r_var = (((seed * 12.9898).sin() * 43758.5453).fract() - 0.5) * 0.04;
+                let g_var = (((seed * 78.233).sin() * 43758.5453).fract() - 0.5) * 0.04;
+                let b_var = (((seed * 39.346).sin() * 43758.5453).fract() - 0.5) * 0.04;
+
+                // Small accent sprite for extra depth
+                let accent_color = match terrain {
+                    TerrainType::Crystal => Color::srgba(0.5 + r_var, 0.3 + g_var, 0.6 + b_var, 0.15),
+                    TerrainType::Rock => Color::srgba(0.25 + r_var, 0.22 + g_var, 0.2 + b_var, 0.15),
+                    TerrainType::Water => Color::srgba(0.15 + r_var, 0.35 + g_var, 0.55 + b_var, 0.12),
+                    TerrainType::Forest => Color::srgba(0.12 + r_var, 0.25 + g_var, 0.15 + b_var, 0.15),
+                };
+
+                let off_x = (((seed * 5.7).sin() * 100.0).fract() - 0.5) * 16.0;
+                let off_y = (((seed * 3.2).cos() * 100.0).fract() - 0.5) * 16.0;
+
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: accent_color,
+                            custom_size: Some(Vec2::splat(TILE_SIZE * 0.25)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(
+                            Vec3::new(pos.x + off_x, pos.y + off_y, 0.12)
+                        ),
+                        ..default()
+                    },
+                    TerrainDecoration,
+                    GameEntity,
+                ));
+            }
+        }
+    }
 
     // Insert the generated map as a resource
     commands.insert_resource(map);
@@ -747,6 +826,72 @@ fn update_tile_visuals(
             }
         } else {
             preview_sprite.color = Color::NONE;
+        }
+    }
+}
+
+/// Animate path flow dots traveling along the path
+fn update_path_flow_dots(
+    map: Res<GameMap>,
+    mut dots: Query<(&mut PathFlowDot, &mut Transform, &mut Sprite)>,
+    time: Res<Time>,
+) {
+    if map.path.len() < 2 {
+        return;
+    }
+
+    let path_len = map.path.len() - 1;
+
+    for (mut dot, mut transform, mut sprite) in &mut dots {
+        // Advance progress
+        dot.progress += dot.speed * time.delta_seconds();
+        if dot.progress >= 1.0 {
+            dot.progress -= 1.0;
+        }
+
+        // Interpolate position along path
+        let path_pos = dot.progress * path_len as f32;
+        let segment = (path_pos as usize).min(path_len - 1);
+        let frac = path_pos - segment as f32;
+
+        let (x1, y1) = map.path[segment];
+        let (x2, y2) = map.path[(segment + 1).min(path_len)];
+
+        let pos1 = GameMap::grid_to_world(x1, y1);
+        let pos2 = GameMap::grid_to_world(x2, y2);
+
+        let world_pos = pos1 + (pos2 - pos1) * frac;
+        transform.translation.x = world_pos.x;
+        transform.translation.y = world_pos.y;
+
+        // Pulse alpha
+        let alpha = 0.2 + 0.15 * (time.elapsed_seconds() * 3.0 + dot.progress * 6.28).sin();
+        sprite.color = GameColors::PATH_INDICATOR.with_alpha(alpha);
+    }
+}
+
+/// Pulse spawn and exit markers for visibility
+fn update_spawn_exit_markers(
+    mut markers: Query<(&SpawnExitMarker, &mut Transform, &mut Sprite)>,
+    time: Res<Time>,
+) {
+    for (marker, mut transform, mut sprite) in &mut markers {
+        let t = time.elapsed_seconds();
+
+        // Gentle scale pulse
+        let scale_pulse = 1.0 + 0.15 * (t * 2.5).sin();
+        transform.scale = Vec3::splat(scale_pulse);
+
+        // Pulse glow alpha for outer markers (lower z = glow)
+        if transform.translation.z < 1.0 {
+            let base_alpha = if marker.is_spawn { 0.3 } else { 0.3 };
+            let alpha = base_alpha * (0.6 + 0.4 * (t * 2.0).sin());
+            let base_color = if marker.is_spawn {
+                GameColors::SECONDARY
+            } else {
+                GameColors::ACCENT
+            };
+            sprite.color = base_color.with_alpha(alpha);
         }
     }
 }
