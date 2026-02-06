@@ -329,7 +329,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                             TextStyle {
                                 font: assets.font.clone(),
                                 font_size: 14.0,
-                                color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.85),
                             },
                         ),
                         ScoreText,
@@ -385,7 +385,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                         color: if is_default {
                                             GameColors::PRIMARY
                                         } else {
-                                            Color::srgba(1.0, 1.0, 1.0, 0.5)
+                                            Color::srgba(1.0, 1.0, 1.0, 0.65)
                                         },
                                     },
                                 ));
@@ -502,7 +502,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                     TextStyle {
                                         font: assets.font.clone(),
                                         font_size: 10.0,
-                                        color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                                        color: Color::srgba(1.0, 1.0, 1.0, 0.55),
                                     },
                                 ).with_style(Style {
                                     align_self: AlignSelf::FlexStart,
@@ -550,7 +550,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                         TextStyle {
                                             font: assets.font.clone(),
                                             font_size: 9.0,
-                                            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                                            color: Color::srgba(1.0, 1.0, 1.0, 0.85),
                                         },
                                     ));
                                 } else {
@@ -564,7 +564,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                         TextStyle {
                                             font: assets.font.clone(),
                                             font_size: 9.0,
-                                            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                                            color: Color::srgba(1.0, 1.0, 1.0, 0.85),
                                         },
                                     ));
                                 }
@@ -614,7 +614,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                             TextStyle {
                                 font: assets.font.clone(),
                                 font_size: 9.0,
-                                color: Color::srgba(1.0, 1.0, 1.0, 0.6),
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.75),
                             },
                         ),
                         InfoPanelDesc,
@@ -1079,7 +1079,7 @@ fn spawn_ability_button(
                 TextStyle {
                     font: assets.font.clone(),
                     font_size: 9.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.6),
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.75),
                 },
             ));
 
@@ -1099,7 +1099,7 @@ fn spawn_ability_button(
                     TextStyle {
                         font: assets.font.clone(),
                         font_size: 9.0,
-                        color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                        color: Color::srgba(1.0, 1.0, 1.0, 0.65),
                     },
                 ));
                 row.spawn((
@@ -1340,7 +1340,7 @@ fn update_ability_display(
             text.sections[0].style.color = GameColors::GOLD;
         } else {
             text.sections[0].value = format!("{:.0}s", remaining);
-            text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.5);
+            text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.65);
         }
     }
 }
@@ -1400,7 +1400,7 @@ fn update_ability_tooltips(
                 TextStyle {
                     font: assets.font.clone(),
                     font_size: 11.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.85),
                 },
             ));
         });
@@ -1786,7 +1786,7 @@ fn speed_button_system(
                         *btn_border = BorderColor(Color::NONE);
                         for &child in btn_children.iter() {
                             if let Ok(mut text) = text_query.get_mut(child) {
-                                text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.5);
+                                text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.65);
                             }
                         }
                     }
@@ -1921,7 +1921,7 @@ fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) {
                 TextStyle {
                     font: assets.font.clone(),
                     font_size: 16.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.5),
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.65),
                 },
             ).with_style(Style {
                 margin: UiRect::top(Val::Px(30.0)),
