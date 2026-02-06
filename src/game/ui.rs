@@ -21,14 +21,15 @@ pub struct UiClicked(pub bool);
 impl Plugin for GameUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<UiClicked>()
+            .init_resource::<UiZones>()
             .add_systems(OnEnter(GameState::Playing), setup_ui)
             .add_systems(OnEnter(GameState::Paused), setup_pause_menu)
             .add_systems(OnExit(GameState::Paused), cleanup_pause_menu)
             .add_systems(
                 Update,
                 (
-                    // Phase 1: Reset UI click flag
-                    reset_ui_clicked,
+                    // Phase 1: Reset UI click flag + update zone sizes
+                    (reset_ui_clicked, update_ui_zones),
                     // Phase 2: UI button interactions (set flag if clicked)
                     (
                         tower_button_system,
@@ -162,6 +163,19 @@ struct TargetingText;
 struct SynergyText;
 
 #[derive(Component)]
+pub struct TopHudBar;
+
+#[derive(Component)]
+pub struct BottomTowerBar;
+
+/// Dynamic UI zone boundaries (actual rendered pixel heights)
+#[derive(Resource, Default)]
+pub struct UiZones {
+    pub top_bar_height: f32,
+    pub bottom_bar_height: f32,
+}
+
+#[derive(Component)]
 struct AbilityBar;
 
 #[derive(Component)]
@@ -210,6 +224,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                 background_color: GameColors::UI_OVERLAY.into(),
                 ..default()
             },
+            TopHudBar,
             GameEntity,
         ))
         .with_children(|parent| {
@@ -373,11 +388,15 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
             NodeBundle {
                 style: Style {
                     width: Val::Percent(100.0),
-                    height: Val::Px(122.0),
-                    padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(6.0), Val::Px(6.0)),
+                    min_height: Val::Px(65.0),
+                    max_height: Val::Px(220.0),
+                    padding: UiRect::all(Val::Px(4.0)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
+                    align_content: AlignContent::Center,
+                    flex_wrap: FlexWrap::Wrap,
                     column_gap: Val::Px(4.0),
+                    row_gap: Val::Px(4.0),
                     position_type: PositionType::Absolute,
                     bottom: Val::Px(0.0),
                     left: Val::Px(0.0),
@@ -386,6 +405,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                 background_color: GameColors::UI_OVERLAY.into(),
                 ..default()
             },
+            BottomTowerBar,
             GameEntity,
         ))
         .with_children(|parent| {
@@ -395,8 +415,11 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     .spawn((
                         NodeBundle {
                             style: Style {
-                                width: Val::Px(70.0),
-                                height: Val::Px(108.0),
+                                min_width: Val::Px(56.0),
+                                max_width: Val::Px(75.0),
+                                flex_basis: Val::Px(65.0),
+                                flex_shrink: 1.0,
+                                height: Val::Px(100.0),
                                 border: UiRect::all(Val::Px(2.0)),
                                 ..default()
                             },
@@ -489,8 +512,11 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                 .spawn((
                     NodeBundle {
                         style: Style {
-                            width: Val::Px(175.0),
-                            height: Val::Px(108.0),
+                            min_width: Val::Px(140.0),
+                            max_width: Val::Px(180.0),
+                            flex_basis: Val::Px(160.0),
+                            flex_shrink: 1.0,
+                            height: Val::Px(100.0),
                             flex_direction: FlexDirection::Column,
                             justify_content: JustifyContent::SpaceEvenly,
                             align_items: AlignItems::FlexStart,
@@ -1323,6 +1349,20 @@ fn reset_ui_clicked(mut ui_clicked: ResMut<UiClicked>) {
     ui_clicked.0 = false;
 }
 
+/// Update UI zone boundaries from actual rendered node sizes
+fn update_ui_zones(
+    top_bar: Query<&Node, With<TopHudBar>>,
+    bottom_bar: Query<&Node, With<BottomTowerBar>>,
+    mut zones: ResMut<UiZones>,
+) {
+    if let Ok(node) = top_bar.get_single() {
+        zones.top_bar_height = node.size().y;
+    }
+    if let Ok(node) = bottom_bar.get_single() {
+        zones.bottom_bar_height = node.size().y;
+    }
+}
+
 fn handle_tile_click(
     mouse_button: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -1332,6 +1372,7 @@ fn handle_tile_click(
     economy: Res<PlayerEconomy>,
     mut place_events: EventWriter<PlaceTowerEvent>,
     ui_clicked: Res<UiClicked>,
+    ui_zones: Res<UiZones>,
 ) {
     // Don't place tower if UI was clicked
     if ui_clicked.0 {
@@ -1373,9 +1414,9 @@ fn handle_tile_click(
         return;
     }
 
-    // Check if click is in UI area (bottom 140px or top 50px)
+    // Check if click is in UI area (dynamic zone boundaries)
     let window_height = window.height();
-    if cursor_pos.y > window_height - 140.0 || cursor_pos.y < 50.0 {
+    if cursor_pos.y > window_height - ui_zones.bottom_bar_height - 10.0 || cursor_pos.y < ui_zones.top_bar_height + 10.0 {
         return;
     }
 
@@ -1650,8 +1691,10 @@ fn update_tower_context_menu(
     mut targeting_text: Query<&mut Text, (With<TargetingText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<SynergyText>)>,
     mut synergy_text: Query<&mut Text, (With<SynergyText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>)>,
     windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     economy: Res<PlayerEconomy>,
+    bevy_ui_scale: Res<bevy::ui::UiScale>,
 ) {
     // Left-click to select/deselect towers
     if mouse_button.just_pressed(MouseButton::Left) {
@@ -1682,14 +1725,19 @@ fn update_tower_context_menu(
             if let Ok((_, tower, synergies)) = towers.get(tower_entity) {
                 style.display = Display::Flex;
 
-                // Position near the tower
-                if let Ok(window) = windows.get_single() {
+                // Position near the tower using camera projection
+                if let (Ok(window), Ok((camera, cam_transform))) = (windows.get_single(), camera_q.get_single()) {
                     let world_pos = GameMap::grid_to_world(tower.grid_x, tower.grid_y);
-                    // Convert to screen space (approximate)
-                    let screen_x = world_pos.x + window.width() / 2.0 + 40.0;
-                    let screen_y = window.height() / 2.0 - world_pos.y - 60.0;
-                    style.left = Val::Px(screen_x.clamp(0.0, window.width() - 180.0));
-                    style.top = Val::Px(screen_y.clamp(0.0, window.height() - 220.0));
+                    let ui_scale = bevy_ui_scale.0.max(0.01);
+                    if let Some(screen_pos) = camera.world_to_viewport(cam_transform, world_pos.extend(0.0)) {
+                        // Divide by UiScale since Val::Px values get multiplied by it
+                        let screen_x = (screen_pos.x + 40.0) / ui_scale;
+                        let screen_y = (screen_pos.y - 60.0) / ui_scale;
+                        let max_x = (window.width() - 200.0) / ui_scale;
+                        let max_y = (window.height() - 220.0) / ui_scale;
+                        style.left = Val::Px(screen_x.clamp(0.0, max_x.max(0.0)));
+                        style.top = Val::Px(screen_y.clamp(0.0, max_y.max(0.0)));
+                    }
                 }
 
                 // Get current attack speed

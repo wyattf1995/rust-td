@@ -5,6 +5,7 @@ use crate::graphics::shapes::GameColors;
 
 use super::{
     enemy::Enemy,
+    ui::UiZones,
     GameEntity,
 };
 
@@ -144,6 +145,7 @@ fn ability_input(
     mut artillery_events: EventWriter<ArtilleryAbilityEvent>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
+    ui_zones: Res<UiZones>,
 ) {
     // Freeze - Q key
     if keyboard.just_pressed(KeyCode::KeyQ) && abilities.freeze_ready {
@@ -172,9 +174,9 @@ fn ability_input(
         if let Ok(window) = windows.get_single() {
             if let Ok((camera, camera_transform)) = camera_q.get_single() {
                 if let Some(cursor_pos) = window.cursor_position() {
-                    // Don't fire if clicking on UI areas
+                    // Don't fire if clicking on UI areas (dynamic zone boundaries)
                     let window_height = window.height();
-                    if cursor_pos.y <= window_height - 140.0 && cursor_pos.y >= 50.0 {
+                    if cursor_pos.y <= window_height - ui_zones.bottom_bar_height - 10.0 && cursor_pos.y >= ui_zones.top_bar_height + 10.0 {
                         if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
                             artillery_events.send(ArtilleryAbilityEvent { position: world_pos });
                             abilities.artillery_targeting = false;

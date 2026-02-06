@@ -7,6 +7,7 @@ use crate::graphics::shapes::{GameColors, ShapeSizes};
 
 use super::GameEntity;
 use super::tower::{SelectedTowerType, Tower};
+use super::ui::UiZones;
 
 pub struct MapPlugin;
 
@@ -650,6 +651,7 @@ fn tile_hover_system(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut hovered_tile: ResMut<HoveredTile>,
+    ui_zones: Res<UiZones>,
 ) {
     let Ok(window) = windows.get_single() else {
         return;
@@ -664,9 +666,9 @@ fn tile_hover_system(
         return;
     };
 
-    // Check if cursor is in UI area (top HUD or bottom panel)
+    // Check if cursor is in UI area (dynamic zone boundaries)
     let window_height = window.height();
-    if cursor_pos.y > window_height - 140.0 || cursor_pos.y < 50.0 {
+    if cursor_pos.y > window_height - ui_zones.bottom_bar_height - 10.0 || cursor_pos.y < ui_zones.top_bar_height + 10.0 {
         hovered_tile.position = None;
         return;
     }

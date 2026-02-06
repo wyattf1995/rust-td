@@ -28,14 +28,14 @@ impl Default for GameSpeed {
     }
 }
 
-/// UI scale factor for responsive design (mobile vs desktop)
+/// Screen info for responsive design (mobile vs desktop)
 #[derive(Resource)]
-pub struct UiScale {
+pub struct ScreenInfo {
     pub factor: f32,
     pub is_mobile: bool,
 }
 
-impl Default for UiScale {
+impl Default for ScreenInfo {
     fn default() -> Self {
         Self {
             factor: 1.0,
@@ -68,7 +68,7 @@ fn main() {
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.18)))
         .init_state::<GameState>()
         .init_resource::<GameSpeed>()
-        .init_resource::<UiScale>()
+        .init_resource::<ScreenInfo>()
         .add_plugins((
             analytics::AnalyticsPlugin,
             loading::LoadingPlugin,
@@ -76,14 +76,15 @@ fn main() {
             game::GamePlugin,
             graphics::GraphicsPlugin,
         ))
-        .add_systems(Update, detect_screen_size)
+        .add_systems(Update, (detect_screen_size, update_camera_projection))
         .run();
 }
 
-/// Detect screen size and update UI scale for mobile
+/// Detect screen size and update UI scale for responsive layout
 fn detect_screen_size(
     windows: Query<&Window>,
-    mut ui_scale: ResMut<UiScale>,
+    mut screen_info: ResMut<ScreenInfo>,
+    mut bevy_ui_scale: ResMut<bevy::ui::UiScale>,
 ) {
     let Ok(window) = windows.get_single() else {
         return;
@@ -100,13 +101,38 @@ fn detect_screen_size(
     let base_width = 1280.0;
     let scale = if is_mobile {
         // On mobile, scale up UI elements for touch
-        (width / base_width).max(0.6) * 1.3
+        ((width / base_width) * 1.3).clamp(0.5, 1.3)
     } else {
-        (width / base_width).max(0.7)
+        (width / base_width).clamp(0.6, 1.5)
     };
 
-    if (ui_scale.factor - scale).abs() > 0.01 || ui_scale.is_mobile != is_mobile {
-        ui_scale.factor = scale;
-        ui_scale.is_mobile = is_mobile;
+    if (screen_info.factor - scale).abs() > 0.01 || screen_info.is_mobile != is_mobile {
+        screen_info.factor = scale;
+        screen_info.is_mobile = is_mobile;
+        // Bevy's built-in UiScale globally multiplies all Val::Px values
+        bevy_ui_scale.0 = scale;
     }
+}
+
+/// Scale camera projection so the full grid + UI margins always fit in the viewport
+fn update_camera_projection(
+    windows: Query<&Window>,
+    mut camera_q: Query<&mut OrthographicProjection, With<Camera2d>>,
+) {
+    let Ok(window) = windows.get_single() else { return };
+    let Ok(mut projection) = camera_q.get_single_mut() else { return };
+
+    let window_w = window.width();
+    let window_h = window.height();
+    if window_w <= 0.0 || window_h <= 0.0 { return; }
+
+    // Game grid: 18*50=900 wide, 11*50=550 tall
+    // Plus UI margins: ~50px top HUD, ~122px bottom bar
+    let target_w = 940.0;  // Grid width + small margin
+    let target_h = 750.0;  // Grid height + HUD margins
+
+    // Scale to whichever dimension is tighter
+    let scale_x = target_w / window_w;
+    let scale_y = target_h / window_h;
+    projection.scale = scale_x.max(scale_y).max(1.0);
 }
