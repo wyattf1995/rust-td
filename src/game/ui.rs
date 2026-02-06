@@ -164,7 +164,8 @@ enum AbilityType {
     Artillery,
 }
 
-fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
+fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<super::GameActive>>) {
+    if active.is_some() { return; }
     // Top bar - HUD
     commands
         .spawn((

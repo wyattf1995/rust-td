@@ -40,7 +40,8 @@ impl PlayerEconomy {
     }
 }
 
-fn reset_economy(mut economy: ResMut<PlayerEconomy>) {
+fn reset_economy(mut economy: ResMut<PlayerEconomy>, active: Option<Res<super::GameActive>>) {
+    if active.is_some() { return; }
     *economy = PlayerEconomy::default();
 }
 
@@ -91,7 +92,8 @@ impl KillStreak {
     }
 }
 
-fn reset_kill_streak(mut streak: ResMut<KillStreak>) {
+fn reset_kill_streak(mut streak: ResMut<KillStreak>, active: Option<Res<super::GameActive>>) {
+    if active.is_some() { return; }
     *streak = KillStreak::default();
 }
 

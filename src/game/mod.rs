@@ -48,6 +48,11 @@ impl Plugin for GamePlugin {
 #[derive(Component)]
 pub struct GameEntity;
 
+/// Marker resource: present while a game session is active.
+/// Prevents OnEnter(Playing) init systems from re-running when resuming from pause.
+#[derive(Resource)]
+pub struct GameActive;
+
 #[derive(Component)]
 struct GameOverScreen;
 
@@ -65,6 +70,7 @@ fn cleanup_game(mut commands: Commands, query: Query<Entity, With<GameEntity>>) 
     for entity in &query {
         commands.entity(entity).despawn_recursive();
     }
+    commands.remove_resource::<GameActive>();
 }
 
 fn setup_game_over(

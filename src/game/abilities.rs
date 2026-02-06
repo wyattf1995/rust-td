@@ -98,7 +98,8 @@ pub struct ArtilleryStrike {
 #[derive(Component)]
 pub struct ArtilleryTargetCursor;
 
-fn reset_abilities(mut abilities: ResMut<PlayerAbilities>) {
+fn reset_abilities(mut abilities: ResMut<PlayerAbilities>, active: Option<Res<super::GameActive>>) {
+    if active.is_some() { return; }
     *abilities = PlayerAbilities::default();
 }
 

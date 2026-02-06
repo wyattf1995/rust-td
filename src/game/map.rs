@@ -374,7 +374,13 @@ pub struct TerrainDecoration;
 #[derive(Component)]
 pub struct TileRangePreview;
 
-fn setup_map(mut commands: Commands) {
+fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
+    // Skip if resuming from pause (game already active)
+    if active.is_some() {
+        return;
+    }
+    commands.insert_resource(super::GameActive);
+
     // Generate a new random map each game
     let map = GameMap::generate_random();
 
@@ -459,9 +465,74 @@ fn setup_map(mut commands: Commands) {
         }
     }
 
-    // Draw continuous path lane lines connecting consecutive tiles
-    let lane_width = ShapeSizes::PATH_LANE_WIDTH;
+    // Draw path lane markings based on actual path sequence
+    let dash_length = TILE_SIZE * 0.35;
+    let dash_offset = TILE_SIZE * 0.22;
 
+    for i in 0..map.path.len() {
+        let (x, y) = map.path[i];
+        let pos = GameMap::grid_to_world(x, y);
+
+        // Check previous node in path
+        if i > 0 {
+            let (px, py) = map.path[i - 1];
+            let dx = px as i32 - x as i32;
+            let dy = py as i32 - y as i32;
+
+            // Draw dash toward previous
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: GameColors::PATH_LANE,
+                        custom_size: Some(if dx != 0 {
+                            Vec2::new(dash_length, ShapeSizes::PATH_LANE_WIDTH)
+                        } else {
+                            Vec2::new(ShapeSizes::PATH_LANE_WIDTH, dash_length)
+                        }),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(
+                        pos.x + dx as f32 * dash_offset,
+                        pos.y + dy as f32 * dash_offset,
+                        0.05,
+                    )),
+                    ..default()
+                },
+                GameEntity,
+            ));
+        }
+
+        // Check next node in path
+        if i + 1 < map.path.len() {
+            let (nx, ny) = map.path[i + 1];
+            let dx = nx as i32 - x as i32;
+            let dy = ny as i32 - y as i32;
+
+            // Draw dash toward next
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: GameColors::PATH_LANE,
+                        custom_size: Some(if dx != 0 {
+                            Vec2::new(dash_length, ShapeSizes::PATH_LANE_WIDTH)
+                        } else {
+                            Vec2::new(ShapeSizes::PATH_LANE_WIDTH, dash_length)
+                        }),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(
+                        pos.x + dx as f32 * dash_offset,
+                        pos.y + dy as f32 * dash_offset,
+                        0.05,
+                    )),
+                    ..default()
+                },
+                GameEntity,
+            ));
+        }
+    }
+
+    // Draw path direction indicators (dots between tiles)
     for i in 0..map.path.len().saturating_sub(1) {
         let (x1, y1) = map.path[i];
         let (x2, y2) = map.path[i + 1];
@@ -470,30 +541,7 @@ fn setup_map(mut commands: Commands) {
         let pos2 = GameMap::grid_to_world(x2, y2);
         let mid = (pos1 + pos2) / 2.0;
 
-        let dx = x2 as i32 - x1 as i32;
-        let dy = y2 as i32 - y1 as i32;
-
-        // Draw a continuous line segment between tile centers
-        let size = if dx != 0 {
-            Vec2::new(TILE_SIZE, lane_width)
-        } else {
-            Vec2::new(lane_width, TILE_SIZE)
-        };
-
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: GameColors::PATH_LANE,
-                    custom_size: Some(size),
-                    ..default()
-                },
-                transform: Transform::from_translation(mid.extend(0.05)),
-                ..default()
-            },
-            GameEntity,
-        ));
-
-        // Small direction indicator dot at midpoint
+        // Small indicator dot along path
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {

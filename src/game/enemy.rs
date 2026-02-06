@@ -473,7 +473,8 @@ impl WaveManager {
     }
 }
 
-fn reset_wave_manager(mut wave_manager: ResMut<WaveManager>) {
+fn reset_wave_manager(mut wave_manager: ResMut<WaveManager>, active: Option<Res<super::GameActive>>) {
+    if active.is_some() { return; }
     *wave_manager = WaveManager::default();
 }
 
