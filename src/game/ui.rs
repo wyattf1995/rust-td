@@ -342,28 +342,36 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     style: Style {
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
-                        column_gap: Val::Px(4.0),
+                        column_gap: Val::Px(3.0),
                         ..default()
                     },
                     ..default()
                 })
                 .with_children(|parent| {
-                    for speed in [1.0, 2.0, 3.0] {
+                    for speed in [1.0, 2.0, 3.0, 4.0, 5.0] {
+                        let is_default = speed == 1.0;
                         parent
                             .spawn((
                                 ButtonBundle {
                                     style: Style {
-                                        width: Val::Px(32.0),
-                                        height: Val::Px(28.0),
+                                        width: Val::Px(30.0),
+                                        height: Val::Px(26.0),
                                         justify_content: JustifyContent::Center,
                                         align_items: AlignItems::Center,
+                                        border: UiRect::all(Val::Px(1.5)),
                                         ..default()
                                     },
-                                    background_color: if speed == 1.0 {
-                                        GameColors::BUTTON_SELECTED.into()
+                                    background_color: if is_default {
+                                        Color::srgb(0.15, 0.35, 0.45).into()
                                     } else {
                                         GameColors::BUTTON_NORMAL.into()
                                     },
+                                    border_color: BorderColor(if is_default {
+                                        GameColors::PRIMARY
+                                    } else {
+                                        Color::NONE
+                                    }),
+                                    border_radius: BorderRadius::all(Val::Px(4.0)),
                                     ..default()
                                 },
                                 SpeedButton(speed),
@@ -373,8 +381,12 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                     format!("{}x", speed as u32),
                                     TextStyle {
                                         font: assets.font.clone(),
-                                        font_size: 14.0,
-                                        color: Color::WHITE,
+                                        font_size: 12.0,
+                                        color: if is_default {
+                                            GameColors::PRIMARY
+                                        } else {
+                                            Color::srgba(1.0, 1.0, 1.0, 0.5)
+                                        },
                                     },
                                 ));
                             });
@@ -1695,39 +1707,66 @@ fn update_score_display(
 
 fn speed_button_system(
     mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor, &SpeedButton),
+        (&Interaction, &mut BackgroundColor, &mut BorderColor, &SpeedButton, &Children),
         Changed<Interaction>,
     >,
     mut game_speed: ResMut<GameSpeed>,
-    mut all_speed_buttons: Query<(&SpeedButton, &mut BackgroundColor), Without<Interaction>>,
+    mut all_speed_buttons: Query<(&SpeedButton, &mut BackgroundColor, &mut BorderColor, &Children), Without<Interaction>>,
+    mut text_query: Query<&mut Text>,
     mut time: ResMut<Time<Virtual>>,
 ) {
-    for (interaction, mut color, speed_button) in &mut interaction_query {
+    let active_bg: BackgroundColor = Color::srgb(0.15, 0.35, 0.45).into();
+    let inactive_bg: BackgroundColor = GameColors::BUTTON_NORMAL.into();
+    let hover_bg: BackgroundColor = GameColors::BUTTON_HOVER.into();
+
+    for (interaction, mut color, mut border, speed_button, children) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
                 game_speed.0 = speed_button.0;
                 time.set_relative_speed(speed_button.0);
-                *color = GameColors::BUTTON_SELECTED.into();
+                *color = active_bg;
+                *border = BorderColor(GameColors::PRIMARY);
 
-                // Update all button colors
-                for (btn, mut btn_color) in &mut all_speed_buttons {
+                // Update text color for this button
+                for &child in children.iter() {
+                    if let Ok(mut text) = text_query.get_mut(child) {
+                        text.sections[0].style.color = GameColors::PRIMARY;
+                    }
+                }
+
+                // Update all other buttons
+                for (btn, mut btn_color, mut btn_border, btn_children) in &mut all_speed_buttons {
                     if btn.0 == speed_button.0 {
-                        *btn_color = GameColors::BUTTON_SELECTED.into();
+                        *btn_color = active_bg;
+                        *btn_border = BorderColor(GameColors::PRIMARY);
+                        for &child in btn_children.iter() {
+                            if let Ok(mut text) = text_query.get_mut(child) {
+                                text.sections[0].style.color = GameColors::PRIMARY;
+                            }
+                        }
                     } else {
-                        *btn_color = GameColors::BUTTON_NORMAL.into();
+                        *btn_color = inactive_bg;
+                        *btn_border = BorderColor(Color::NONE);
+                        for &child in btn_children.iter() {
+                            if let Ok(mut text) = text_query.get_mut(child) {
+                                text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.5);
+                            }
+                        }
                     }
                 }
             }
             Interaction::Hovered => {
                 if game_speed.0 != speed_button.0 {
-                    *color = GameColors::BUTTON_HOVER.into();
+                    *color = hover_bg;
                 }
             }
             Interaction::None => {
                 if game_speed.0 == speed_button.0 {
-                    *color = GameColors::BUTTON_SELECTED.into();
+                    *color = active_bg;
+                    *border = BorderColor(GameColors::PRIMARY);
                 } else {
-                    *color = GameColors::BUTTON_NORMAL.into();
+                    *color = inactive_bg;
+                    *border = BorderColor(Color::NONE);
                 }
             }
         }
