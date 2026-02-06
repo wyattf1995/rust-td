@@ -32,6 +32,7 @@ impl Plugin for TowerPlugin {
                     handle_tower_upgrade,
                     tower_targeting,
                     update_buff_auras,
+                    update_tower_synergies,
                     tower_attack,
                     update_tower_visuals,
                     update_range_indicators,
@@ -117,7 +118,7 @@ pub enum TowerType {
 impl TowerType {
     pub fn cost(&self) -> u32 {
         match self {
-            TowerType::Basic => 60,     // Nerfed from 50, adjusted from 65
+            TowerType::Basic => 50,
             TowerType::Splash => 100,
             TowerType::Slow => 75,
             TowerType::Sniper => 150,
@@ -382,11 +383,62 @@ pub struct BuffAuraIndicator {
     pub tower: Entity,
 }
 
+/// Tower accent/core visual layer
+#[derive(Component)]
+pub struct TowerCore {
+    pub tower: Entity,
+}
+
 /// Tracks if a tower is being buffed
 #[derive(Component, Default)]
 pub struct BuffedStatus {
     pub damage_multiplier: f32,
     pub speed_multiplier: f32,
+}
+
+/// Tower synergy types
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SynergyType {
+    SniperPair,      // Sniper + Sniper: +15% range each
+    SlowPoison,      // Slow + Poison: Poison duration +50%
+    RapidBuff,       // Rapid + Buff: Attack speed bonus doubled
+    ChainPair,       // Chain + Chain: +1 bounce each
+}
+
+impl SynergyType {
+    pub fn name(&self) -> &'static str {
+        match self {
+            SynergyType::SniperPair => "Sniper Duo",
+            SynergyType::SlowPoison => "Toxic Slow",
+            SynergyType::RapidBuff => "Overdrive",
+            SynergyType::ChainPair => "Lightning Storm",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            SynergyType::SniperPair => "+15% range",
+            SynergyType::SlowPoison => "+50% poison duration",
+            SynergyType::RapidBuff => "2x speed buff",
+            SynergyType::ChainPair => "+1 chain bounce",
+        }
+    }
+}
+
+/// Tracks active synergies on a tower
+#[derive(Component, Default)]
+pub struct TowerSynergies {
+    pub active: Vec<SynergyType>,
+    pub range_bonus: f32,           // Percentage bonus (0.15 = 15%)
+    pub poison_duration_bonus: f32, // Percentage bonus
+    pub speed_buff_multiplier: f32, // Multiplier for buff tower effect
+    pub extra_chain_bounces: u32,   // Additional bounces for chain
+}
+
+impl TowerSynergies {
+    pub fn has_synergy(&self, synergy: SynergyType) -> bool {
+        self.active.contains(&synergy)
+    }
 }
 
 /// Event to place a tower
@@ -421,14 +473,15 @@ fn handle_tower_placement(
         // Spawn tower
         let pos = GameMap::grid_to_world(event.grid_x, event.grid_y);
         let tower = Tower::new(event.tower_type, event.grid_x, event.grid_y);
-        let color = event.tower_type.color();
+        let accent_color = event.tower_type.color();
         let range = tower.range;
 
+        // Layer 1: Base (dark gunmetal foundation)
         let tower_entity = commands
             .spawn((
                 SpriteBundle {
                     sprite: Sprite {
-                        color,
+                        color: GameColors::TOWER_BASE,
                         custom_size: Some(Vec2::splat(ShapeSizes::TOWER)),
                         ..default()
                     },
@@ -436,15 +489,31 @@ fn handle_tower_placement(
                     ..default()
                 },
                 tower,
+                TowerSynergies::default(),
                 GameEntity,
             ))
             .id();
+
+        // Layer 2: Accent core (colored center showing tower type)
+        commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: accent_color,
+                    custom_size: Some(Vec2::splat(ShapeSizes::TOWER_CORE)),
+                    ..default()
+                },
+                transform: Transform::from_translation(pos.extend(2.1)),
+                ..default()
+            },
+            TowerCore { tower: tower_entity },
+            GameEntity,
+        ));
 
         // Spawn range indicator (initially hidden)
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
-                    color: Color::NONE, // Hidden by default
+                    color: Color::NONE,
                     custom_size: Some(Vec2::splat(range * 2.0)),
                     ..default()
                 },
@@ -455,7 +524,7 @@ fn handle_tower_placement(
             GameEntity,
         ));
 
-        // Spawn tower barrel/turret
+        // Layer 3: Barrel/turret (dark, on top)
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
@@ -470,15 +539,32 @@ fn handle_tower_placement(
             GameEntity,
         ));
 
-        // Spawn level badge (bottom-right corner of tower)
-        let badge_offset = Vec2::new(12.0, -12.0);
+        // Spawn level badge with background (bottom-right corner of tower)
+        let badge_offset = Vec2::new(14.0, -14.0);
+
+        // Badge background (dark circle for contrast)
+        commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: Color::srgba(0.0, 0.0, 0.0, 0.85),
+                    custom_size: Some(Vec2::splat(16.0)),
+                    ..default()
+                },
+                transform: Transform::from_translation((pos + badge_offset).extend(3.4)),
+                ..default()
+            },
+            TowerLevelBadge { tower: tower_entity },
+            GameEntity,
+        ));
+
+        // Badge text
         commands.spawn((
             Text2dBundle {
                 text: Text::from_section(
                     "1",
                     TextStyle {
                         font: assets.font.clone(),
-                        font_size: 14.0,
+                        font_size: 12.0,
                         color: Color::WHITE,
                     },
                 ).with_justify(JustifyText::Center),
@@ -511,11 +597,11 @@ fn handle_tower_placement(
 }
 
 fn tower_targeting(
-    mut towers: Query<(&mut Tower, &Transform)>,
+    mut towers: Query<(&mut Tower, &Transform, Option<&TowerSynergies>)>,
     enemies: Query<(Entity, &Transform, &Enemy)>,
     spatial_grid: Res<SpatialGrid>,
 ) {
-    for (mut tower, tower_transform) in &mut towers {
+    for (mut tower, tower_transform, synergies) in &mut towers {
         // Buff towers don't target enemies
         if !tower.tower_type.can_attack() {
             tower.target = None;
@@ -524,8 +610,12 @@ fn tower_targeting(
 
         let tower_pos = tower_transform.translation.truncate();
 
+        // Apply synergy range bonus (Sniper pair)
+        let range_bonus = synergies.map(|s| s.range_bonus).unwrap_or(0.0);
+        let effective_range = tower.range * (1.0 + range_bonus);
+
         // Use spatial grid to get nearby entities (much faster than checking all)
-        let nearby = spatial_grid.query_range(tower_pos, tower.range);
+        let nearby = spatial_grid.query_range(tower_pos, effective_range);
 
         // Find best target based on priority
         let mut best_target: Option<(Entity, f32)> = None;
@@ -543,7 +633,7 @@ fn tower_targeting(
             let distance = tower_pos.distance(enemy_pos);
 
             // Double-check distance (spatial grid is approximate)
-            if distance > tower.range {
+            if distance > effective_range {
                 continue;
             }
 
@@ -578,18 +668,20 @@ fn tower_targeting(
 
 fn tower_attack(
     mut commands: Commands,
-    mut towers: Query<(&mut Tower, &Transform, Option<&BuffedStatus>)>,
+    mut towers: Query<(&mut Tower, &Transform, Option<&BuffedStatus>, Option<&TowerSynergies>)>,
     enemies: Query<&Transform, With<Enemy>>,
     time: Res<Time>,
     mut projectile_events: EventWriter<SpawnProjectileEvent>,
 ) {
-    for (mut tower, tower_transform, buff_status) in &mut towers {
+    for (mut tower, tower_transform, buff_status, synergies) in &mut towers {
         // Buff towers don't attack
         if !tower.tower_type.can_attack() {
             continue;
         }
 
-        tower.attack_cooldown.tick(time.delta());
+        // Apply buff speed multiplier to attack cooldown
+        let speed_mult = buff_status.map(|b| b.speed_multiplier).unwrap_or(1.0);
+        tower.attack_cooldown.tick(time.delta().mul_f32(speed_mult));
 
         if let Some(target) = tower.target {
             if tower.attack_cooldown.just_finished() {
@@ -600,11 +692,17 @@ fn tower_attack(
                     let damage_mult = buff_status.map(|b| b.damage_multiplier).unwrap_or(1.0);
                     let final_damage = tower.damage * damage_mult;
 
+                    // Get synergy bonuses
+                    let extra_chain_bounces = synergies.map(|s| s.extra_chain_bounces).unwrap_or(0);
+                    let poison_duration_bonus = synergies.map(|s| s.poison_duration_bonus).unwrap_or(0.0);
+
                     projectile_events.send(SpawnProjectileEvent {
                         start,
                         target,
                         damage: final_damage,
                         tower_type: tower.tower_type,
+                        extra_chain_bounces,
+                        poison_duration_bonus,
                     });
 
                     // Spawn muzzle flash (different color for different tower types)
@@ -691,6 +789,7 @@ fn handle_tower_selling(
     barrels: Query<(Entity, &TowerBarrel)>,
     badges: Query<(Entity, &TowerLevelBadge)>,
     buff_indicators: Query<(Entity, &BuffAuraIndicator)>,
+    tower_cores: Query<(Entity, &TowerCore)>,
 ) {
     for event in events.read() {
         if let Ok(tower) = towers.get(event.tower) {
@@ -706,6 +805,13 @@ fn handle_tower_selling(
             // Despawn range indicator
             for (entity, indicator) in &range_indicators {
                 if indicator.tower == event.tower {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
+
+            // Despawn tower core
+            for (entity, core) in &tower_cores {
+                if core.tower == event.tower {
                     commands.entity(entity).despawn_recursive();
                 }
             }
@@ -738,23 +844,35 @@ fn handle_tower_upgrade(
     mut events: EventReader<UpgradeTowerEvent>,
     mut economy: ResMut<PlayerEconomy>,
     mut towers: Query<(&mut Tower, &mut Sprite)>,
-    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), Without<Tower>>,
+    mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
+    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>)>,
 ) {
     for event in events.read() {
-        if let Ok((mut tower, mut sprite)) = towers.get_mut(event.tower) {
+        if let Ok((mut tower, _sprite)) = towers.get_mut(event.tower) {
             let cost = tower.upgrade_cost();
             if cost > 0 && economy.gold >= cost {
                 economy.gold -= cost;
                 tower.upgrade();
 
-                // Visual feedback - slightly brighter color
-                let base_color = tower.tower_type.color();
-                let brightness = 1.0 + 0.15 * (tower.level - 1) as f32;
-                sprite.color = Color::srgb(
-                    (base_color.to_srgba().red * brightness).min(1.0),
-                    (base_color.to_srgba().green * brightness).min(1.0),
-                    (base_color.to_srgba().blue * brightness).min(1.0),
+                // Update core visual - brighter accent with each level
+                let accent_color = tower.tower_type.color();
+                let brightness = 1.0 + 0.12 * (tower.level - 1) as f32;
+                let upgraded_color = Color::srgb(
+                    (accent_color.to_srgba().red * brightness).min(1.0),
+                    (accent_color.to_srgba().green * brightness).min(1.0),
+                    (accent_color.to_srgba().blue * brightness).min(1.0),
                 );
+
+                // Find and update the core sprite for this tower
+                for (core, mut core_sprite) in &mut tower_cores {
+                    if core.tower == event.tower {
+                        core_sprite.color = upgraded_color;
+                        // Slightly larger core with upgrades
+                        let core_size = ShapeSizes::TOWER_CORE + (tower.level - 1) as f32 * 1.5;
+                        core_sprite.custom_size = Some(Vec2::splat(core_size));
+                        break;
+                    }
+                }
 
                 // Update range indicator size
                 for (indicator, mut ind_sprite) in &mut range_indicators {
@@ -830,7 +948,7 @@ fn update_level_badges(
 fn update_buff_auras(
     mut commands: Commands,
     buff_towers: Query<(&Tower, &Transform)>,
-    mut other_towers: Query<(Entity, &Tower, &Transform, Option<&mut BuffedStatus>)>,
+    mut other_towers: Query<(Entity, &Tower, &Transform, Option<&TowerSynergies>, Option<&mut BuffedStatus>)>,
 ) {
     // Collect buff tower positions, ranges, and levels
     let buff_sources: Vec<(Vec2, f32, u32)> = buff_towers
@@ -840,7 +958,7 @@ fn update_buff_auras(
         .collect();
 
     // Update buff status for each tower
-    for (entity, tower, transform, buff_status) in &mut other_towers {
+    for (entity, tower, transform, synergies, buff_status) in &mut other_towers {
         // Skip buff towers themselves
         if tower.tower_type == TowerType::Buff {
             continue;
@@ -860,10 +978,15 @@ fn update_buff_auras(
         }
 
         if total_buff > 0.0 {
+            // Apply RapidBuff synergy: Rapid towers adjacent to Buff get 2x the effect
+            let synergy_multiplier = synergies
+                .map(|s| s.speed_buff_multiplier)
+                .unwrap_or(1.0);
+
             // Tower is being buffed
             let new_status = BuffedStatus {
-                damage_multiplier: 1.0 + total_buff,
-                speed_multiplier: 1.0 + total_buff * 0.4, // Speed scales too
+                damage_multiplier: 1.0 + total_buff * synergy_multiplier,
+                speed_multiplier: 1.0 + total_buff * 0.4 * synergy_multiplier, // Speed scales too
             };
             if let Some(mut status) = buff_status {
                 *status = new_status;
@@ -877,10 +1000,99 @@ fn update_buff_auras(
     }
 }
 
-/// Visual pulse effect for buff aura indicators
+/// Update tower synergies based on adjacent towers
+fn update_tower_synergies(
+    mut towers: Query<(Entity, &Tower, &mut TowerSynergies)>,
+) {
+    // Collect all tower positions and types first
+    let tower_data: Vec<(Entity, usize, usize, TowerType)> = towers
+        .iter()
+        .map(|(e, t, _)| (e, t.grid_x, t.grid_y, t.tower_type))
+        .collect();
+
+    // Check adjacency and calculate synergies for each tower
+    for (entity, tower, mut synergies) in &mut towers {
+        // Reset synergies
+        synergies.active.clear();
+        synergies.range_bonus = 0.0;
+        synergies.poison_duration_bonus = 0.0;
+        synergies.speed_buff_multiplier = 1.0;
+        synergies.extra_chain_bounces = 0;
+
+        let grid_x = tower.grid_x;
+        let grid_y = tower.grid_y;
+        let tower_type = tower.tower_type;
+
+        // Check all 8 adjacent tiles (including diagonals)
+        let adjacent_offsets: [(i32, i32); 8] = [
+            (-1, -1), (0, -1), (1, -1),
+            (-1, 0),           (1, 0),
+            (-1, 1),  (0, 1),  (1, 1),
+        ];
+
+        // Find adjacent tower types
+        let mut adjacent_types: Vec<TowerType> = Vec::new();
+        for (ox, oy) in adjacent_offsets {
+            let check_x = grid_x as i32 + ox;
+            let check_y = grid_y as i32 + oy;
+
+            if check_x >= 0 && check_y >= 0 {
+                for (other_entity, other_x, other_y, other_type) in &tower_data {
+                    if *other_entity != entity && *other_x == check_x as usize && *other_y == check_y as usize {
+                        adjacent_types.push(*other_type);
+                    }
+                }
+            }
+        }
+
+        // Check for synergies based on tower type and adjacent towers
+        match tower_type {
+            TowerType::Sniper => {
+                // Sniper + Sniper: +15% range
+                if adjacent_types.contains(&TowerType::Sniper) {
+                    synergies.active.push(SynergyType::SniperPair);
+                    synergies.range_bonus = 0.15;
+                }
+            }
+            TowerType::Slow => {
+                // Slow + Poison: +50% poison duration (applied when Poison hits)
+                if adjacent_types.contains(&TowerType::Poison) {
+                    synergies.active.push(SynergyType::SlowPoison);
+                    synergies.poison_duration_bonus = 0.5;
+                }
+            }
+            TowerType::Poison => {
+                // Poison + Slow: +50% poison duration
+                if adjacent_types.contains(&TowerType::Slow) {
+                    synergies.active.push(SynergyType::SlowPoison);
+                    synergies.poison_duration_bonus = 0.5;
+                }
+            }
+            TowerType::Rapid => {
+                // Rapid + Buff: Double the buff effect on this tower
+                if adjacent_types.contains(&TowerType::Buff) {
+                    synergies.active.push(SynergyType::RapidBuff);
+                    synergies.speed_buff_multiplier = 2.0;
+                }
+            }
+            TowerType::Chain => {
+                // Chain + Chain: +1 bounce
+                if adjacent_types.contains(&TowerType::Chain) {
+                    synergies.active.push(SynergyType::ChainPair);
+                    synergies.extra_chain_bounces = 1;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Visual pulse effect for buff aura indicators - only show when hovered or selected
 fn update_buff_aura_visuals(
     towers: Query<(&Tower, &Transform)>,
     mut indicators: Query<(&BuffAuraIndicator, &mut Sprite, &mut Transform), Without<Tower>>,
+    hovered: Res<HoveredTower>,
+    selected: Res<SelectedPlacedTower>,
     time: Res<Time>,
 ) {
     let pulse = (time.elapsed_seconds() * 2.0).sin() * 0.5 + 0.5;
@@ -894,9 +1106,15 @@ fn update_buff_aura_visuals(
             // Update size based on tower range (which increases with upgrades)
             sprite.custom_size = Some(Vec2::splat(tower.range * 2.0));
 
-            // Pulse alpha
-            let alpha = 0.1 + pulse * 0.08;
-            sprite.color = Color::srgba(1.0, 0.85, 0.3, alpha);
+            // Only show aura if this tower is hovered or selected
+            let is_visible = hovered.0 == Some(indicator.tower) || selected.0 == Some(indicator.tower);
+
+            if is_visible {
+                let alpha = 0.12 + pulse * 0.08;
+                sprite.color = Color::srgba(1.0, 0.85, 0.3, alpha);
+            } else {
+                sprite.color = Color::NONE;
+            }
         }
     }
 }

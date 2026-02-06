@@ -1,12 +1,12 @@
 {
-  "name": "Rust Tower Defense",
-  "short_name": "Tower Defense",
-  "description": "A browser-based tower defense game built with Rust and WebAssembly",
+  "name": "Neon Command",
+  "short_name": "Neon Command",
+  "description": "A tactical tower defense game with 8 unique towers, synergy combos, and infinite survival waves",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#1a1a2e",
-  "theme_color": "#1a1a2e",
+  "background_color": "#0f0f17",
+  "theme_color": "#0f0f17",
   "icons": [
     {
       "src": "/assets/icon-192.svg",

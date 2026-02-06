@@ -240,8 +240,8 @@ impl GameMap {
         let mut rng = rand::thread_rng();
         let terrain_types = [TerrainType::Rock, TerrainType::Water, TerrainType::Forest, TerrainType::Crystal];
 
-        // Choose 3-6 terrain clusters for denser map
-        let num_clusters = rng.gen_range(3..7);
+        // Choose 2-5 terrain clusters (reduced for more buildable space)
+        let num_clusters = rng.gen_range(2..6);
 
         for _ in 0..num_clusters {
             // Pick a random center point
@@ -251,8 +251,8 @@ impl GameMap {
             // Pick a terrain type
             let terrain = terrain_types[rng.gen_range(0..terrain_types.len())];
 
-            // Create a cluster of 4-10 tiles
-            let cluster_size = rng.gen_range(4..11);
+            // Create a cluster of 3-8 tiles (reduced ~20%)
+            let cluster_size = rng.gen_range(3..9);
             let mut placed = 0;
             let mut attempts = 0;
 
@@ -277,8 +277,8 @@ impl GameMap {
             }
         }
 
-        // Add some scattered individual obstacles
-        let scattered = rng.gen_range(8..16);
+        // Add some scattered individual obstacles (reduced ~20%)
+        let scattered = rng.gen_range(6..12);
         for _ in 0..scattered {
             let x = rng.gen_range(0..GRID_WIDTH);
             let y = rng.gen_range(0..GRID_HEIGHT);
@@ -383,11 +383,25 @@ fn setup_map(mut commands: Commands) {
         ((x * 7 + y * 13) % 3) == 0
     };
 
-    // Spawn grid tiles
+    // Spawn grid tiles with borders
     for x in 0..GRID_WIDTH {
         for y in 0..GRID_HEIGHT {
             let pos = GameMap::grid_to_world(x, y);
             let tile_type = map.tiles[x][y];
+
+            // Tile border (slightly larger, behind main tile)
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: GameColors::TILE_BORDER,
+                        custom_size: Some(Vec2::splat(TILE_SIZE - 1.0)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(pos.extend(-0.1)),
+                    ..default()
+                },
+                GameEntity,
+            ));
 
             let color = match tile_type {
                 TileType::Path => GameColors::PATH,
@@ -396,12 +410,12 @@ fn setup_map(mut commands: Commands) {
                 TileType::Tower => GameColors::TILE_EMPTY,
             };
 
-            // Main tile sprite
+            // Main tile sprite (inner area)
             commands.spawn((
                 SpriteBundle {
                     sprite: Sprite {
                         color,
-                        custom_size: Some(Vec2::splat(TILE_SIZE - ShapeSizes::TILE_GAP)),
+                        custom_size: Some(Vec2::splat(ShapeSizes::TILE_INNER)),
                         ..default()
                     },
                     transform: Transform::from_translation(pos.extend(0.0)),
@@ -411,19 +425,20 @@ fn setup_map(mut commands: Commands) {
                 GameEntity,
             ));
 
+
             // Add decoration overlay for terrain tiles
             if let TileType::Blocked(terrain) = tile_type {
                 let decoration_color = match terrain {
-                    TerrainType::Rock => Color::srgba(0.4, 0.35, 0.3, 0.3),
-                    TerrainType::Water => Color::srgba(0.3, 0.5, 0.7, 0.25),
-                    TerrainType::Forest => Color::srgba(0.2, 0.4, 0.25, 0.3),
-                    TerrainType::Crystal => Color::srgba(0.5, 0.3, 0.6, 0.3),
+                    TerrainType::Rock => Color::srgba(0.3, 0.28, 0.25, 0.25),
+                    TerrainType::Water => Color::srgba(0.2, 0.4, 0.6, 0.2),
+                    TerrainType::Forest => Color::srgba(0.15, 0.3, 0.18, 0.25),
+                    TerrainType::Crystal => Color::srgba(0.4, 0.25, 0.5, 0.25),
                 };
 
                 // Inner decoration (smaller highlight)
-                let deco_size = TILE_SIZE * 0.5;
-                let offset_x = if variation_seed(x, y) { 5.0 } else { -5.0 };
-                let offset_y = if variation_seed(y, x) { 5.0 } else { -5.0 };
+                let deco_size = TILE_SIZE * 0.4;
+                let offset_x = if variation_seed(x, y) { 6.0 } else { -6.0 };
+                let offset_y = if variation_seed(y, x) { 6.0 } else { -6.0 };
 
                 commands.spawn((
                     SpriteBundle {
@@ -444,8 +459,75 @@ fn setup_map(mut commands: Commands) {
         }
     }
 
-    // Draw path direction indicators
-    for i in 0..map.path.len() - 1 {
+    // Draw path lane markings based on actual path sequence
+    let dash_length = TILE_SIZE * 0.35;
+    let dash_offset = TILE_SIZE * 0.22;
+
+    for i in 0..map.path.len() {
+        let (x, y) = map.path[i];
+        let pos = GameMap::grid_to_world(x, y);
+
+        // Check previous node in path
+        if i > 0 {
+            let (px, py) = map.path[i - 1];
+            let dx = px as i32 - x as i32;
+            let dy = py as i32 - y as i32;
+
+            // Draw dash toward previous
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: GameColors::PATH_LANE,
+                        custom_size: Some(if dx != 0 {
+                            Vec2::new(dash_length, ShapeSizes::PATH_LANE_WIDTH)
+                        } else {
+                            Vec2::new(ShapeSizes::PATH_LANE_WIDTH, dash_length)
+                        }),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(
+                        pos.x + dx as f32 * dash_offset,
+                        pos.y + dy as f32 * dash_offset,
+                        0.05,
+                    )),
+                    ..default()
+                },
+                GameEntity,
+            ));
+        }
+
+        // Check next node in path
+        if i + 1 < map.path.len() {
+            let (nx, ny) = map.path[i + 1];
+            let dx = nx as i32 - x as i32;
+            let dy = ny as i32 - y as i32;
+
+            // Draw dash toward next
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: GameColors::PATH_LANE,
+                        custom_size: Some(if dx != 0 {
+                            Vec2::new(dash_length, ShapeSizes::PATH_LANE_WIDTH)
+                        } else {
+                            Vec2::new(ShapeSizes::PATH_LANE_WIDTH, dash_length)
+                        }),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(
+                        pos.x + dx as f32 * dash_offset,
+                        pos.y + dy as f32 * dash_offset,
+                        0.05,
+                    )),
+                    ..default()
+                },
+                GameEntity,
+            ));
+        }
+    }
+
+    // Draw path direction indicators (dots between tiles)
+    for i in 0..map.path.len().saturating_sub(1) {
         let (x1, y1) = map.path[i];
         let (x2, y2) = map.path[i + 1];
 
@@ -468,13 +550,27 @@ fn setup_map(mut commands: Commands) {
         ));
     }
 
-    // Spawn entry point indicator
+    // Spawn entry point indicator (enemy spawn)
     if let Some(&(x, y)) = map.path.first() {
         let pos = GameMap::grid_to_world(x, y);
+        // Outer glow
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
-                    color: GameColors::PRIMARY,
+                    color: GameColors::SECONDARY.with_alpha(0.3),
+                    custom_size: Some(Vec2::splat(ShapeSizes::SPAWN_INDICATOR + 8.0)),
+                    ..default()
+                },
+                transform: Transform::from_translation(pos.extend(0.9)),
+                ..default()
+            },
+            GameEntity,
+        ));
+        // Inner marker
+        commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: GameColors::SECONDARY,
                     custom_size: Some(Vec2::splat(ShapeSizes::SPAWN_INDICATOR)),
                     ..default()
                 },
@@ -485,14 +581,28 @@ fn setup_map(mut commands: Commands) {
         ));
     }
 
-    // Spawn exit point indicator
+    // Spawn exit point indicator (goal)
     if let Some(&(x, y)) = map.path.last() {
         let pos = GameMap::grid_to_world(x, y);
+        // Outer glow
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
-                    color: GameColors::SUCCESS,
-                    custom_size: Some(Vec2::splat(ShapeSizes::SPAWN_INDICATOR)),
+                    color: GameColors::ACCENT.with_alpha(0.3),
+                    custom_size: Some(Vec2::splat(ShapeSizes::EXIT_INDICATOR + 8.0)),
+                    ..default()
+                },
+                transform: Transform::from_translation(pos.extend(0.9)),
+                ..default()
+            },
+            GameEntity,
+        ));
+        // Inner marker
+        commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: GameColors::ACCENT,
+                    custom_size: Some(Vec2::splat(ShapeSizes::EXIT_INDICATOR)),
                     ..default()
                 },
                 transform: Transform::from_translation(pos.extend(1.0)),
@@ -572,13 +682,13 @@ fn update_tile_visuals(
                 let tile_type = map.tiles[tile.x][tile.y];
                 if tile_type == TileType::Empty {
                     // Buildable - show green tint
-                    sprite.color = Color::srgba(0.3, 0.6, 0.3, 1.0);
+                    sprite.color = GameColors::TILE_HOVER_BUILD;
                 } else if tile_type == TileType::Tower {
                     // Has tower - show selection highlight
-                    sprite.color = Color::srgba(0.4, 0.4, 0.6, 1.0);
+                    sprite.color = GameColors::TILE_HOVER_TOWER;
                 } else {
                     // Not buildable - show red tint
-                    sprite.color = Color::srgba(0.6, 0.3, 0.3, 1.0);
+                    sprite.color = GameColors::TILE_HOVER_BLOCKED;
                 }
             } else {
                 sprite.color = tile.base_color;

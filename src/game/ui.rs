@@ -4,38 +4,56 @@ use crate::{loading::GameAssets, GameState, GameSpeed};
 use crate::graphics::shapes::GameColors;
 
 use super::{
+    abilities::PlayerAbilities,
     economy::{PlayerEconomy, KillStreak},
     enemy::{WaveManager, WaveModifier},
     map::{GameMap, HoveredTile, TileType},
-    tower::{PlaceTowerEvent, SelectedTowerType, SelectedPlacedTower, SellTowerEvent, UpgradeTowerEvent, Tower, TowerType},
+    tower::{PlaceTowerEvent, SelectedTowerType, SelectedPlacedTower, SellTowerEvent, UpgradeTowerEvent, Tower, TowerType, TowerSynergies},
     GameEntity,
 };
 
 pub struct GameUiPlugin;
 
+/// Resource to track if UI was clicked this frame (prevents click-through to game)
+#[derive(Resource, Default)]
+pub struct UiClicked(pub bool);
+
 impl Plugin for GameUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Playing), setup_ui)
+        app.init_resource::<UiClicked>()
+            .add_systems(OnEnter(GameState::Playing), setup_ui)
             .add_systems(OnEnter(GameState::Paused), setup_pause_menu)
             .add_systems(OnExit(GameState::Paused), cleanup_pause_menu)
             .add_systems(
                 Update,
                 (
-                    update_gold_display,
-                    update_lives_display,
-                    update_wave_display,
-                    update_score_display,
-                    update_combo_display,
-                    tower_button_system,
-                    start_wave_button,
+                    // Phase 1: Reset UI click flag
+                    reset_ui_clicked,
+                    // Phase 2: UI button interactions (set flag if clicked)
+                    (
+                        tower_button_system,
+                        start_wave_button,
+                        tower_context_shortcuts,
+                        update_tower_context_menu,
+                        tower_context_buttons,
+                        speed_button_system,
+                    ),
+                    // Phase 3: Game world clicks (check flag before placing)
                     handle_tile_click,
-                    update_tower_selection,
-                    update_info_panel,
-                    speed_button_system,
-                    pause_input,
-                    update_tower_context_menu,
-                    tower_context_buttons,
+                    // Phase 4: Display updates (order doesn't matter)
+                    (
+                        update_gold_display,
+                        update_lives_display,
+                        update_wave_display,
+                        update_score_display,
+                        update_combo_display,
+                        update_ability_display,
+                        update_tower_selection,
+                        update_info_panel,
+                        pause_input,
+                    ),
                 )
+                    .chain()
                     .run_if(in_state(GameState::Playing)),
             )
             .add_systems(
@@ -123,6 +141,28 @@ struct WaveModifierText;
 
 #[derive(Component)]
 struct TargetingButton;
+
+#[derive(Component)]
+struct TargetingText;
+
+#[derive(Component)]
+struct SynergyText;
+
+#[derive(Component)]
+struct AbilityBar;
+
+#[derive(Component)]
+struct AbilityButton(AbilityType);
+
+#[derive(Component)]
+struct AbilityCooldownText(AbilityType);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AbilityType {
+    Freeze,
+    GoldRush,
+    Artillery,
+}
 
 fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
     // Top bar - HUD
@@ -618,6 +658,54 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                     ));
                 });
 
+            // Synergy display (hidden when no synergies active)
+            parent.spawn((
+                TextBundle::from_section(
+                    "",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 11.0,
+                        color: Color::srgb(0.9, 0.7, 1.0), // Light purple for synergies
+                    },
+                ).with_style(Style {
+                    margin: UiRect::bottom(Val::Px(6.0)),
+                    ..default()
+                }),
+                SynergyText,
+            ));
+
+            // Targeting mode button
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(28.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::bottom(Val::Px(6.0)),
+                            ..default()
+                        },
+                        background_color: Color::srgb(0.3, 0.3, 0.5).into(),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
+                        ..default()
+                    },
+                    TargetingButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "Target: First [T]",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 12.0,
+                                color: Color::WHITE,
+                            },
+                        ),
+                        TargetingText,
+                    ));
+                });
+
             // Upgrade button
             parent
                 .spawn((
@@ -719,6 +807,95 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>) {
                 ComboText,
             ));
         });
+
+    // Ability bar (left side, vertical)
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(10.0),
+                    top: Val::Px(60.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(6.0),
+                    padding: UiRect::all(Val::Px(6.0)),
+                    ..default()
+                },
+                background_color: Color::srgba(0.0, 0.0, 0.0, 0.6).into(),
+                border_radius: BorderRadius::all(Val::Px(8.0)),
+                ..default()
+            },
+            AbilityBar,
+            GameEntity,
+        ))
+        .with_children(|parent| {
+            // Freeze ability [Q]
+            spawn_ability_button(parent, &assets, AbilityType::Freeze, "Q", "Freeze", GameColors::ABILITY_FREEZE);
+            // Gold Rush ability [W]
+            spawn_ability_button(parent, &assets, AbilityType::GoldRush, "W", "Gold", GameColors::ABILITY_GOLD_RUSH);
+            // Artillery ability [E]
+            spawn_ability_button(parent, &assets, AbilityType::Artillery, "E", "Arty", GameColors::ABILITY_NUKE);
+        });
+}
+
+fn spawn_ability_button(
+    parent: &mut ChildBuilder,
+    assets: &GameAssets,
+    ability: AbilityType,
+    key: &str,
+    name: &str,
+    color: Color,
+) {
+    parent
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    width: Val::Px(60.0),
+                    height: Val::Px(50.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::all(Val::Px(4.0)),
+                    ..default()
+                },
+                background_color: color.with_alpha(0.3).into(),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                ..default()
+            },
+            AbilityButton(ability),
+        ))
+        .with_children(|btn| {
+            // Key hint
+            btn.spawn(TextBundle::from_section(
+                format!("[{}]", key),
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 12.0,
+                    color: Color::WHITE,
+                },
+            ));
+            // Ability name
+            btn.spawn(TextBundle::from_section(
+                name,
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 11.0,
+                    color,
+                },
+            ));
+            // Cooldown text
+            btn.spawn((
+                TextBundle::from_section(
+                    "Ready",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 10.0,
+                        color: GameColors::SUCCESS,
+                    },
+                ),
+                AbilityCooldownText(ability),
+            ));
+        });
 }
 
 fn update_gold_display(
@@ -793,6 +970,86 @@ fn update_combo_display(
             } else {
                 GameColors::GOLD // Yellow for 3+
             };
+        }
+    }
+}
+
+fn update_ability_display(
+    abilities: Res<PlayerAbilities>,
+    mut button_query: Query<(&AbilityButton, &mut BackgroundColor)>,
+    mut cooldown_text_query: Query<(&AbilityCooldownText, &mut Text)>,
+) {
+    for (button, mut bg_color) in &mut button_query {
+        let (ready, active, remaining) = match button.0 {
+            AbilityType::Freeze => (
+                abilities.freeze_ready,
+                false,
+                abilities.freeze_cooldown.remaining_secs(),
+            ),
+            AbilityType::GoldRush => (
+                abilities.gold_rush_ready,
+                abilities.gold_rush_active.is_some(),
+                if abilities.gold_rush_active.is_some() {
+                    abilities.gold_rush_active.as_ref().unwrap().remaining_secs()
+                } else {
+                    abilities.gold_rush_cooldown.remaining_secs()
+                },
+            ),
+            AbilityType::Artillery => (
+                abilities.artillery_ready,
+                abilities.artillery_targeting,
+                abilities.artillery_cooldown.remaining_secs(),
+            ),
+        };
+
+        // Update button opacity based on ready state
+        let base_color = match button.0 {
+            AbilityType::Freeze => GameColors::ABILITY_FREEZE,
+            AbilityType::GoldRush => GameColors::ABILITY_GOLD_RUSH,
+            AbilityType::Artillery => GameColors::ABILITY_NUKE,
+        };
+
+        if ready {
+            *bg_color = base_color.with_alpha(0.5).into();
+        } else if active {
+            *bg_color = base_color.with_alpha(0.8).into();
+        } else {
+            *bg_color = base_color.with_alpha(0.2).into();
+        }
+    }
+
+    for (cooldown_text, mut text) in &mut cooldown_text_query {
+        let (ready, active, remaining) = match cooldown_text.0 {
+            AbilityType::Freeze => (
+                abilities.freeze_ready,
+                false,
+                abilities.freeze_cooldown.remaining_secs(),
+            ),
+            AbilityType::GoldRush => (
+                abilities.gold_rush_ready,
+                abilities.gold_rush_active.is_some(),
+                if abilities.gold_rush_active.is_some() {
+                    abilities.gold_rush_active.as_ref().unwrap().remaining_secs()
+                } else {
+                    abilities.gold_rush_cooldown.remaining_secs()
+                },
+            ),
+            AbilityType::Artillery => (
+                abilities.artillery_ready,
+                abilities.artillery_targeting,
+                abilities.artillery_cooldown.remaining_secs(),
+            ),
+        };
+
+        if ready {
+            text.sections[0].value = "Ready".to_string();
+            text.sections[0].style.color = GameColors::SUCCESS;
+        } else if active {
+            text.sections[0].value = format!("{:.0}s", remaining);
+            text.sections[0].style.color = GameColors::GOLD;
+        } else {
+            text.sections[0].value = format!("{:.0}s", remaining);
+            text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.5);
         }
     }
 }
@@ -887,6 +1144,11 @@ fn start_wave_button(
     }
 }
 
+/// Reset UI clicked flag at the start of each frame
+fn reset_ui_clicked(mut ui_clicked: ResMut<UiClicked>) {
+    ui_clicked.0 = false;
+}
+
 fn handle_tile_click(
     mouse_button: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -895,7 +1157,13 @@ fn handle_tile_click(
     selected: Res<SelectedTowerType>,
     economy: Res<PlayerEconomy>,
     mut place_events: EventWriter<PlaceTowerEvent>,
+    ui_clicked: Res<UiClicked>,
 ) {
+    // Don't place tower if UI was clicked
+    if ui_clicked.0 {
+        return;
+    }
+
     if !mouse_button.just_pressed(MouseButton::Left) {
         return;
     }
@@ -1162,18 +1430,10 @@ fn pause_menu_buttons(
     }
 }
 
-fn update_tower_context_menu(
-    hovered_tile: Res<HoveredTile>,
-    map: Res<GameMap>,
-    towers: Query<(Entity, &Tower)>,
+/// Handle keyboard shortcuts for tower context menu (separate system to stay within param limit)
+fn tower_context_shortcuts(
+    towers: Query<&Tower>,
     mut selected_tower: ResMut<SelectedPlacedTower>,
-    mut context_menu: Query<(&mut Style, &Children), With<TowerContextMenu>>,
-    mut upgrade_text: Query<&mut Text, (With<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>)>,
-    mut sell_text: Query<&mut Text, (With<SellValueText>, Without<UpgradeCostText>, Without<TowerStatsText>, Without<TowerUpgradePreview>)>,
-    mut stats_text: Query<&mut Text, (With<TowerStatsText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerUpgradePreview>)>,
-    mut preview_text: Query<&mut Text, (With<TowerUpgradePreview>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>)>,
-    windows: Query<&Window>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     economy: Res<PlayerEconomy>,
     mut upgrade_events: EventWriter<UpgradeTowerEvent>,
@@ -1187,7 +1447,7 @@ fn update_tower_context_menu(
 
     // Keyboard shortcuts when tower is selected
     if let Some(tower_entity) = selected_tower.0 {
-        if let Ok((_, tower)) = towers.get(tower_entity) {
+        if let Ok(tower) = towers.get(tower_entity) {
             // U to upgrade
             if keyboard.just_pressed(KeyCode::KeyU) {
                 if tower.can_upgrade() && economy.gold >= tower.upgrade_cost() {
@@ -1198,17 +1458,33 @@ fn update_tower_context_menu(
             if keyboard.just_pressed(KeyCode::KeyS) {
                 sell_events.send(SellTowerEvent { tower: tower_entity });
                 selected_tower.0 = None;
-                return;
             }
         }
     }
+}
 
+fn update_tower_context_menu(
+    hovered_tile: Res<HoveredTile>,
+    map: Res<GameMap>,
+    towers: Query<(Entity, &Tower, Option<&TowerSynergies>)>,
+    mut selected_tower: ResMut<SelectedPlacedTower>,
+    mut context_menu: Query<(&mut Style, &Children), With<TowerContextMenu>>,
+    mut upgrade_text: Query<&mut Text, (With<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
+    mut sell_text: Query<&mut Text, (With<SellValueText>, Without<UpgradeCostText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
+    mut stats_text: Query<&mut Text, (With<TowerStatsText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
+    mut preview_text: Query<&mut Text, (With<TowerUpgradePreview>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TargetingText>, Without<SynergyText>)>,
+    mut targeting_text: Query<&mut Text, (With<TargetingText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<SynergyText>)>,
+    mut synergy_text: Query<&mut Text, (With<SynergyText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>)>,
+    windows: Query<&Window>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    economy: Res<PlayerEconomy>,
+) {
     // Left-click to select/deselect towers
     if mouse_button.just_pressed(MouseButton::Left) {
         if let Some((hx, hy)) = hovered_tile.position {
             if map.tiles[hx][hy] == TileType::Tower {
                 // Find the tower at this position
-                for (entity, tower) in &towers {
+                for (entity, tower, _) in &towers {
                     if tower.grid_x == hx && tower.grid_y == hy {
                         // Toggle selection - if already selected, deselect
                         if selected_tower.0 == Some(entity) {
@@ -1229,7 +1505,7 @@ fn update_tower_context_menu(
     // Update context menu visibility and position
     for (mut style, _) in &mut context_menu {
         if let Some(tower_entity) = selected_tower.0 {
-            if let Ok((_, tower)) = towers.get(tower_entity) {
+            if let Ok((_, tower, synergies)) = towers.get(tower_entity) {
                 style.display = Display::Flex;
 
                 // Position near the tower
@@ -1301,6 +1577,25 @@ fn update_tower_context_menu(
                 for mut text in &mut sell_text {
                     text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
                 }
+                // Update targeting text to show current mode
+                for mut text in &mut targeting_text {
+                    text.sections[0].value = format!("Target: {} [T]", tower.targeting.name());
+                }
+                // Update synergy text
+                for mut text in &mut synergy_text {
+                    if let Some(syn) = synergies {
+                        if !syn.active.is_empty() {
+                            let synergy_strs: Vec<String> = syn.active.iter()
+                                .map(|s| format!("⚡ {}: {}", s.name(), s.description()))
+                                .collect();
+                            text.sections[0].value = synergy_strs.join("\n");
+                        } else {
+                            text.sections[0].value = String::new();
+                        }
+                    } else {
+                        text.sections[0].value = String::new();
+                    }
+                }
             } else {
                 style.display = Display::None;
                 selected_tower.0 = None;
@@ -1314,30 +1609,39 @@ fn update_tower_context_menu(
 fn tower_context_buttons(
     mut upgrade_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (With<UpgradeButton>, Without<SellButton>, Without<CloseMenuButton>),
+        (With<UpgradeButton>, Without<SellButton>, Without<CloseMenuButton>, Without<TargetingButton>),
     >,
     mut sell_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (With<SellButton>, Without<UpgradeButton>, Without<CloseMenuButton>),
+        (With<SellButton>, Without<UpgradeButton>, Without<CloseMenuButton>, Without<TargetingButton>),
     >,
     mut close_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<CloseMenuButton>, Without<UpgradeButton>, Without<SellButton>),
+        (With<CloseMenuButton>, Without<UpgradeButton>, Without<SellButton>, Without<TargetingButton>),
+    >,
+    mut targeting_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (With<TargetingButton>, Without<UpgradeButton>, Without<SellButton>, Without<CloseMenuButton>),
     >,
     mut selected_tower: ResMut<SelectedPlacedTower>,
-    towers: Query<&Tower>,
+    mut towers: Query<&mut Tower>,
     economy: Res<PlayerEconomy>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut upgrade_events: EventWriter<UpgradeTowerEvent>,
     mut sell_events: EventWriter<SellTowerEvent>,
+    mut targeting_text: Query<&mut Text, With<TargetingText>>,
+    mut ui_clicked: ResMut<UiClicked>,
 ) {
     // Close button
     for (interaction, mut color) in &mut close_query {
         match *interaction {
             Interaction::Pressed => {
                 selected_tower.0 = None;
+                ui_clicked.0 = true;
             }
             Interaction::Hovered => {
                 *color = Color::srgb(0.6, 0.25, 0.25).into();
+                ui_clicked.0 = true;
             }
             Interaction::None => {
                 *color = Color::srgba(0.4, 0.15, 0.15, 0.9).into();
@@ -1360,6 +1664,7 @@ fn tower_context_buttons(
     for (interaction, mut color) in &mut upgrade_query {
         match *interaction {
             Interaction::Pressed => {
+                ui_clicked.0 = true;
                 if let Some(tower_entity) = selected_tower.0 {
                     if let Ok(tower) = towers.get(tower_entity) {
                         if economy.gold >= tower.upgrade_cost() {
@@ -1369,6 +1674,7 @@ fn tower_context_buttons(
                 }
             }
             Interaction::Hovered => {
+                ui_clicked.0 = true;
                 if can_afford {
                     *color = Color::srgb(0.25, 0.65, 0.4).into();
                 } else {
@@ -1389,16 +1695,56 @@ fn tower_context_buttons(
     for (interaction, mut color) in &mut sell_query {
         match *interaction {
             Interaction::Pressed => {
+                ui_clicked.0 = true;
                 if let Some(tower_entity) = selected_tower.0 {
                     sell_events.send(SellTowerEvent { tower: tower_entity });
                     selected_tower.0 = None;
                 }
             }
             Interaction::Hovered => {
+                ui_clicked.0 = true;
                 *color = Color::srgb(0.65, 0.3, 0.3).into();
             }
             Interaction::None => {
                 *color = Color::srgb(0.5, 0.2, 0.2).into();
+            }
+        }
+    }
+
+    // Handle targeting button click or [T] key
+    let mut should_cycle_targeting = false;
+
+    for (interaction, mut color) in &mut targeting_query {
+        match *interaction {
+            Interaction::Pressed => {
+                ui_clicked.0 = true;
+                should_cycle_targeting = true;
+            }
+            Interaction::Hovered => {
+                ui_clicked.0 = true;
+                *color = Color::srgb(0.4, 0.4, 0.65).into();
+            }
+            Interaction::None => {
+                *color = Color::srgb(0.3, 0.3, 0.5).into();
+            }
+        }
+    }
+
+    // Keyboard shortcut [T]
+    if keyboard.just_pressed(KeyCode::KeyT) && selected_tower.0.is_some() {
+        should_cycle_targeting = true;
+    }
+
+    // Apply targeting cycle
+    if should_cycle_targeting {
+        if let Some(tower_entity) = selected_tower.0 {
+            if let Ok(mut tower) = towers.get_mut(tower_entity) {
+                tower.cycle_targeting();
+
+                // Update targeting text
+                for mut text in &mut targeting_text {
+                    text.sections[0].value = format!("Target: {} [T]", tower.targeting.name());
+                }
             }
         }
     }

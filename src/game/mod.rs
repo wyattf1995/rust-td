@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+pub mod abilities;
 pub mod economy;
 pub mod enemy;
 pub mod map;
@@ -25,6 +26,7 @@ impl Plugin for GamePlugin {
             ui::GameUiPlugin,
             spatial::SpatialPlugin,
             pool::PoolPlugin,
+            abilities::AbilitiesPlugin,
         ))
         .add_systems(OnEnter(GameState::Playing), setup_game)
         // Note: Don't cleanup on exit Playing - would destroy game when pausing

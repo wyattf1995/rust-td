@@ -4,6 +4,7 @@ use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes};
 
 use super::{
+    abilities::PlayerAbilities,
     economy::{PlayerEconomy, KillStreak},
     map::GameMap,
     GameEntity,
@@ -16,6 +17,7 @@ impl Plugin for EnemyPlugin {
         app.init_resource::<WaveManager>()
             .add_event::<EnemyKilledEvent>()
             .add_event::<EnemyEscapedEvent>()
+            .add_event::<SpawnMiniSplittersEvent>()
             .add_systems(OnEnter(GameState::Playing), reset_wave_manager)
             .add_systems(
                 Update,
@@ -26,6 +28,7 @@ impl Plugin for EnemyPlugin {
                     enemy_health_check,
                     update_health_bars,
                     handle_enemy_killed,
+                    spawn_mini_splitters,
                     handle_enemy_escaped,
                     check_wave_complete,
                     update_death_effects,
@@ -41,9 +44,11 @@ pub enum EnemyType {
     Basic,
     Fast,
     Tank,
-    Armored,  // Resistant to damage
-    Flying,   // Ignores some path (takes shortcuts)
-    Boss,     // Big and tough
+    Armored,      // Resistant to damage
+    Flying,       // Ignores some path (takes shortcuts)
+    Boss,         // Big and tough
+    Splitter,     // Splits into mini-splitters on death
+    MiniSplitter, // Small fast enemy spawned from Splitter
 }
 
 impl EnemyType {
@@ -55,6 +60,8 @@ impl EnemyType {
             EnemyType::Armored => 285.0,
             EnemyType::Flying => 98.0,
             EnemyType::Boss => 2300.0,
+            EnemyType::Splitter => 180.0,
+            EnemyType::MiniSplitter => 45.0,
         }
     }
 
@@ -66,6 +73,8 @@ impl EnemyType {
             EnemyType::Armored => 42.0,
             EnemyType::Flying => 95.0,
             EnemyType::Boss => 30.0,
+            EnemyType::Splitter => 45.0,
+            EnemyType::MiniSplitter => 75.0,
         }
     }
 
@@ -77,6 +86,8 @@ impl EnemyType {
             EnemyType::Armored => 16,
             EnemyType::Flying => 10,
             EnemyType::Boss => 120,
+            EnemyType::Splitter => 12,
+            EnemyType::MiniSplitter => 2,
         }
     }
 
@@ -88,6 +99,8 @@ impl EnemyType {
             EnemyType::Armored => GameColors::ENEMY_ARMORED,
             EnemyType::Flying => GameColors::ENEMY_FLYING,
             EnemyType::Boss => GameColors::ENEMY_BOSS,
+            EnemyType::Splitter => GameColors::ENEMY_SPLITTER,
+            EnemyType::MiniSplitter => GameColors::ENEMY_MINI_SPLITTER,
         }
     }
 
@@ -99,6 +112,8 @@ impl EnemyType {
             EnemyType::Armored => ShapeSizes::ENEMY_ARMORED,
             EnemyType::Flying => ShapeSizes::ENEMY_FLYING,
             EnemyType::Boss => ShapeSizes::ENEMY_BOSS,
+            EnemyType::Splitter => ShapeSizes::ENEMY_SPLITTER,
+            EnemyType::MiniSplitter => ShapeSizes::ENEMY_MINI_SPLITTER,
         }
     }
 
@@ -114,6 +129,11 @@ impl EnemyType {
     /// Whether this enemy can fly (skip path sections)
     pub fn is_flying(&self) -> bool {
         matches!(self, EnemyType::Flying)
+    }
+
+    /// Whether this enemy splits into smaller enemies on death
+    pub fn is_splitter(&self) -> bool {
+        matches!(self, EnemyType::Splitter)
     }
 }
 
@@ -165,8 +185,10 @@ impl Enemy {
     pub fn apply_poison(&mut self, dps: f32, duration: f32) {
         // Stack poison damage
         self.poison_damage += dps;
-        // Refresh or extend duration
-        self.poison_timer = Some(Timer::from_seconds(duration, TimerMode::Once));
+        // Take max of remaining duration and new duration (don't lose existing progress)
+        let remaining = self.poison_timer.as_ref().map(|t| t.remaining_secs()).unwrap_or(0.0);
+        let new_duration = duration.max(remaining);
+        self.poison_timer = Some(Timer::from_seconds(new_duration, TimerMode::Once));
     }
 }
 
@@ -246,13 +268,20 @@ impl Default for WaveManager {
 }
 
 impl WaveManager {
-    /// Generate and start the next wave - infinite scaling (gentler curve)
+    /// Generate and start the next wave - infinite scaling (balanced curve)
     pub fn start_wave(&mut self) {
         let wave_num = self.current_wave + 1;
 
-        // Calculate health multiplier: stronger mid-game, steeper late-game
-        // Wave 1: 1.05x, Wave 10: ~1.85x, Wave 20: ~3.2x, Wave 50: ~7x
-        self.health_multiplier = 1.0 + (wave_num as f32).powf(1.25) * 0.05;
+        // Calculate health multiplier: gentle early, steep late game
+        // Wave 1: 1.0x, Wave 6: ~1.4x, Wave 10: ~2.0x, Wave 15: ~3.0x, Wave 20: ~4.2x
+        let base_mult = 1.0 + (wave_num as f32).powf(1.25) * 0.05;
+        // Additional late-game scaling to counter upgraded towers
+        let late_game_mult = if wave_num > 12 {
+            1.0 + (wave_num - 12) as f32 * 0.08
+        } else {
+            1.0
+        };
+        self.health_multiplier = base_mult * late_game_mult;
 
         // Determine wave modifier (every 3rd wave after wave 5)
         self.current_modifier = if wave_num >= 6 && wave_num % 3 == 0 {
@@ -289,8 +318,8 @@ impl WaveManager {
         let multiplier = self.health_multiplier;
 
         // Base enemy count scaling: ramps up more in late game
-        // Early waves (1-5) have fewer enemies to compensate for economy nerfs
-        let early_wave_factor = if wave_num <= 5 { 0.75 } else { 1.0 };
+        // Early waves (1-7) have fewer enemies to give time to build economy
+        let early_wave_factor = if wave_num <= 4 { 0.7 } else if wave_num <= 7 { 0.85 } else { 1.0 };
 
         // Apply wave modifier to enemy count
         let modifier_factor = match self.current_modifier {
@@ -361,6 +390,11 @@ impl WaveManager {
                         for _ in 0..(count / 3) {
                             enemies.push((EnemyType::Tank, multiplier));
                         }
+                        // Add splitters to tank waves
+                        let splitter_count = ((wave_num - 7) / 4).min(3).max(1);
+                        for _ in 0..splitter_count {
+                            enemies.push((EnemyType::Splitter, multiplier));
+                        }
                     }
                     if wave_num >= 13 {
                         for _ in 0..(count / 4) {
@@ -380,6 +414,13 @@ impl WaveManager {
                     if wave_num >= 9 {
                         for _ in 0..(count / 4) {
                             enemies.push((EnemyType::Tank, multiplier));
+                        }
+                    }
+                    // Add splitters starting wave 7 (forces AOE strategy)
+                    if wave_num >= 7 {
+                        let splitter_count = ((wave_num - 6) / 3).min(5).max(1);
+                        for _ in 0..splitter_count {
+                            enemies.push((EnemyType::Splitter, multiplier));
                         }
                     }
                 }
@@ -421,10 +462,10 @@ impl WaveManager {
     /// Calculate wave completion bonus
     pub fn wave_bonus(&self) -> u32 {
         let wave = self.current_wave as u32;
-        // Reduced bonus - scales with progression (nerfed from base 20)
+        // Base bonus scales with wave progression (slightly reduced for balance)
         let base_bonus = 12 + (wave * 3) + ((wave as f32).sqrt() * 4.0) as u32;
         if self.perfect_wave {
-            (base_bonus as f32 * 1.5) as u32  // 50% bonus for no leaks
+            (base_bonus as f32 * 1.4) as u32  // 40% bonus for no leaks
         } else {
             base_bonus
         }
@@ -442,11 +483,21 @@ pub struct EnemyKilledEvent {
     pub reward: u32,
     pub position: Vec3,
     pub size: f32,
+    pub enemy_type: EnemyType,
+    pub path_index: usize,
 }
 
 #[derive(Event)]
 pub struct EnemyEscapedEvent {
     pub enemy: Entity,
+}
+
+/// Event to spawn mini-splitters when a Splitter dies
+#[derive(Event)]
+pub struct SpawnMiniSplittersEvent {
+    pub position: Vec3,
+    pub path_index: usize,
+    pub health_multiplier: f32,
 }
 
 fn wave_spawner(
@@ -654,6 +705,8 @@ fn enemy_health_check(
                 reward: enemy.reward,
                 position: transform.translation,
                 size: enemy.enemy_type.size(),
+                enemy_type: enemy.enemy_type,
+                path_index: enemy.path_index,
             });
         }
     }
@@ -726,11 +779,15 @@ fn handle_enemy_killed(
     mut economy: ResMut<PlayerEconomy>,
     mut wave_manager: ResMut<WaveManager>,
     mut kill_streak: ResMut<KillStreak>,
+    mut splitter_events: EventWriter<SpawnMiniSplittersEvent>,
+    abilities: Res<PlayerAbilities>,
     health_bars: Query<(Entity, &HealthBar)>,
     health_fills: Query<(Entity, &HealthBarFill)>,
 ) {
-    // Gold Rush modifier gives 2x gold
-    let gold_rush_multiplier = if wave_manager.current_modifier == WaveModifier::GoldRush {
+    // Gold Rush modifier gives 2x gold (from wave OR ability)
+    let wave_gold_rush = wave_manager.current_modifier == WaveModifier::GoldRush;
+    let ability_gold_rush = abilities.gold_rush_active.is_some();
+    let gold_rush_multiplier = if wave_gold_rush || ability_gold_rush {
         2.0
     } else {
         1.0
@@ -745,6 +802,15 @@ fn handle_enemy_killed(
         economy.gold += multiplied_reward;
         economy.score += multiplied_reward;
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
+
+        // If this was a Splitter, spawn mini-splitters
+        if event.enemy_type.is_splitter() {
+            splitter_events.send(SpawnMiniSplittersEvent {
+                position: event.position,
+                path_index: event.path_index,
+                health_multiplier: wave_manager.health_multiplier,
+            });
+        }
 
         // Spawn death effect
         commands.spawn((
@@ -783,6 +849,94 @@ fn handle_enemy_killed(
                     entity_commands.despawn_recursive();
                 }
             }
+        }
+    }
+}
+
+/// Spawn mini-splitters when a Splitter dies
+fn spawn_mini_splitters(
+    mut commands: Commands,
+    mut events: EventReader<SpawnMiniSplittersEvent>,
+    mut wave_manager: ResMut<WaveManager>,
+) {
+    for event in events.read() {
+        let enemy_type = EnemyType::MiniSplitter;
+        let size = enemy_type.size();
+        let color = enemy_type.color();
+
+        // Spawn 3 mini-splitters in a triangle pattern around the death position
+        let offsets = [
+            Vec2::new(0.0, 15.0),      // Above
+            Vec2::new(-13.0, -8.0),    // Bottom left
+            Vec2::new(13.0, -8.0),     // Bottom right
+        ];
+
+        for offset in offsets {
+            let pos = event.position.truncate() + offset;
+            let mut enemy = Enemy::new(enemy_type);
+
+            // Apply health multiplier from wave scaling
+            enemy.health *= event.health_multiplier;
+            enemy.max_health *= event.health_multiplier;
+
+            // Inherit path progress from parent Splitter
+            enemy.path_index = event.path_index;
+
+            let enemy_entity = commands
+                .spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color,
+                            custom_size: Some(Vec2::splat(size)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(pos.extend(3.0)),
+                        ..default()
+                    },
+                    enemy,
+                    GameEntity,
+                ))
+                .id();
+
+            // Spawn health bar background
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: GameColors::HEALTH_BAR_BG,
+                        custom_size: Some(Vec2::new(size + 4.0, ShapeSizes::HEALTH_BAR_BG_HEIGHT)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(
+                        pos.x,
+                        pos.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET,
+                        3.5,
+                    )),
+                    ..default()
+                },
+                HealthBar { enemy: enemy_entity },
+                GameEntity,
+            ));
+
+            // Spawn health bar fill
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: GameColors::HEALTH_HIGH,
+                        custom_size: Some(Vec2::new(size, ShapeSizes::HEALTH_BAR_HEIGHT)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(
+                        pos.x,
+                        pos.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET,
+                        3.6,
+                    )),
+                    ..default()
+                },
+                HealthBarFill { enemy: enemy_entity },
+                GameEntity,
+            ));
+
+            wave_manager.enemies_alive += 1;
         }
     }
 }

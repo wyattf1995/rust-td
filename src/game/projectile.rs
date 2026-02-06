@@ -33,6 +33,7 @@ pub struct Projectile {
     pub predicted_pos: Option<Vec2>,  // For leading shots
     pub chain_bounces: u32,           // Remaining bounces for chain lightning
     pub hit_enemies: Vec<Entity>,     // Enemies already hit (for chain)
+    pub poison_duration_bonus: f32,   // Synergy bonus for poison duration
 }
 
 /// Trail particle
@@ -61,6 +62,8 @@ pub struct SpawnProjectileEvent {
     pub target: Entity,
     pub damage: f32,
     pub tower_type: TowerType,
+    pub extra_chain_bounces: u32,     // From Chain+Chain synergy
+    pub poison_duration_bonus: f32,   // From Slow+Poison synergy
 }
 
 fn spawn_projectiles(
@@ -110,8 +113,12 @@ fn spawn_projectiles(
             None
         };
 
-        // Chain lightning starts with 3 bounces
-        let chain_bounces = if event.tower_type == TowerType::Chain { 3 } else { 0 };
+        // Chain lightning starts with 3 bounces (+synergy bonus)
+        let chain_bounces = if event.tower_type == TowerType::Chain {
+            3 + event.extra_chain_bounces
+        } else {
+            0
+        };
 
         commands.spawn((
             SpriteBundle {
@@ -131,6 +138,7 @@ fn spawn_projectiles(
                 predicted_pos,
                 chain_bounces,
                 hit_enemies: vec![],
+                poison_duration_bonus: event.poison_duration_bonus,
             },
             GameEntity,
         ));
@@ -219,7 +227,7 @@ fn projectile_collision(
     assets: Res<GameAssets>,
 ) {
     // Collect chain bounce data to spawn after iteration
-    let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>)> = Vec::new();
+    let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32)> = Vec::new();
 
     // Check projectile collisions
     for (proj_entity, projectile, proj_transform) in &projectiles {
@@ -246,8 +254,10 @@ fn projectile_collision(
 
                 // Apply poison effect
                 if projectile.tower_type == TowerType::Poison {
-                    // 8 DPS for 4 seconds (stacks)
-                    enemy.apply_poison(8.0, 4.0);
+                    // 8 DPS for 4 seconds (stacks), +synergy bonus duration
+                    let base_duration = 4.0;
+                    let duration = base_duration * (1.0 + projectile.poison_duration_bonus);
+                    enemy.apply_poison(8.0, duration);
 
                     // Spawn poison effect
                     commands.spawn((
@@ -274,8 +284,9 @@ fn projectile_collision(
 
                     // Find next target for bounce (30% damage reduction per bounce)
                     let bounce_damage = projectile.damage * 0.7;
+                    let remaining_bounces = projectile.chain_bounces.saturating_sub(1);
 
-                    chain_bounces.push((enemy_pos, bounce_damage, hit_list));
+                    chain_bounces.push((enemy_pos, bounce_damage, hit_list, remaining_bounces));
                 }
 
                 // Splash damage
@@ -325,7 +336,7 @@ fn projectile_collision(
     }
 
     // Spawn chain bounce projectiles
-    for (origin_pos, bounce_damage, hit_list) in chain_bounces {
+    for (origin_pos, bounce_damage, hit_list, remaining_bounces) in chain_bounces {
         // Find nearest enemy not in hit list
         let mut best_target: Option<(Entity, f32)> = None;
         let bounce_range = ShapeSizes::CHAIN_BOUNCE_RANGE;
@@ -371,8 +382,9 @@ fn projectile_collision(
                         speed: 600.0, // Faster bounce
                         tower_type: TowerType::Chain,
                         predicted_pos: Some(next_pos),
-                        chain_bounces: (hit_list.len() as u32).saturating_sub(1).min(2), // Reduce bounces
+                        chain_bounces: remaining_bounces,
                         hit_enemies: hit_list,
+                        poison_duration_bonus: 0.0, // Chain doesn't apply poison
                     },
                     GameEntity,
                 ));
