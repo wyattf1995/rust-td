@@ -846,19 +846,22 @@ fn handle_enemy_killed(
         economy.score += multiplied_reward;
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
 
-        // Spawn gold earned toast
+        // Spawn gold earned toast (bigger and brighter during Gold Rush)
         {
+            let is_boosted = gold_rush_multiplier > 1.0;
             let pos = event.position.truncate();
             let offset_x = (rand_simple(pos.x) - 0.5) * 16.0;
             let velocity = Vec2::new(offset_x, 35.0);
+            let toast_size = if is_boosted { 18.0 } else { 14.0 };
+            let toast_color = if is_boosted { GameColors::ABILITY_GOLD_RUSH } else { GameColors::GOLD_TEXT };
             commands.spawn((
                 Text2dBundle {
                     text: Text::from_section(
                         format!("+{}g", multiplied_reward),
                         TextStyle {
                             font: assets.font.clone(),
-                            font_size: 14.0,
-                            color: GameColors::GOLD_TEXT,
+                            font_size: toast_size,
+                            color: toast_color,
                         },
                     ),
                     transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 20.0, 10.0)),

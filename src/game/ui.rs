@@ -45,6 +45,7 @@ impl Plugin for GameUiPlugin {
                     // Phase 4: Display updates (order doesn't matter)
                     (
                         update_gold_display,
+                        update_gold_rush_indicator,
                         update_lives_display,
                         update_life_flash,
                         update_wave_display,
@@ -108,6 +109,9 @@ struct InfoPanelCost;
 
 #[derive(Component)]
 struct ScoreText;
+
+#[derive(Component)]
+struct GoldRushIndicator;
 
 #[derive(Component)]
 struct SpeedButton(f32);
@@ -278,6 +282,21 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                             },
                         ),
                         GoldText,
+                    ));
+                    // Gold Rush indicator (hidden by default)
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "2x",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 18.0,
+                                color: GameColors::ABILITY_GOLD_RUSH,
+                            },
+                        ).with_style(Style {
+                            display: Display::None,
+                            ..default()
+                        }),
+                        GoldRushIndicator,
                     ));
                 });
 
@@ -1056,6 +1075,43 @@ fn update_gold_display(
     if economy.is_changed() {
         for mut text in &mut query {
             text.sections[0].value = format!("{}", economy.gold);
+        }
+    }
+}
+
+fn update_gold_rush_indicator(
+    abilities: Res<PlayerAbilities>,
+    mut indicator_query: Query<(&mut Text, &mut Style), With<GoldRushIndicator>>,
+    mut gold_text_query: Query<&mut Text, (With<GoldText>, Without<GoldRushIndicator>)>,
+    time: Res<Time>,
+) {
+    let is_active = abilities.gold_rush_active.is_some();
+    let remaining = abilities.gold_rush_active.as_ref().map(|t| t.remaining_secs()).unwrap_or(0.0);
+
+    for (mut text, mut style) in &mut indicator_query {
+        if is_active {
+            style.display = Display::Flex;
+            text.sections[0].value = format!("2x {:.0}s", remaining);
+
+            // Pulse the indicator color - brighter when more time left
+            let pulse = (time.elapsed_seconds() * 4.0).sin() * 0.5 + 0.5;
+            let alpha = 0.7 + pulse * 0.3;
+            text.sections[0].style.color = GameColors::ABILITY_GOLD_RUSH.with_alpha(alpha);
+        } else {
+            style.display = Display::None;
+        }
+    }
+
+    // Pulse the gold amount text while Gold Rush is active
+    for mut text in &mut gold_text_query {
+        if is_active {
+            let pulse = (time.elapsed_seconds() * 3.0).sin() * 0.5 + 0.5;
+            let r = GameColors::GOLD.to_srgba().red * (0.85 + pulse * 0.15);
+            let g = GameColors::GOLD.to_srgba().green * (0.85 + pulse * 0.15);
+            let b = GameColors::GOLD.to_srgba().blue * (0.85 + pulse * 0.15);
+            text.sections[0].style.color = Color::srgb(r.min(1.0), g.min(1.0), b.min(1.0));
+        } else {
+            text.sections[0].style.color = GameColors::GOLD;
         }
     }
 }
