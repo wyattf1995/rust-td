@@ -48,6 +48,7 @@ impl Plugin for GameUiPlugin {
                         update_score_display,
                         update_combo_display,
                         update_ability_display,
+                        update_ability_tooltips,
                         update_tower_selection,
                         update_info_panel,
                         pause_input,
@@ -157,11 +158,24 @@ struct AbilityButton(AbilityType);
 #[derive(Component)]
 struct AbilityCooldownText(AbilityType);
 
+#[derive(Component)]
+struct AbilityTooltip;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum AbilityType {
     Freeze,
     GoldRush,
     Artillery,
+}
+
+impl AbilityType {
+    fn tooltip(&self) -> (&'static str, &'static str) {
+        match self {
+            AbilityType::Freeze => ("Freeze [Q]", "Freeze all enemies for 3s\nCooldown: 45s"),
+            AbilityType::GoldRush => ("Gold Rush [W]", "2x gold from kills for 10s\nCooldown: 60s"),
+            AbilityType::Artillery => ("Artillery [E]", "Click to bomb an area for 400 dmg\nCooldown: 90s"),
+        }
+    }
 }
 
 fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<super::GameActive>>) {
@@ -849,7 +863,7 @@ fn spawn_ability_button(
 ) {
     parent
         .spawn((
-            NodeBundle {
+            ButtonBundle {
                 style: Style {
                     width: Val::Px(60.0),
                     height: Val::Px(50.0),
@@ -1052,6 +1066,68 @@ fn update_ability_display(
             text.sections[0].value = format!("{:.0}s", remaining);
             text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.5);
         }
+    }
+}
+
+fn update_ability_tooltips(
+    mut commands: Commands,
+    assets: Res<GameAssets>,
+    button_query: Query<(&Interaction, &AbilityButton)>,
+    tooltip_query: Query<Entity, With<AbilityTooltip>>,
+) {
+    // Find which ability (if any) is hovered
+    let mut hovered: Option<AbilityType> = None;
+    for (interaction, button) in &button_query {
+        if *interaction == Interaction::Hovered {
+            hovered = Some(button.0);
+        }
+    }
+
+    // Despawn existing tooltip
+    for entity in &tooltip_query {
+        commands.entity(entity).despawn_recursive();
+    }
+
+    // Spawn new tooltip if hovering
+    if let Some(ability) = hovered {
+        let (title, desc) = ability.tooltip();
+
+        commands.spawn((
+            NodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(82.0),
+                    top: Val::Px(60.0),
+                    padding: UiRect::all(Val::Px(8.0)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0),
+                    max_width: Val::Px(200.0),
+                    ..default()
+                },
+                background_color: Color::srgba(0.0, 0.0, 0.0, 0.85).into(),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                ..default()
+            },
+            AbilityTooltip,
+            GameEntity,
+        )).with_children(|parent| {
+            parent.spawn(TextBundle::from_section(
+                title,
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 13.0,
+                    color: Color::WHITE,
+                },
+            ));
+            parent.spawn(TextBundle::from_section(
+                desc,
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 11.0,
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                },
+            ));
+        });
     }
 }
 

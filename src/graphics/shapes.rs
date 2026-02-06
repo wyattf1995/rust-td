@@ -138,7 +138,7 @@ impl GameColors {
     pub const HEALTH_MID: Color = Color::srgb(0.95, 0.75, 0.25);
     pub const HEALTH_LOW: Color = Color::srgb(0.95, 0.3, 0.25);
     pub const HEALTH_BAR_BG: Color = Color::srgb(0.12, 0.12, 0.14);
-    pub const SUCCESS: Color = Color::srgb(0.3, 0.9, 0.45);
+    pub const SUCCESS: Color = Color::srgb(0.6, 1.0, 0.7);
 
     pub const BUTTON_NORMAL: Color = Color::srgb(0.14, 0.15, 0.18);
     pub const BUTTON_HOVER: Color = Color::srgb(0.2, 0.22, 0.26);
