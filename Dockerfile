@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.84-slim-bookworm AS builder
+FROM rust:1.85-slim-bookworm AS builder
 
 # Install dependencies for trunk and wasm
 RUN apt-get update && apt-get install -y \
