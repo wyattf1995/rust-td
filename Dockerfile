@@ -37,11 +37,12 @@ RUN echo 'server { \
     listen 80; \
     root /usr/share/nginx/html; \
     index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
+    include mime.types; \
     types { \
         application/wasm wasm; \
+    } \
+    location / { \
+        try_files $uri $uri/ /index.html; \
     } \
     gzip on; \
     gzip_types application/javascript application/wasm text/css; \
