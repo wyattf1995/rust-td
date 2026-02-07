@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::{analytics::{Analytics, track_with_context}, loading::GameAssets, GameState};
+use crate::{analytics::{Analytics, track_with_context}, game::map::{MapPreset, SelectedMap}, loading::GameAssets, GameState};
 
 pub struct MenuPlugin;
 
@@ -12,7 +12,9 @@ impl Plugin for MenuPlugin {
                 Update,
                 (
                     button_system,
+                    map_button_hover,
                     button_interaction,
+                    map_select_interaction,
                     animate_projectiles,
                     animate_title_glow,
                 )
@@ -30,6 +32,9 @@ struct MenuCamera;
 
 #[derive(Component)]
 struct PlayButton;
+
+#[derive(Component)]
+struct MapSelectButton(MapPreset);
 
 #[derive(Component)]
 struct MenuProjectile {
@@ -55,7 +60,7 @@ const NEON_COLORS: [(f32, f32, f32); 8] = [
     (1.0, 0.85, 0.4),   // Gold (Buff)
 ];
 
-fn setup_menu(mut commands: Commands, assets: Res<GameAssets>) {
+fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res<SelectedMap>) {
     // Spawn menu camera
     commands.spawn((Camera2dBundle::default(), MenuCamera, MenuScreen));
 
@@ -144,6 +149,71 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>) {
                             color: Color::WHITE,
                         },
                     ));
+                });
+
+            // Map selection row
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(8.0),
+                        margin: UiRect::top(Val::Px(12.0)),
+                        ..default()
+                    },
+                    ..default()
+                })
+                .with_children(|row| {
+                    let presets = [MapPreset::Random, MapPreset::Serpentine, MapPreset::Sprint, MapPreset::Spiral];
+                    for preset in presets {
+                        let is_selected = preset == selected_map.0;
+                        let border_color = if is_selected {
+                            Color::srgb(0.0, 0.85, 0.95) // Cyan highlight
+                        } else {
+                            Color::srgba(1.0, 1.0, 1.0, 0.15)
+                        };
+
+                        row.spawn((
+                            ButtonBundle {
+                                style: Style {
+                                    width: Val::Px(120.0),
+                                    height: Val::Px(45.0),
+                                    flex_direction: FlexDirection::Column,
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    border: UiRect::all(Val::Px(2.0)),
+                                    ..default()
+                                },
+                                background_color: Color::srgb(0.14, 0.15, 0.18).into(),
+                                border_color: border_color.into(),
+                                ..default()
+                            },
+                            MapSelectButton(preset),
+                        ))
+                        .with_children(|btn| {
+                            btn.spawn(TextBundle::from_section(
+                                preset.name(),
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 14.0,
+                                    color: if is_selected {
+                                        Color::srgb(0.0, 0.85, 0.95)
+                                    } else {
+                                        Color::WHITE
+                                    },
+                                },
+                            ));
+                            btn.spawn(TextBundle::from_section(
+                                preset.description(),
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 10.0,
+                                    color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                                },
+                            ));
+                        });
+                    }
                 });
 
             // Features list
@@ -266,7 +336,7 @@ fn animate_title_glow(mut query: Query<&mut Text, With<TitleText>>, time: Res<Ti
 fn button_system(
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor, &mut BorderColor),
-        (Changed<Interaction>, With<Button>),
+        (Changed<Interaction>, With<PlayButton>, Without<MapSelectButton>),
     >,
 ) {
     for (interaction, mut color, mut border) in &mut interaction_query {
@@ -287,15 +357,80 @@ fn button_system(
     }
 }
 
+fn map_button_hover(
+    mut interaction_query: Query<
+        (&Interaction, &MapSelectButton, &mut BackgroundColor),
+        (Changed<Interaction>, With<MapSelectButton>),
+    >,
+) {
+    for (interaction, _btn, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = Color::srgb(0.18, 0.2, 0.24).into();
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.2, 0.22, 0.26).into();
+            }
+            Interaction::None => {
+                *color = Color::srgb(0.14, 0.15, 0.18).into();
+            }
+        }
+    }
+}
+
 fn button_interaction(
     interaction_query: Query<&Interaction, (Changed<Interaction>, With<PlayButton>)>,
     mut next_state: ResMut<NextState<GameState>>,
     analytics: Res<Analytics>,
+    selected_map: Res<SelectedMap>,
 ) {
     for interaction in &interaction_query {
         if *interaction == Interaction::Pressed {
-            track_with_context(&analytics, "game_started", &[]);
+            let map_name = selected_map.0.name();
+            track_with_context(&analytics, "game_started", &[("map", map_name)]);
             next_state.set(GameState::Playing);
+        }
+    }
+}
+
+fn map_select_interaction(
+    interaction_query: Query<(&Interaction, &MapSelectButton), Changed<Interaction>>,
+    mut selected_map: ResMut<SelectedMap>,
+    mut all_buttons: Query<(&MapSelectButton, &mut BorderColor, &Children)>,
+    mut text_query: Query<&mut Text>,
+) {
+    let mut new_selection = None;
+
+    for (interaction, map_btn) in &interaction_query {
+        if *interaction == Interaction::Pressed {
+            new_selection = Some(map_btn.0);
+        }
+    }
+
+    if let Some(preset) = new_selection {
+        selected_map.0 = preset;
+
+        // Update all button visuals
+        for (btn, mut border, children) in &mut all_buttons {
+            let is_selected = btn.0 == preset;
+            *border = if is_selected {
+                Color::srgb(0.0, 0.85, 0.95).into()
+            } else {
+                Color::srgba(1.0, 1.0, 1.0, 0.15).into()
+            };
+
+            // Update the first child text (name) color
+            if let Some(&first_child) = children.iter().next() {
+                if let Ok(mut text) = text_query.get_mut(first_child) {
+                    if let Some(section) = text.sections.first_mut() {
+                        section.style.color = if is_selected {
+                            Color::srgb(0.0, 0.85, 0.95)
+                        } else {
+                            Color::WHITE
+                        };
+                    }
+                }
+            }
         }
     }
 }

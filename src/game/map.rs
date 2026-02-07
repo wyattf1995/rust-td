@@ -9,11 +9,46 @@ use super::GameEntity;
 use super::tower::{SelectedTowerType, Tower};
 use super::ui::UiZones;
 
+/// Map preset variants for strategic variety
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum MapPreset {
+    #[default]
+    Random,
+    Serpentine,
+    Sprint,
+    Spiral,
+}
+
+impl MapPreset {
+    pub fn name(&self) -> &'static str {
+        match self {
+            MapPreset::Random => "Random",
+            MapPreset::Serpentine => "Serpentine",
+            MapPreset::Sprint => "Sprint",
+            MapPreset::Spiral => "Spiral",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            MapPreset::Random => "Procedural path",
+            MapPreset::Serpentine => "Long winding road",
+            MapPreset::Sprint => "Short & direct",
+            MapPreset::Spiral => "Inward spiral",
+        }
+    }
+}
+
+/// Currently selected map preset (persists between menu and game)
+#[derive(Resource, Default)]
+pub struct SelectedMap(pub MapPreset);
+
 pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HoveredTile>()
+            .init_resource::<SelectedMap>()
             .add_systems(OnEnter(GameState::Playing), setup_map)
             .add_systems(
                 Update,
@@ -82,25 +117,25 @@ pub struct GameMap {
 
 impl Default for GameMap {
     fn default() -> Self {
-        Self::generate_random()
+        Self::generate(MapPreset::Random)
     }
 }
 
 impl GameMap {
-    /// Generate a random map with procedural path and obstacles
-    pub fn generate_random() -> Self {
+    /// Generate a map using the given preset
+    pub fn generate(preset: MapPreset) -> Self {
+        let path = match preset {
+            MapPreset::Random => Self::generate_path(),
+            MapPreset::Serpentine => Self::generate_serpentine_path(),
+            MapPreset::Sprint => Self::generate_sprint_path(),
+            MapPreset::Spiral => Self::generate_spiral_path(),
+        };
+
         let mut tiles = [[TileType::Empty; GRID_HEIGHT]; GRID_WIDTH];
-
-        // Generate a winding path using simple random walk algorithm
-        let path = Self::generate_path();
-
-        // Mark path tiles
         let path_set: HashSet<(usize, usize)> = path.iter().cloned().collect();
         for &(x, y) in &path {
             tiles[x][y] = TileType::Path;
         }
-
-        // Generate random terrain obstacles
         Self::generate_obstacles(&mut tiles, &path_set);
 
         Self { tiles, path }
@@ -240,6 +275,153 @@ impl GameMap {
             x += 1;
             path.push((x, y));
             path_set.insert((x, y));
+        }
+
+        path
+    }
+
+    /// Generate a serpentine path: full-width snake with 3 horizontal runs
+    fn generate_serpentine_path() -> Vec<(usize, usize)> {
+        let mut rng = rand::thread_rng();
+        let mut path = Vec::with_capacity(150);
+
+        // Three horizontal rows with vertical connectors
+        // Row positions with minor randomization
+        let row1 = rng.gen_range(1..3);           // top area
+        let row2 = rng.gen_range(4..7);           // middle area
+        let row3 = rng.gen_range(8..(GRID_HEIGHT - 1)); // bottom area
+
+        // Run 1: left to right along row1
+        for x in 0..GRID_WIDTH - 1 {
+            path.push((x, row1));
+        }
+
+        // Drop down from row1 to row2 at right side
+        let drop_x = GRID_WIDTH - 2;
+        let (start, end) = if row1 < row2 { (row1, row2) } else { (row2, row1) };
+        for y in (start + 1)..=end {
+            path.push((drop_x, y));
+        }
+
+        // Run 2: right to left along row2
+        for x in (1..=drop_x).rev() {
+            path.push((x, row2));
+        }
+
+        // Drop down from row2 to row3 at left side
+        let drop_x2 = 1;
+        let (start, end) = if row2 < row3 { (row2, row3) } else { (row3, row2) };
+        for y in (start + 1)..=end {
+            path.push((drop_x2, y));
+        }
+
+        // Run 3: left to right along row3 to exit
+        for x in (drop_x2 + 1)..GRID_WIDTH {
+            path.push((x, row3));
+        }
+
+        path
+    }
+
+    /// Generate a sprint path: mostly horizontal through center with minor jogs
+    fn generate_sprint_path() -> Vec<(usize, usize)> {
+        let mut rng = rand::thread_rng();
+        let mut path = Vec::with_capacity(40);
+
+        let mut y = GRID_HEIGHT / 2; // Start near center
+        let mut x = 0;
+
+        path.push((x, y));
+
+        while x < GRID_WIDTH - 1 {
+            // Move right 2-4 columns
+            let run = rng.gen_range(2..5).min(GRID_WIDTH - 1 - x);
+            for _ in 0..run {
+                x += 1;
+                path.push((x, y));
+            }
+
+            if x >= GRID_WIDTH - 1 {
+                break;
+            }
+
+            // Small vertical jog of 1-2 tiles
+            let jog = rng.gen_range(1..3);
+            let direction = if y <= 2 {
+                1 // must go down
+            } else if y >= GRID_HEIGHT - 3 {
+                -1 // must go up
+            } else if rng.gen_bool(0.5) {
+                1
+            } else {
+                -1
+            };
+
+            for _ in 0..jog {
+                let new_y = (y as i32 + direction) as usize;
+                if new_y > 0 && new_y < GRID_HEIGHT - 1 {
+                    y = new_y;
+                    path.push((x, y));
+                }
+            }
+        }
+
+        path
+    }
+
+    /// Generate a spiral path: clockwise inward from top-left, exits right
+    fn generate_spiral_path() -> Vec<(usize, usize)> {
+        let mut path = Vec::with_capacity(120);
+
+        let mut left = 0usize;
+        let mut right = GRID_WIDTH - 2; // Leave last column for exit
+        let mut top = 0usize;
+        let mut bottom = GRID_HEIGHT - 1;
+
+        // Start at top-left
+        let mut x = 0;
+        let mut y = 0;
+        path.push((x, y));
+
+        // Spiral inward clockwise
+        loop {
+            // Move right along top
+            while x < right {
+                x += 1;
+                path.push((x, y));
+            }
+            top += 1;
+            if top > bottom { break; }
+
+            // Move down along right
+            while y < bottom {
+                y += 1;
+                path.push((x, y));
+            }
+            right = right.saturating_sub(1);
+            if left > right { break; }
+
+            // Move left along bottom
+            while x > left {
+                x -= 1;
+                path.push((x, y));
+            }
+            bottom = bottom.saturating_sub(1);
+            if top > bottom { break; }
+
+            // Move up along left
+            while y > top {
+                y -= 1;
+                path.push((x, y));
+            }
+            left += 1;
+            if left > right { break; }
+        }
+
+        // Break out rightward to exit at column GRID_WIDTH-1
+        while x < GRID_WIDTH - 1 {
+            x += 1;
+            path.push((x, y));
         }
 
         path
@@ -397,15 +579,15 @@ pub struct SpawnExitMarker {
     pub is_spawn: bool,
 }
 
-fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
+fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>, selected_map: Res<SelectedMap>) {
     // Skip if resuming from pause (game already active)
     if active.is_some() {
         return;
     }
     commands.insert_resource(super::GameActive);
 
-    // Generate a new random map each game
-    let map = GameMap::generate_random();
+    // Generate map based on selected preset
+    let map = GameMap::generate(selected_map.0);
 
     // Simple deterministic variation based on position
     let variation_seed = |x: usize, y: usize| -> bool {
