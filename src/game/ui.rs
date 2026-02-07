@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-use crate::{loading::GameAssets, GameState, GameSpeed};
+use crate::{loading::GameAssets, GameState, GameSpeed, ScreenInfo};
 use crate::graphics::shapes::GameColors;
 
 use super::{
-    abilities::PlayerAbilities,
+    abilities::{PlayerAbilities, FreezeAbilityEvent, GoldRushAbilityEvent},
     economy::{PlayerEconomy, KillStreak},
     enemy::{WaveManager, WaveModifier},
     map::{GameMap, HoveredTile, TileType},
@@ -39,6 +39,7 @@ impl Plugin for GameUiPlugin {
                         update_tower_context_menu,
                         tower_context_buttons,
                         speed_button_system,
+                        ability_button_activate,
                     ),
                     // Phase 3: Game world clicks (check flag before placing)
                     handle_tile_click,
@@ -53,9 +54,11 @@ impl Plugin for GameUiPlugin {
                         update_combo_display,
                         update_ability_display,
                         update_ability_tooltips,
+                        adapt_ability_bar_layout,
                         update_tower_selection,
                         update_tower_affordability,
                         update_wave_announcement,
+                        update_start_button_text,
                         update_info_panel,
                         pause_input,
                     ),
@@ -85,6 +88,9 @@ struct TowerButton(TowerType);
 
 #[derive(Component)]
 struct StartWaveButton;
+
+#[derive(Component)]
+struct StartWaveButtonText;
 
 #[derive(Component)]
 struct TowerButtonBorder(TowerType);
@@ -677,13 +683,16 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     StartWaveButton,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "START",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 14.0,
-                            color: Color::WHITE,
-                        },
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "START",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 14.0,
+                                color: Color::WHITE,
+                            },
+                        ),
+                        StartWaveButtonText,
                     ));
                 });
         });
@@ -1381,6 +1390,82 @@ fn update_ability_tooltips(
     }
 }
 
+fn ability_button_activate(
+    button_query: Query<(&Interaction, &AbilityButton), Changed<Interaction>>,
+    mut abilities: ResMut<PlayerAbilities>,
+    mut freeze_events: EventWriter<FreezeAbilityEvent>,
+    mut gold_rush_events: EventWriter<GoldRushAbilityEvent>,
+    mut ui_clicked: ResMut<UiClicked>,
+) {
+    for (interaction, button) in &button_query {
+        match *interaction {
+            Interaction::Pressed => {
+                ui_clicked.0 = true;
+                match button.0 {
+                    AbilityType::Freeze => {
+                        if abilities.freeze_ready {
+                            freeze_events.send(FreezeAbilityEvent);
+                            abilities.freeze_ready = false;
+                        }
+                    }
+                    AbilityType::GoldRush => {
+                        if abilities.gold_rush_ready {
+                            gold_rush_events.send(GoldRushAbilityEvent);
+                            abilities.gold_rush_ready = false;
+                        }
+                    }
+                    AbilityType::Artillery => {
+                        if abilities.artillery_ready {
+                            abilities.artillery_targeting = !abilities.artillery_targeting;
+                        }
+                    }
+                }
+            }
+            Interaction::Hovered => {
+                ui_clicked.0 = true;
+            }
+            Interaction::None => {}
+        }
+    }
+}
+
+fn adapt_ability_bar_layout(
+    screen_info: Res<ScreenInfo>,
+    mut ability_bar: Query<&mut Style, With<AbilityBar>>,
+    mut ability_buttons: Query<&mut Style, (With<AbilityButton>, Without<AbilityBar>)>,
+) {
+    if !screen_info.is_changed() { return; }
+
+    let Ok(mut bar_style) = ability_bar.get_single_mut() else { return };
+
+    if screen_info.is_landscape {
+        // Landscape mobile: horizontal bar at top-right to avoid blocking grid
+        bar_style.flex_direction = FlexDirection::Row;
+        bar_style.column_gap = Val::Px(6.0);
+        bar_style.row_gap = Val::Px(0.0);
+        bar_style.left = Val::Auto;
+        bar_style.right = Val::Px(10.0);
+        bar_style.top = Val::Px(60.0);
+
+        // Compact ability buttons for landscape
+        for mut btn_style in &mut ability_buttons {
+            btn_style.width = Val::Px(90.0);
+        }
+    } else {
+        // Default: vertical column on the left
+        bar_style.flex_direction = FlexDirection::Column;
+        bar_style.column_gap = Val::Px(0.0);
+        bar_style.row_gap = Val::Px(6.0);
+        bar_style.left = Val::Px(10.0);
+        bar_style.right = Val::Auto;
+        bar_style.top = Val::Px(60.0);
+
+        for mut btn_style in &mut ability_buttons {
+            btn_style.width = Val::Px(110.0);
+        }
+    }
+}
+
 fn update_info_panel(
     selected: Res<SelectedTowerType>,
     mut name_query: Query<&mut Text, (With<InfoPanelName>, Without<InfoPanelDesc>, Without<InfoPanelStats>, Without<InfoPanelCost>)>,
@@ -1513,7 +1598,9 @@ fn start_wave_button(
         (Changed<Interaction>, With<StartWaveButton>),
     >,
     mut wave_manager: ResMut<WaveManager>,
+    mut economy: ResMut<PlayerEconomy>,
     assets: Res<GameAssets>,
+    time: Res<Time>,
     existing_announcements: Query<Entity, With<WaveAnnouncement>>,
     mut ui_clicked: ResMut<UiClicked>,
 ) {
@@ -1523,7 +1610,16 @@ fn start_wave_button(
                 *color = GameColors::BUTTON_START_PRESSED.into();
                 ui_clicked.0 = true;
                 if !wave_manager.wave_active {
+                    // Calculate early-send bonus before starting wave
+                    let early_bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
+
                     wave_manager.start_wave();
+
+                    // Award early-send bonus
+                    if early_bonus > 0 {
+                        economy.gold += early_bonus;
+                        economy.score += early_bonus;
+                    }
 
                     // Despawn any existing announcement
                     for entity in &existing_announcements {
@@ -1564,6 +1660,19 @@ fn start_wave_button(
                                 color: GameColors::PRIMARY,
                             },
                         ));
+                        if early_bonus > 0 {
+                            parent.spawn(TextBundle::from_section(
+                                format!("+{}g EARLY BONUS", early_bonus),
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 16.0,
+                                    color: GameColors::GOLD,
+                                },
+                            ).with_style(Style {
+                                margin: UiRect::top(Val::Px(4.0)),
+                                ..default()
+                            }));
+                        }
                         if !modifier_name.is_empty() {
                             parent.spawn(TextBundle::from_section(
                                 modifier_name,
@@ -1591,10 +1700,29 @@ fn start_wave_button(
     }
 }
 
+fn update_start_button_text(
+    wave_manager: Res<WaveManager>,
+    time: Res<Time>,
+    mut text_query: Query<&mut Text, With<StartWaveButtonText>>,
+) {
+    for mut text in &mut text_query {
+        if wave_manager.wave_active {
+            text.sections[0].value = "START".to_string();
+        } else {
+            let bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
+            if bonus > 0 {
+                text.sections[0].value = format!("START +{}g", bonus);
+            } else {
+                text.sections[0].value = "START".to_string();
+            }
+        }
+    }
+}
+
 fn update_wave_announcement(
     mut commands: Commands,
     mut announcements: Query<(Entity, &mut WaveAnnouncement, &Children)>,
-    mut text_query: Query<&mut Text>,
+    mut text_query: Query<&mut Text, Without<StartWaveButtonText>>,
     time: Res<Time>,
 ) {
     for (entity, mut announcement, children) in &mut announcements {

@@ -126,7 +126,9 @@ fn reset_abilities(mut abilities: ResMut<PlayerAbilities>, active: Option<Res<su
 fn ability_cooldowns(
     mut abilities: ResMut<PlayerAbilities>,
     time: Res<Time>,
+    wave_manager: Res<super::enemy::WaveManager>,
 ) {
+    if !wave_manager.wave_active { return; }
     let delta = time.delta();
     let a = &mut *abilities;
     tick_cooldown(&mut a.freeze_ready, &mut a.freeze_cooldown, delta);

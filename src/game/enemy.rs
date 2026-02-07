@@ -274,6 +274,7 @@ pub struct WaveManager {
     pub last_interest: u32,  // Interest earned last wave (for UI)
     pub last_bonus: u32,     // Bonus earned last wave (for UI)
     pub current_modifier: WaveModifier, // Active wave modifier
+    pub wave_ended_at: Option<f64>, // elapsed_seconds when wave completed
 }
 
 impl Default for WaveManager {
@@ -289,6 +290,7 @@ impl Default for WaveManager {
             last_interest: 0,
             last_bonus: 0,
             current_modifier: WaveModifier::None,
+            wave_ended_at: None,
         }
     }
 }
@@ -479,6 +481,23 @@ impl WaveManager {
         }
 
         enemies
+    }
+
+    /// Calculate early-send bonus based on how quickly the player starts the next wave
+    pub fn early_send_bonus(&self, current_time: f64) -> u32 {
+        let Some(ended_at) = self.wave_ended_at else { return 0 };
+        let wait_seconds = (current_time - ended_at) as f32;
+        // Grace period: 0-5s = full bonus, 5-20s = decaying, >20s = nothing
+        // Bonus scales with wave number (higher waves = more reward for aggression)
+        let base = 10 + self.current_wave as u32 * 3;
+        if wait_seconds <= 5.0 {
+            base
+        } else if wait_seconds < 20.0 {
+            let decay = (wait_seconds - 5.0) / 15.0;
+            (base as f32 * (1.0 - decay)) as u32
+        } else {
+            0
+        }
     }
 
     /// Calculate wave completion bonus
@@ -1112,6 +1131,7 @@ fn check_wave_complete(
     mut wave_manager: ResMut<WaveManager>,
     mut economy: ResMut<PlayerEconomy>,
     analytics: Res<Analytics>,
+    time: Res<Time>,
 ) {
     if wave_manager.wave_active
         && wave_manager.enemies_to_spawn.is_empty()
@@ -1133,6 +1153,7 @@ fn check_wave_complete(
         let completed_wave = wave_manager.current_wave;
 
         wave_manager.wave_active = false;
+        wave_manager.wave_ended_at = Some(time.elapsed_seconds_f64());
         wave_manager.current_wave += 1;
 
         // Track milestone waves (5, 10, 15, 20...) to measure progression

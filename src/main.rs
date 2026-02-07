@@ -5,6 +5,7 @@ mod game;
 mod graphics;
 mod loading;
 mod menu;
+mod persistence;
 
 /// Game states
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
@@ -33,6 +34,7 @@ impl Default for GameSpeed {
 pub struct ScreenInfo {
     pub factor: f32,
     pub is_mobile: bool,
+    pub is_landscape: bool,
 }
 
 impl Default for ScreenInfo {
@@ -40,6 +42,7 @@ impl Default for ScreenInfo {
         Self {
             factor: 1.0,
             is_mobile: false,
+            is_landscape: false,
         }
     }
 }
@@ -71,6 +74,7 @@ fn main() {
         .init_resource::<ScreenInfo>()
         .add_plugins((
             analytics::AnalyticsPlugin,
+            persistence::PersistencePlugin,
             loading::LoadingPlugin,
             menu::MenuPlugin,
             game::GamePlugin,
@@ -93,8 +97,9 @@ fn detect_screen_size(
     let width = window.width();
     let height = window.height();
 
-    // Consider mobile if width < 800 or if in portrait mode
-    let is_mobile = width < 800.0 || (height > width);
+    // Consider mobile if either dimension is small (catches landscape phones)
+    let is_mobile = width < 800.0 || height < 500.0 || (height > width);
+    let is_landscape = is_mobile && width > height;
 
     // Calculate scale factor based on screen width
     // Base design is 1280px wide
@@ -106,9 +111,13 @@ fn detect_screen_size(
         (width / base_width).clamp(0.6, 1.5)
     };
 
-    if (screen_info.factor - scale).abs() > 0.01 || screen_info.is_mobile != is_mobile {
+    if (screen_info.factor - scale).abs() > 0.01
+        || screen_info.is_mobile != is_mobile
+        || screen_info.is_landscape != is_landscape
+    {
         screen_info.factor = scale;
         screen_info.is_mobile = is_mobile;
+        screen_info.is_landscape = is_landscape;
         // Bevy's built-in UiScale globally multiplies all Val::Px values
         bevy_ui_scale.0 = scale;
     }
@@ -118,6 +127,7 @@ fn detect_screen_size(
 fn update_camera_projection(
     windows: Query<&Window>,
     mut camera_q: Query<&mut OrthographicProjection, With<Camera2d>>,
+    screen_info: Res<ScreenInfo>,
 ) {
     let Ok(window) = windows.get_single() else { return };
     let Ok(mut projection) = camera_q.get_single_mut() else { return };
@@ -129,7 +139,12 @@ fn update_camera_projection(
     // Game grid: 18*50=900 wide, 11*50=550 tall
     // Plus UI margins: ~50px top HUD, ~122px bottom bar
     let target_w = 940.0;  // Grid width + small margin
-    let target_h = 750.0;  // Grid height + HUD margins
+    let target_h = if screen_info.is_landscape {
+        // Landscape mobile: UI bars are smaller, need less vertical margin
+        650.0
+    } else {
+        750.0  // Default: includes full HUD + bottom bar margins
+    };
 
     // Scale to whichever dimension is tighter
     let scale_x = target_w / window_w;

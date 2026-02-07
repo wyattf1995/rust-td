@@ -122,6 +122,16 @@ impl Default for GameMap {
 }
 
 impl GameMap {
+    /// Generate just the path for a preset (for menu previews).
+    pub fn generate_path_for(preset: MapPreset) -> Vec<(usize, usize)> {
+        match preset {
+            MapPreset::Random => Self::generate_path(),
+            MapPreset::Serpentine => Self::generate_serpentine_path(),
+            MapPreset::Sprint => Self::generate_sprint_path(),
+            MapPreset::Spiral => Self::generate_spiral_path(),
+        }
+    }
+
     /// Generate a map using the given preset
     pub fn generate(preset: MapPreset) -> Self {
         let path = match preset {
@@ -369,7 +379,8 @@ impl GameMap {
         path
     }
 
-    /// Generate a spiral path: clockwise inward from top-left, exits right
+    /// Generate a spiral path: clockwise inward from top-left, exits right.
+    /// Loops are spaced 2 apart to leave buildable columns between them.
     fn generate_spiral_path() -> Vec<(usize, usize)> {
         let mut path = Vec::with_capacity(120);
 
@@ -383,14 +394,14 @@ impl GameMap {
         let mut y = 0;
         path.push((x, y));
 
-        // Spiral inward clockwise
+        // Spiral inward clockwise, shrinking by 2 each loop to leave gaps
         loop {
             // Move right along top
             while x < right {
                 x += 1;
                 path.push((x, y));
             }
-            top += 1;
+            top += 2;
             if top > bottom { break; }
 
             // Move down along right
@@ -398,7 +409,7 @@ impl GameMap {
                 y += 1;
                 path.push((x, y));
             }
-            right = right.saturating_sub(1);
+            right = right.saturating_sub(2);
             if left > right { break; }
 
             // Move left along bottom
@@ -406,7 +417,7 @@ impl GameMap {
                 x -= 1;
                 path.push((x, y));
             }
-            bottom = bottom.saturating_sub(1);
+            bottom = bottom.saturating_sub(2);
             if top > bottom { break; }
 
             // Move up along left
@@ -414,7 +425,7 @@ impl GameMap {
                 y -= 1;
                 path.push((x, y));
             }
-            left += 1;
+            left += 2;
             if left > right { break; }
         }
 

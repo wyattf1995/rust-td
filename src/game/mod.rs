@@ -11,6 +11,7 @@ pub mod tower;
 pub mod ui;
 
 use crate::analytics::{Analytics, track_with_context};
+use crate::persistence::{HighScores, save_highscores};
 use crate::GameState;
 use crate::graphics::shapes::GameColors;
 
@@ -106,16 +107,29 @@ fn setup_game_over(
     analytics: Res<Analytics>,
     wave_manager: Res<enemy::WaveManager>,
     economy: Res<economy::PlayerEconomy>,
+    selected_map: Res<map::SelectedMap>,
+    mut high_scores: ResMut<HighScores>,
 ) {
+    let map_name = selected_map.0.name();
+    let wave = wave_manager.current_wave;
+    let score = economy.score;
+
+    // Check and save high score
+    let is_new_best = high_scores.update_if_better(map_name, wave, score);
+    if is_new_best {
+        save_highscores(&high_scores);
+    }
+
     // Track game over event with stats
-    let wave_reached = wave_manager.current_wave.to_string();
-    let score = economy.score.to_string();
+    let wave_reached = wave.to_string();
+    let score_str = score.to_string();
     track_with_context(
         &analytics,
         "game_over",
         &[
             ("wave_reached", &wave_reached),
-            ("score", &score),
+            ("score", &score_str),
+            ("map", map_name),
         ],
     );
 
@@ -136,6 +150,21 @@ fn setup_game_over(
             GameOverScreen,
         ))
         .with_children(|parent| {
+            // "NEW BEST!" text above game over (only if new record)
+            if is_new_best {
+                parent.spawn(TextBundle::from_section(
+                    "NEW BEST!",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 32.0,
+                        color: Color::srgb(1.0, 0.85, 0.2),
+                    },
+                ).with_style(Style {
+                    margin: UiRect::bottom(Val::Px(10.0)),
+                    ..default()
+                }));
+            }
+
             parent.spawn(TextBundle::from_section(
                 "GAME OVER",
                 TextStyle {

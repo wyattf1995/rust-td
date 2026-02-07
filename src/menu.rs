@@ -1,7 +1,13 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::{analytics::{Analytics, track_with_context}, game::map::{MapPreset, SelectedMap}, loading::GameAssets, GameState};
+use crate::{
+    analytics::{Analytics, track_with_context},
+    game::map::{GameMap, MapPreset, SelectedMap, GRID_WIDTH, GRID_HEIGHT},
+    loading::GameAssets,
+    persistence::HighScores,
+    GameState,
+};
 
 pub struct MenuPlugin;
 
@@ -60,7 +66,7 @@ const NEON_COLORS: [(f32, f32, f32); 8] = [
     (1.0, 0.85, 0.4),   // Gold (Buff)
 ];
 
-fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res<SelectedMap>) {
+fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res<SelectedMap>, high_scores: Res<HighScores>) {
     // Spawn menu camera
     commands.spawn((Camera2dBundle::default(), MenuCamera, MenuScreen));
 
@@ -169,7 +175,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                     for preset in presets {
                         let is_selected = preset == selected_map.0;
                         let border_color = if is_selected {
-                            Color::srgb(0.0, 0.85, 0.95) // Cyan highlight
+                            Color::srgb(0.0, 0.85, 0.95)
                         } else {
                             Color::srgba(1.0, 1.0, 1.0, 0.15)
                         };
@@ -177,12 +183,13 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                         row.spawn((
                             ButtonBundle {
                                 style: Style {
-                                    width: Val::Px(120.0),
-                                    height: Val::Px(45.0),
+                                    width: Val::Px(130.0),
+                                    height: Val::Px(95.0),
                                     flex_direction: FlexDirection::Column,
-                                    justify_content: JustifyContent::Center,
+                                    justify_content: JustifyContent::FlexStart,
                                     align_items: AlignItems::Center,
                                     border: UiRect::all(Val::Px(2.0)),
+                                    padding: UiRect::all(Val::Px(4.0)),
                                     ..default()
                                 },
                                 background_color: Color::srgb(0.14, 0.15, 0.18).into(),
@@ -192,11 +199,44 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                             MapSelectButton(preset),
                         ))
                         .with_children(|btn| {
+                            // Preview container
+                            let path = GameMap::generate_path_for(preset);
+                            btn.spawn(NodeBundle {
+                                style: Style {
+                                    width: Val::Px(90.0),
+                                    height: Val::Px(55.0),
+                                    position_type: PositionType::Relative,
+                                    ..default()
+                                },
+                                background_color: Color::srgb(0.08, 0.08, 0.12).into(),
+                                ..default()
+                            })
+                            .with_children(|preview| {
+                                let dot_color = Color::srgba(0.0, 0.85, 0.95, 0.7);
+                                for &(px, py) in &path {
+                                    if px < GRID_WIDTH && py < GRID_HEIGHT {
+                                        preview.spawn(NodeBundle {
+                                            style: Style {
+                                                width: Val::Px(4.0),
+                                                height: Val::Px(4.0),
+                                                position_type: PositionType::Absolute,
+                                                left: Val::Px(px as f32 * 5.0),
+                                                top: Val::Px(py as f32 * 5.0),
+                                                ..default()
+                                            },
+                                            background_color: dot_color.into(),
+                                            ..default()
+                                        });
+                                    }
+                                }
+                            });
+
+                            // Preset name
                             btn.spawn(TextBundle::from_section(
                                 preset.name(),
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 14.0,
+                                    font_size: 12.0,
                                     color: if is_selected {
                                         Color::srgb(0.0, 0.85, 0.95)
                                     } else {
@@ -204,14 +244,28 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                                     },
                                 },
                             ));
+
+                            // Description
                             btn.spawn(TextBundle::from_section(
                                 preset.description(),
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 10.0,
+                                    font_size: 9.0,
                                     color: Color::srgba(1.0, 1.0, 1.0, 0.4),
                                 },
                             ));
+
+                            // Best wave (if record exists)
+                            if let Some(entry) = high_scores.get(preset.name()) {
+                                btn.spawn(TextBundle::from_section(
+                                    format!("Best: Wave {}", entry.wave),
+                                    TextStyle {
+                                        font: assets.font.clone(),
+                                        font_size: 9.0,
+                                        color: Color::srgba(1.0, 0.85, 0.2, 0.5),
+                                    },
+                                ));
+                            }
                         });
                     }
                 });
@@ -419,9 +473,9 @@ fn map_select_interaction(
                 Color::srgba(1.0, 1.0, 1.0, 0.15).into()
             };
 
-            // Update the first child text (name) color
-            if let Some(&first_child) = children.iter().next() {
-                if let Ok(mut text) = text_query.get_mut(first_child) {
+            // Update the name text color (second child, after preview container)
+            if let Some(&name_child) = children.iter().nth(1) {
+                if let Ok(mut text) = text_query.get_mut(name_child) {
                     if let Some(section) = text.sections.first_mut() {
                         section.style.color = if is_selected {
                             Color::srgb(0.0, 0.85, 0.95)

@@ -23,7 +23,7 @@ rand = "0.8"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["console"] }
+web-sys = { version = "0.3", features = ["console", "Storage", "Window"] }
 console_error_panic_hook = "0.1"
 # Force getrandom 0.2 and 0.3 to use js features for wasm
 getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
