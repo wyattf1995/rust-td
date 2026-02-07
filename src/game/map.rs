@@ -731,6 +731,7 @@ fn tile_hover_system(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut hovered_tile: ResMut<HoveredTile>,
     ui_zones: Res<UiZones>,
+    pointer: Res<super::PointerState>,
 ) {
     let Ok(window) = windows.get_single() else {
         return;
@@ -740,7 +741,7 @@ fn tile_hover_system(
         return;
     };
 
-    let Some(cursor_pos) = window.cursor_position() else {
+    let Some(cursor_pos) = pointer.position else {
         hovered_tile.position = None;
         return;
     };

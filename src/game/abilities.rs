@@ -137,7 +137,7 @@ fn ability_cooldowns(
 
 fn ability_input(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
+    pointer: Res<super::PointerState>,
     mut abilities: ResMut<PlayerAbilities>,
     mut freeze_events: EventWriter<FreezeAbilityEvent>,
     mut gold_rush_events: EventWriter<GoldRushAbilityEvent>,
@@ -168,11 +168,11 @@ fn ability_input(
         abilities.artillery_targeting = false;
     }
 
-    // Fire artillery on click while targeting
-    if abilities.artillery_targeting && mouse_button.just_pressed(MouseButton::Left) {
+    // Fire artillery on click/touch while targeting
+    if abilities.artillery_targeting && pointer.just_pressed {
         if let Ok(window) = windows.get_single() {
             if let Ok((camera, camera_transform)) = camera_q.get_single() {
-                if let Some(cursor_pos) = window.cursor_position() {
+                if let Some(cursor_pos) = pointer.position {
                     // Don't fire if clicking on UI areas (dynamic zone boundaries)
                     let window_height = window.height();
                     if cursor_pos.y <= window_height - ui_zones.bottom_bar_height - 10.0 && cursor_pos.y >= ui_zones.top_bar_height + 10.0 {
@@ -324,8 +324,8 @@ fn update_artillery_target(
     mut commands: Commands,
     abilities: Res<PlayerAbilities>,
     mut cursor_query: Query<(Entity, &mut Transform), With<ArtilleryTargetCursor>>,
-    windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
+    pointer: Res<super::PointerState>,
     mut artillery_effects: Query<(Entity, &mut ArtilleryStrike, &mut Sprite, &mut Transform), Without<ArtilleryTargetCursor>>,
     time: Res<Time>,
 ) {
@@ -350,29 +350,27 @@ fn update_artillery_target(
 
     // Show/hide targeting cursor
     if abilities.artillery_targeting {
-        if let Ok(window) = windows.get_single() {
-            if let Ok((camera, camera_transform)) = camera_q.get_single() {
-                if let Some(cursor_pos) = window.cursor_position() {
-                    if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
-                        // Update or spawn cursor
-                        if let Ok((_, mut transform)) = cursor_query.get_single_mut() {
-                            transform.translation = world_pos.extend(5.0);
-                        } else {
-                            // Spawn targeting cursor
-                            commands.spawn((
-                                SpriteBundle {
-                                    sprite: Sprite {
-                                        color: GameColors::ABILITY_NUKE.with_alpha(0.3),
-                                        custom_size: Some(Vec2::splat(200.0)), // Preview radius
-                                        ..default()
-                                    },
-                                    transform: Transform::from_translation(world_pos.extend(5.0)),
+        if let Ok((camera, camera_transform)) = camera_q.get_single() {
+            if let Some(cursor_pos) = pointer.position {
+                if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
+                    // Update or spawn cursor
+                    if let Ok((_, mut transform)) = cursor_query.get_single_mut() {
+                        transform.translation = world_pos.extend(5.0);
+                    } else {
+                        // Spawn targeting cursor
+                        commands.spawn((
+                            SpriteBundle {
+                                sprite: Sprite {
+                                    color: GameColors::ABILITY_NUKE.with_alpha(0.3),
+                                    custom_size: Some(Vec2::splat(200.0)), // Preview radius
                                     ..default()
                                 },
-                                ArtilleryTargetCursor,
-                                GameEntity,
-                            ));
-                        }
+                                transform: Transform::from_translation(world_pos.extend(5.0)),
+                                ..default()
+                            },
+                            ArtilleryTargetCursor,
+                            GameEntity,
+                        ));
                     }
                 }
             }

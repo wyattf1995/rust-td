@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::input::touch::Touches;
 
 pub mod abilities;
 pub mod economy;
@@ -28,6 +29,8 @@ impl Plugin for GamePlugin {
             abilities::AbilitiesPlugin,
         ))
         .init_resource::<ScreenShake>()
+        .init_resource::<PointerState>()
+        .add_systems(Update, update_pointer_state)
         .add_systems(OnEnter(GameState::Playing), setup_game)
         // Note: Don't cleanup on exit Playing - would destroy game when pausing
         // Cleanup happens when entering Menu instead
@@ -61,6 +64,16 @@ pub struct ScreenShake {
 /// Prevents OnEnter(Playing) init systems from re-running when resuming from pause.
 #[derive(Resource)]
 pub struct GameActive;
+
+/// Unified pointer state: reads from both mouse cursor and touch input.
+/// Game-world systems should use this instead of window.cursor_position() directly.
+#[derive(Resource, Default)]
+pub struct PointerState {
+    /// Current pointer position in window/viewport coordinates
+    pub position: Option<Vec2>,
+    /// Whether a "click" (mouse left-click or touch-start) happened this frame
+    pub just_pressed: bool,
+}
 
 #[derive(Component)]
 struct GameOverScreen;
@@ -244,6 +257,39 @@ fn restart_button_system(
             }
             Interaction::None => {
                 *color = GameColors::PRIMARY.into();
+            }
+        }
+    }
+}
+
+fn update_pointer_state(
+    mut pointer: ResMut<PointerState>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    touches: Res<Touches>,
+    windows: Query<&Window>,
+) {
+    pointer.just_pressed = false;
+
+    // Touch takes priority (mobile)
+    if let Some(touch) = touches.iter_just_pressed().next() {
+        pointer.position = Some(touch.position());
+        pointer.just_pressed = true;
+    } else if let Some(touch) = touches.iter().next() {
+        // Finger is held down — update position for hover/targeting
+        pointer.position = Some(touch.position());
+    } else if let Ok(window) = windows.get_single() {
+        // Fallback to mouse cursor (desktop)
+        pointer.position = window.cursor_position();
+        if mouse_button.just_pressed(MouseButton::Left) {
+            pointer.just_pressed = true;
+        }
+    }
+
+    // No touch AND no cursor → clear position (touch-only devices)
+    if touches.iter().count() == 0 {
+        if let Ok(window) = windows.get_single() {
+            if window.cursor_position().is_none() {
+                pointer.position = None;
             }
         }
     }

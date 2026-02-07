@@ -345,8 +345,8 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                             .spawn((
                                 ButtonBundle {
                                     style: Style {
-                                        width: Val::Px(30.0),
-                                        height: Val::Px(26.0),
+                                        width: Val::Px(38.0),
+                                        height: Val::Px(38.0),
                                         justify_content: JustifyContent::Center,
                                         align_items: AlignItems::Center,
                                         border: UiRect::all(Val::Px(1.5)),
@@ -1441,15 +1441,18 @@ fn tower_button_system(
         Changed<Interaction>,
     >,
     mut selected: ResMut<SelectedTowerType>,
+    mut ui_clicked: ResMut<UiClicked>,
 ) {
     for (interaction, mut color, tower_button) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
                 selected.0 = tower_button.0;
                 *color = GameColors::BUTTON_SELECTED.into();
+                ui_clicked.0 = true;
             }
             Interaction::Hovered => {
                 *color = GameColors::BUTTON_HOVER.into();
+                ui_clicked.0 = true;
             }
             Interaction::None => {
                 if selected.0 == tower_button.0 {
@@ -1525,11 +1528,13 @@ fn start_wave_button(
     mut wave_manager: ResMut<WaveManager>,
     assets: Res<GameAssets>,
     existing_announcements: Query<Entity, With<WaveAnnouncement>>,
+    mut ui_clicked: ResMut<UiClicked>,
 ) {
     for (interaction, mut color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
                 *color = GameColors::BUTTON_START_PRESSED.into();
+                ui_clicked.0 = true;
                 if !wave_manager.wave_active {
                     wave_manager.start_wave();
 
@@ -1590,6 +1595,7 @@ fn start_wave_button(
             }
             Interaction::Hovered => {
                 *color = GameColors::BUTTON_START_HOVER.into();
+                ui_clicked.0 = true;
             }
             Interaction::None => {
                 *color = GameColors::BUTTON_START.into();
@@ -1655,7 +1661,7 @@ fn update_ui_zones(
 }
 
 fn handle_tile_click(
-    mouse_button: Res<ButtonInput<MouseButton>>,
+    pointer: Res<super::PointerState>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     map: Res<GameMap>,
@@ -1670,7 +1676,7 @@ fn handle_tile_click(
         return;
     }
 
-    if !mouse_button.just_pressed(MouseButton::Left) {
+    if !pointer.just_pressed {
         return;
     }
 
@@ -1682,7 +1688,7 @@ fn handle_tile_click(
         return;
     };
 
-    let Some(cursor_pos) = window.cursor_position() else {
+    let Some(cursor_pos) = pointer.position else {
         return;
     };
 
@@ -1737,6 +1743,7 @@ fn speed_button_system(
     mut game_speed: ResMut<GameSpeed>,
     mut text_query: Query<&mut Text>,
     mut time: ResMut<Time<Virtual>>,
+    mut ui_clicked: ResMut<UiClicked>,
 ) {
     let active_bg: BackgroundColor = Color::srgb(0.15, 0.35, 0.45).into();
     let inactive_bg: BackgroundColor = GameColors::BUTTON_NORMAL.into();
@@ -1747,6 +1754,9 @@ fn speed_button_system(
     for (interaction, _, _, speed_button, _) in &button_query {
         if *interaction == Interaction::Pressed {
             new_speed = Some(speed_button.0);
+            ui_clicked.0 = true;
+        } else if *interaction == Interaction::Hovered {
+            ui_clicked.0 = true;
         }
     }
 
@@ -2000,12 +2010,12 @@ fn update_tower_context_menu(
     mut synergy_text: Query<&mut Text, (With<SynergyText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>)>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
+    pointer: Res<super::PointerState>,
     economy: Res<PlayerEconomy>,
     bevy_ui_scale: Res<bevy::ui::UiScale>,
 ) {
-    // Left-click to select/deselect towers
-    if mouse_button.just_pressed(MouseButton::Left) {
+    // Left-click or touch to select/deselect towers
+    if pointer.just_pressed {
         if let Some((hx, hy)) = hovered_tile.position {
             if map.tiles[hx][hy] == TileType::Tower {
                 // Find the tower at this position
