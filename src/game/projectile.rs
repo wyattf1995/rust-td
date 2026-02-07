@@ -4,11 +4,15 @@ use crate::GameState;
 use crate::graphics::shapes::{CombatConstants, GameColors, ShapeSizes, ZDepth};
 use crate::loading::GameAssets;
 
+use crate::persistence::GameSettings;
+
 use super::{
+    effects::spawn_hit_sparks,
     enemy::Enemy,
     rand_simple,
     spatial::SpatialGrid,
-    tower::TowerType,
+    stats::GameStats,
+    tower::{TowerType, Specialization},
     GameEntity,
 };
 
@@ -19,7 +23,7 @@ impl Plugin for ProjectilePlugin {
         app.add_event::<SpawnProjectileEvent>()
             .add_systems(
                 Update,
-                (spawn_projectiles, projectile_movement, projectile_collision, update_effects, update_damage_numbers)
+                (spawn_projectiles, projectile_movement, projectile_collision, update_effects, update_damage_numbers, update_napalm_zones, update_blizzard_zones)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -36,6 +40,9 @@ pub struct Projectile {
     pub chain_bounces: u32,           // Remaining bounces for chain lightning
     pub hit_enemies: Vec<Entity>,     // Enemies already hit (for chain)
     pub poison_duration_bonus: f32,   // Synergy bonus for poison duration
+    pub source_tower: Option<Entity>, // Tower entity that fired this projectile (for stats)
+    pub specialization: Option<Specialization>,
+    pub pierce_remaining: u32,        // For Railgun: hits before despawning
 }
 
 /// Trail particle
@@ -66,6 +73,25 @@ pub struct SpawnProjectileEvent {
     pub tower_type: TowerType,
     pub extra_chain_bounces: u32,     // From Chain+Chain synergy
     pub poison_duration_bonus: f32,   // From Slow+Poison synergy
+    pub source_tower: Option<Entity>, // Tower entity for stats attribution
+    pub specialization: Option<Specialization>,
+}
+
+/// Napalm ground zone (lingering DOT)
+#[derive(Component)]
+pub struct NapalmZone {
+    pub lifetime: Timer,
+    pub damage_per_sec: f32,
+    pub radius: f32,
+    pub tick_timer: Timer,
+}
+
+/// Blizzard slow zone
+#[derive(Component)]
+pub struct BlizzardZone {
+    pub lifetime: Timer,
+    pub radius: f32,
+    pub tick_timer: Timer,
 }
 
 fn spawn_projectiles(
@@ -122,6 +148,9 @@ fn spawn_projectiles(
                 chain_bounces,
                 hit_enemies: vec![],
                 poison_duration_bonus: event.poison_duration_bonus,
+                source_tower: event.source_tower,
+                specialization: event.specialization,
+                pierce_remaining: if event.specialization == Some(Specialization::Railgun) { 3 } else { 0 },
             },
             GameEntity,
         ));
@@ -133,7 +162,10 @@ fn projectile_movement(
     mut projectiles: Query<(Entity, &mut Projectile, &mut Transform)>,
     enemies: Query<(&Transform, &Enemy), Without<Projectile>>,
     time: Res<Time>,
+    settings: Res<GameSettings>,
+    mut frame_count: Local<u32>,
 ) {
+    *frame_count = frame_count.wrapping_add(1);
     for (entity, mut projectile, mut transform) in &mut projectiles {
         // Get target position with leading
         let target_pos = if let Ok((enemy_transform, enemy)) = enemies.get(projectile.target) {
@@ -173,25 +205,28 @@ fn projectile_movement(
         transform.translation.x += movement.x;
         transform.translation.y += movement.y;
 
-        // Spawn trail particle
-        let trail_alpha = if matches!(projectile.tower_type, TowerType::Chain) { 0.6 } else { 0.5 };
-        let trail_color = projectile.tower_type.projectile_color().with_alpha(trail_alpha);
+        // Spawn trail particle (frequency based on particle density setting)
+        let trail_skip = settings.particle_density.trail_skip();
+        if *frame_count % trail_skip == 0 {
+            let trail_alpha = if matches!(projectile.tower_type, TowerType::Chain) { 0.6 } else { 0.5 };
+            let trail_color = projectile.tower_type.projectile_color().with_alpha(trail_alpha);
 
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: trail_color,
-                    custom_size: Some(Vec2::splat(ShapeSizes::PROJECTILE_TRAIL)),
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: trail_color,
+                        custom_size: Some(Vec2::splat(ShapeSizes::PROJECTILE_TRAIL)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(transform.translation),
                     ..default()
                 },
-                transform: Transform::from_translation(transform.translation),
-                ..default()
-            },
-            ProjectileTrail {
-                lifetime: Timer::from_seconds(CombatConstants::TRAIL_LIFETIME, TimerMode::Once),
-            },
-            GameEntity,
-        ));
+                ProjectileTrail {
+                    lifetime: Timer::from_seconds(CombatConstants::TRAIL_LIFETIME, TimerMode::Once),
+                },
+                GameEntity,
+            ));
+        }
     }
 }
 
@@ -201,9 +236,14 @@ fn projectile_collision(
     mut enemies: Query<(Entity, &mut Enemy, &Transform)>,
     assets: Res<GameAssets>,
     spatial_grid: Res<SpatialGrid>,
+    settings: Res<GameSettings>,
+    mut stats: ResMut<GameStats>,
 ) {
     // Collect chain bounce data to spawn after iteration
-    let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32)> = Vec::new();
+    // (origin_pos, bounce_damage, hit_list, remaining_bounces, source_tower, specialization)
+    let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32, Option<Entity>, Option<Specialization>)> = Vec::new();
+    // Collect piercing projectile updates (entity, new hit list entry)
+    let mut pierce_updates: Vec<Entity> = Vec::new();
 
     // Check projectile collisions
     for (proj_entity, projectile, proj_transform) in &projectiles {
@@ -215,17 +255,71 @@ fn projectile_collision(
             let distance = proj_pos.distance(enemy_pos);
 
             if distance < CombatConstants::HIT_RADIUS {
-                // Calculate damage with armor reduction (skips dead enemies)
-                let actual_damage = enemy.apply_armor_damage(projectile.damage);
+                // Assassin crit: 25% chance for 3x damage
+                let mut hit_damage = projectile.damage;
+                let mut is_crit = false;
+                if projectile.specialization == Some(Specialization::Assassin) {
+                    let crit_roll = rand_simple(proj_pos.x + proj_pos.y + enemy_pos.x);
+                    if crit_roll < 0.25 {
+                        hit_damage *= 3.0;
+                        is_crit = true;
+                    }
+                }
 
-                // Spawn damage number
+                // Calculate damage with armor reduction (skips dead enemies)
+                let actual_damage = enemy.apply_armor_damage(hit_damage);
+
+                // Track which tower last hit this enemy (for kill attribution + stats)
                 if actual_damage > 0.0 {
-                    spawn_damage_number(&mut commands, &assets, enemy_pos, actual_damage);
+                    enemy.last_hit_by = projectile.source_tower;
+                    if let Some(tower_entity) = projectile.source_tower {
+                        stats.record_damage(tower_entity, actual_damage);
+                    }
+                    if is_crit {
+                        spawn_crit_number(&mut commands, &assets, enemy_pos, actual_damage, settings.show_damage_numbers);
+                    } else {
+                        spawn_damage_number(&mut commands, &assets, enemy_pos, actual_damage, settings.show_damage_numbers);
+                    }
+
+                    // Hit sparks (density-aware)
+                    let spark_count = settings.particle_density.death_particle_count() / 2;
+                    if spark_count > 0 {
+                        spawn_hit_sparks(&mut commands, enemy_pos, spark_count as usize);
+                    }
                 }
 
                 // Apply slow effect for slow towers
                 if projectile.tower_type == TowerType::Slow {
                     enemy.apply_slow(CombatConstants::SLOW_DURATION, CombatConstants::SLOW_FACTOR);
+
+                    // Cryogenic: 15% chance to freeze (speed = 0 for 1s)
+                    if projectile.specialization == Some(Specialization::Cryogenic) {
+                        let freeze_roll = rand_simple(proj_pos.x * 7.3 + proj_pos.y);
+                        if freeze_roll < 0.15 {
+                            enemy.apply_slow(1.0, 0.0); // Full freeze
+                        }
+                    }
+
+                    // Blizzard: spawn ground slow zone
+                    if projectile.specialization == Some(Specialization::Blizzard) {
+                        commands.spawn((
+                            SpriteBundle {
+                                sprite: Sprite {
+                                    color: GameColors::PROJECTILE_SLOW.with_alpha(0.2),
+                                    custom_size: Some(Vec2::splat(60.0)),
+                                    ..default()
+                                },
+                                transform: Transform::from_translation(enemy_pos.extend(ZDepth::ABILITY_EFFECT)),
+                                ..default()
+                            },
+                            BlizzardZone {
+                                lifetime: Timer::from_seconds(3.0, TimerMode::Once),
+                                radius: 30.0,
+                                tick_timer: Timer::from_seconds(0.5, TimerMode::Repeating),
+                            },
+                            GameEntity,
+                        ));
+                    }
                 }
 
                 // Apply poison effect
@@ -256,17 +350,23 @@ fn projectile_collision(
                     let mut hit_list = projectile.hit_enemies.clone();
                     hit_list.push(enemy_entity);
 
-                    // Find next target for bounce (30% damage reduction per bounce)
                     let bounce_damage = projectile.damage * CombatConstants::CHAIN_DAMAGE_DECAY;
                     let remaining_bounces = projectile.chain_bounces.saturating_sub(1);
 
-                    chain_bounces.push((enemy_pos, bounce_damage, hit_list, remaining_bounces));
+                    chain_bounces.push((enemy_pos, bounce_damage, hit_list, remaining_bounces, projectile.source_tower, projectile.specialization));
                 }
 
                 // Splash damage (spatial grid narrows search to nearby enemies)
                 if projectile.tower_type == TowerType::Splash {
-                    let splash_radius = ShapeSizes::SPLASH_RADIUS;
+                    // Shockwave: 40% larger splash radius + knockback primary target
+                    let radius_mult = if projectile.specialization == Some(Specialization::Shockwave) { 1.4 } else { 1.0 };
+                    let splash_radius = ShapeSizes::SPLASH_RADIUS * radius_mult;
                     let splash_damage = projectile.damage * CombatConstants::SPLASH_DAMAGE_RATIO;
+
+                    // Shockwave: push the primary target before borrowing others
+                    if projectile.specialization == Some(Specialization::Shockwave) {
+                        enemy.path_index = enemy.path_index.saturating_sub(2);
+                    }
 
                     let nearby = spatial_grid.query_range(enemy_pos, splash_radius);
                     for other_entity in nearby {
@@ -278,17 +378,49 @@ fn projectile_collision(
                             if enemy_pos.distance(other_pos) < splash_radius {
                                 let other_actual_damage = other_enemy.apply_armor_damage(splash_damage);
                                 if other_actual_damage > 0.0 {
-                                    spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage);
+                                    spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage, settings.show_damage_numbers);
+                                }
+
+                                // Shockwave: push enemies backward along path
+                                if projectile.specialization == Some(Specialization::Shockwave) {
+                                    other_enemy.path_index = other_enemy.path_index.saturating_sub(2);
                                 }
                             }
                         }
                     }
 
+                    // Napalm: spawn lingering ground DOT zone
+                    if projectile.specialization == Some(Specialization::Napalm) {
+                        commands.spawn((
+                            SpriteBundle {
+                                sprite: Sprite {
+                                    color: Color::srgba(1.0, 0.4, 0.1, 0.3),
+                                    custom_size: Some(Vec2::splat(splash_radius * 2.0)),
+                                    ..default()
+                                },
+                                transform: Transform::from_translation(enemy_pos.extend(ZDepth::ABILITY_EFFECT)),
+                                ..default()
+                            },
+                            NapalmZone {
+                                lifetime: Timer::from_seconds(3.0, TimerMode::Once),
+                                damage_per_sec: projectile.damage * 0.3,
+                                radius: splash_radius,
+                                tick_timer: Timer::from_seconds(0.5, TimerMode::Repeating),
+                            },
+                            GameEntity,
+                        ));
+                    }
+
                     // Spawn splash effect
+                    let splash_color = if projectile.specialization == Some(Specialization::Napalm) {
+                        Color::srgba(1.0, 0.4, 0.1, 0.3)
+                    } else {
+                        GameColors::PROJECTILE_SPLASH.with_alpha(0.3)
+                    };
                     commands.spawn((
                         SpriteBundle {
                             sprite: Sprite {
-                                color: GameColors::PROJECTILE_SPLASH.with_alpha(0.3),
+                                color: splash_color,
                                 custom_size: Some(Vec2::splat(splash_radius * 2.0)),
                                 ..default()
                             },
@@ -302,8 +434,12 @@ fn projectile_collision(
                     ));
                 }
 
-                // Despawn projectile
-                commands.entity(proj_entity).despawn_recursive();
+                // Railgun: pierce through enemies instead of despawning
+                if projectile.specialization == Some(Specialization::Railgun) && projectile.pierce_remaining > 0 {
+                    pierce_updates.push(proj_entity);
+                } else {
+                    commands.entity(proj_entity).despawn_recursive();
+                }
             }
         } else {
             // Target doesn't exist anymore
@@ -311,11 +447,69 @@ fn projectile_collision(
         }
     }
 
+    // Handle Railgun piercing: find next target and update projectile
+    for proj_entity in pierce_updates {
+        if let Ok((_, projectile, proj_transform)) = projectiles.get(proj_entity) {
+            let proj_pos = proj_transform.translation.truncate();
+            let mut hit_list = projectile.hit_enemies.clone();
+            hit_list.push(projectile.target);
+
+            // Find nearest enemy not already hit
+            let mut best_target: Option<(Entity, f32)> = None;
+            let pierce_range = 80.0; // Look ahead range for next pierce target
+            let nearby = spatial_grid.query_range(proj_pos, pierce_range);
+            for entity in nearby {
+                if hit_list.contains(&entity) { continue; }
+                if let Ok((_, enemy, transform)) = enemies.get(entity) {
+                    if enemy.marked_dead || enemy.health <= 0.0 { continue; }
+                    let dist = proj_pos.distance(transform.translation.truncate());
+                    if dist <= pierce_range {
+                        if best_target.map_or(true, |(_, bd)| dist < bd) {
+                            best_target = Some((entity, dist));
+                        }
+                    }
+                }
+            }
+
+            if let Some((next_target, _)) = best_target {
+                // Spawn new piercing projectile with decremented count
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: projectile.tower_type.projectile_color(),
+                            custom_size: Some(Vec2::splat(projectile.tower_type.projectile_size())),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(proj_transform.translation),
+                        ..default()
+                    },
+                    Projectile {
+                        target: next_target,
+                        damage: projectile.damage,
+                        speed: projectile.speed,
+                        tower_type: projectile.tower_type,
+                        predicted_pos: None,
+                        chain_bounces: 0,
+                        hit_enemies: hit_list,
+                        poison_duration_bonus: 0.0,
+                        source_tower: projectile.source_tower,
+                        specialization: projectile.specialization,
+                        pierce_remaining: projectile.pierce_remaining - 1,
+                    },
+                    GameEntity,
+                ));
+            }
+            commands.entity(proj_entity).despawn_recursive();
+        }
+    }
+
     // Spawn chain bounce projectiles (spatial grid narrows search to nearby enemies)
-    for (origin_pos, bounce_damage, hit_list, remaining_bounces) in chain_bounces {
+    for (origin_pos, bounce_damage, hit_list, remaining_bounces, source_tower, spec) in chain_bounces {
         // Find nearest enemy not in hit list
         let mut best_target: Option<(Entity, f32)> = None;
-        let bounce_range = ShapeSizes::CHAIN_BOUNCE_RANGE;
+        // Tesla: +20% bounce range
+        let range_mult = if spec == Some(Specialization::Tesla) { 1.2 } else { 1.0 };
+        let bounce_range = ShapeSizes::CHAIN_BOUNCE_RANGE * range_mult;
 
         let nearby = spatial_grid.query_range(origin_pos, bounce_range);
         for entity in nearby {
@@ -343,11 +537,44 @@ fn projectile_collision(
         }
 
         if let Some((next_target, _)) = best_target {
+            // Arc: spawn mini AOE at bounce point
+            if spec == Some(Specialization::Arc) {
+                let arc_radius = 25.0;
+                let arc_damage = bounce_damage * 0.4;
+                let nearby_for_arc = spatial_grid.query_range(origin_pos, arc_radius);
+                for entity in nearby_for_arc {
+                    if let Ok((_, mut arc_enemy, arc_transform)) = enemies.get_mut(entity) {
+                        let arc_pos = arc_transform.translation.truncate();
+                        if origin_pos.distance(arc_pos) < arc_radius {
+                            let arc_actual = arc_enemy.apply_armor_damage(arc_damage);
+                            if arc_actual > 0.0 {
+                                spawn_damage_number(&mut commands, &assets, arc_pos, arc_actual, settings.show_damage_numbers);
+                            }
+                        }
+                    }
+                }
+                // Arc visual
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: GameColors::PROJECTILE_CHAIN.with_alpha(0.3),
+                            custom_size: Some(Vec2::splat(arc_radius * 2.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(origin_pos.extend(ZDepth::ABILITY_EFFECT)),
+                        ..default()
+                    },
+                    SplashEffect {
+                        lifetime: Timer::from_seconds(0.15, TimerMode::Once),
+                    },
+                    GameEntity,
+                ));
+            }
+
             // Spawn chain lightning visual effect (line from origin to new target)
             if let Ok((_, _, next_transform)) = enemies.get(next_target) {
                 let next_pos = next_transform.translation.truncate();
 
-                // Spawn a quick lightning bolt effect
                 commands.spawn((
                     SpriteBundle {
                         sprite: Sprite {
@@ -366,7 +593,10 @@ fn projectile_collision(
                         predicted_pos: Some(next_pos),
                         chain_bounces: remaining_bounces,
                         hit_enemies: hit_list,
-                        poison_duration_bonus: 0.0, // Chain doesn't apply poison
+                        poison_duration_bonus: 0.0,
+                        source_tower,
+                        specialization: spec,
+                        pierce_remaining: 0,
                     },
                     GameEntity,
                 ));
@@ -375,7 +605,10 @@ fn projectile_collision(
     }
 }
 
-fn spawn_damage_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, damage: f32) {
+fn spawn_damage_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, damage: f32, show: bool) {
+    if !show {
+        return;
+    }
     // Random offset and velocity for variety
     let offset_x = (rand_simple(pos.x) - 0.5) * 20.0;
     let velocity = Vec2::new(offset_x, 40.0);
@@ -388,6 +621,34 @@ fn spawn_damage_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, 
                     font: assets.font.clone(),
                     font_size: ShapeSizes::DAMAGE_TEXT_SIZE,
                     color: GameColors::DAMAGE_TEXT,
+                },
+            ),
+            transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, ZDepth::FLOATING_TEXT)),
+            ..default()
+        },
+        DamageNumber {
+            lifetime: Timer::from_seconds(CombatConstants::DAMAGE_NUMBER_LIFETIME, TimerMode::Once),
+            velocity,
+        },
+        GameEntity,
+    ));
+}
+
+fn spawn_crit_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, damage: f32, show: bool) {
+    if !show {
+        return;
+    }
+    let offset_x = (rand_simple(pos.x) - 0.5) * 20.0;
+    let velocity = Vec2::new(offset_x, 50.0);
+
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section(
+                format!("CRIT {:.0}", damage),
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: ShapeSizes::DAMAGE_TEXT_SIZE + 4.0,
+                    color: Color::srgb(1.0, 0.3, 0.3), // Red for crit
                 },
             ),
             transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, ZDepth::FLOATING_TEXT)),
@@ -455,6 +716,77 @@ fn update_effects(
         sprite.color = sprite.color.with_alpha(alpha * 0.3);
 
         if effect.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+fn update_napalm_zones(
+    mut commands: Commands,
+    mut zones: Query<(Entity, &mut NapalmZone, &Transform, &mut Sprite)>,
+    mut enemies: Query<(Entity, &mut Enemy, &Transform), Without<NapalmZone>>,
+    spatial_grid: Res<SpatialGrid>,
+    time: Res<Time>,
+) {
+    for (entity, mut zone, zone_transform, mut sprite) in &mut zones {
+        zone.lifetime.tick(time.delta());
+        zone.tick_timer.tick(time.delta());
+
+        // Fade out over lifetime
+        let alpha = (1.0 - zone.lifetime.fraction()) * 0.3;
+        sprite.color = Color::srgba(1.0, 0.4, 0.1, alpha);
+
+        // Deal damage on tick
+        if zone.tick_timer.just_finished() {
+            let zone_pos = zone_transform.translation.truncate();
+            let tick_damage = zone.damage_per_sec * 0.5; // 0.5s tick interval
+            let nearby = spatial_grid.query_range(zone_pos, zone.radius);
+            for enemy_entity in nearby {
+                if let Ok((_, mut enemy, enemy_transform)) = enemies.get_mut(enemy_entity) {
+                    let enemy_pos = enemy_transform.translation.truncate();
+                    if zone_pos.distance(enemy_pos) < zone.radius {
+                        enemy.apply_armor_damage(tick_damage);
+                    }
+                }
+            }
+        }
+
+        if zone.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+fn update_blizzard_zones(
+    mut commands: Commands,
+    mut zones: Query<(Entity, &mut BlizzardZone, &Transform, &mut Sprite)>,
+    mut enemies: Query<(Entity, &mut Enemy, &Transform), Without<BlizzardZone>>,
+    spatial_grid: Res<SpatialGrid>,
+    time: Res<Time>,
+) {
+    for (entity, mut zone, zone_transform, mut sprite) in &mut zones {
+        zone.lifetime.tick(time.delta());
+        zone.tick_timer.tick(time.delta());
+
+        // Fade out
+        let alpha = (1.0 - zone.lifetime.fraction()) * 0.2;
+        sprite.color = GameColors::PROJECTILE_SLOW.with_alpha(alpha);
+
+        // Apply slow on tick
+        if zone.tick_timer.just_finished() {
+            let zone_pos = zone_transform.translation.truncate();
+            let nearby = spatial_grid.query_range(zone_pos, zone.radius);
+            for enemy_entity in nearby {
+                if let Ok((_, mut enemy, enemy_transform)) = enemies.get_mut(enemy_entity) {
+                    let enemy_pos = enemy_transform.translation.truncate();
+                    if zone_pos.distance(enemy_pos) < zone.radius {
+                        enemy.apply_slow(0.8, CombatConstants::SLOW_FACTOR);
+                    }
+                }
+            }
+        }
+
+        if zone.lifetime.finished() {
             commands.entity(entity).despawn_recursive();
         }
     }

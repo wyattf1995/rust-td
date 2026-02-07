@@ -3,15 +3,17 @@ use bevy::input::touch::Touches;
 
 pub mod abilities;
 pub mod economy;
+pub mod effects;
 pub mod enemy;
 pub mod map;
 pub mod projectile;
 pub mod spatial;
+pub mod stats;
 pub mod tower;
 pub mod ui;
 
 use crate::analytics::{Analytics, track_with_context};
-use crate::persistence::{HighScores, save_highscores};
+use crate::persistence::{GameSettings, HighScores, save_highscores};
 use crate::GameState;
 use crate::graphics::shapes::GameColors;
 
@@ -33,6 +35,8 @@ impl Plugin for GamePlugin {
             ui::GameUiPlugin,
             spatial::SpatialPlugin,
             abilities::AbilitiesPlugin,
+            stats::StatsPlugin,
+            effects::EffectsPlugin,
         ))
         .init_resource::<ScreenShake>()
         .init_resource::<PointerState>()
@@ -109,10 +113,14 @@ fn setup_game_over(
     economy: Res<economy::PlayerEconomy>,
     selected_map: Res<map::SelectedMap>,
     mut high_scores: ResMut<HighScores>,
+    mut game_stats: ResMut<stats::GameStats>,
 ) {
     let map_name = selected_map.0.name();
     let wave = wave_manager.current_wave;
     let score = economy.score;
+
+    // Finalize stats
+    game_stats.finalize(score, wave);
 
     // Check and save high score
     let is_new_best = high_scores.update_if_better(map_name, wave, score);
@@ -132,6 +140,48 @@ fn setup_game_over(
             ("map", map_name),
         ],
     );
+
+    // Build stats summary text
+    let summary = format!(
+        "Waves: {}   Score: {}\nKills: {}   Escaped: {}   Max Combo: {}\nGold Earned: {}   Gold Spent: {}",
+        game_stats.waves_survived,
+        game_stats.total_score,
+        game_stats.total_enemies_killed,
+        game_stats.total_enemies_escaped,
+        game_stats.max_combo,
+        game_stats.total_gold_earned,
+        game_stats.total_gold_spent,
+    );
+
+    // Build kill breakdown
+    let mut kill_breakdown = String::new();
+    let mut kills_sorted: Vec<(u8, u32)> = game_stats.kills_by_type.iter().map(|(&k, &v)| (k, v)).collect();
+    kills_sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    for (key, count) in &kills_sorted {
+        if let Some(etype) = stats::GameStats::enemy_type_from_key(*key) {
+            let name = match etype {
+                enemy::EnemyType::Basic => "Basic",
+                enemy::EnemyType::Fast => "Fast",
+                enemy::EnemyType::Tank => "Tank",
+                enemy::EnemyType::Armored => "Armored",
+                enemy::EnemyType::Flying => "Flying",
+                enemy::EnemyType::Boss => "Boss",
+                enemy::EnemyType::Splitter => "Splitter",
+                enemy::EnemyType::MiniSplitter => "Mini",
+            };
+            kill_breakdown.push_str(&format!("  {} x{}\n", name, count));
+        }
+    }
+
+    // Best tower info
+    let best_tower_text = if let Some(best) = game_stats.best_tower() {
+        format!(
+            "{} Lv{} — {:.0} dmg, {} kills",
+            best.tower_type.name(), best.max_level, best.total_damage, best.total_kills
+        )
+    } else {
+        "No towers placed".to_string()
+    };
 
     commands
         .spawn((
@@ -169,13 +219,149 @@ fn setup_game_over(
                 "GAME OVER",
                 TextStyle {
                     font: assets.font.clone(),
-                    font_size: 72.0,
+                    font_size: 56.0,
                     color: GameColors::PRIMARY,
                 },
             ).with_style(Style {
-                margin: UiRect::bottom(Val::Px(40.0)),
+                margin: UiRect::bottom(Val::Px(16.0)),
                 ..default()
             }));
+
+            // Stats panel
+            parent.spawn(NodeBundle {
+                style: Style {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(20.0),
+                    margin: UiRect::bottom(Val::Px(16.0)),
+                    ..default()
+                },
+                ..default()
+            }).with_children(|row| {
+                // Left column: Summary stats
+                row.spawn(NodeBundle {
+                    style: Style {
+                        flex_direction: FlexDirection::Column,
+                        padding: UiRect::all(Val::Px(10.0)),
+                        row_gap: Val::Px(4.0),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.08, 0.08, 0.12, 0.8).into(),
+                    border_radius: BorderRadius::all(Val::Px(6.0)),
+                    ..default()
+                }).with_children(|col| {
+                    col.spawn(TextBundle::from_section(
+                        &summary,
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 12.0,
+                            color: Color::WHITE,
+                        },
+                    ));
+
+                    if !kill_breakdown.is_empty() {
+                        col.spawn(TextBundle::from_section(
+                            "Kills by Type:",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 11.0,
+                                color: GameColors::PRIMARY,
+                            },
+                        ).with_style(Style {
+                            margin: UiRect::top(Val::Px(6.0)),
+                            ..default()
+                        }));
+
+                        col.spawn(TextBundle::from_section(
+                            &kill_breakdown,
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 11.0,
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                            },
+                        ));
+                    }
+                });
+
+                // Right column: Best tower + gold timeline
+                row.spawn(NodeBundle {
+                    style: Style {
+                        flex_direction: FlexDirection::Column,
+                        padding: UiRect::all(Val::Px(10.0)),
+                        row_gap: Val::Px(4.0),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.08, 0.08, 0.12, 0.8).into(),
+                    border_radius: BorderRadius::all(Val::Px(6.0)),
+                    ..default()
+                }).with_children(|col| {
+                    col.spawn(TextBundle::from_section(
+                        "MVP Tower:",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 11.0,
+                            color: GameColors::PRIMARY,
+                        },
+                    ));
+                    col.spawn(TextBundle::from_section(
+                        &best_tower_text,
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 12.0,
+                            color: Color::WHITE,
+                        },
+                    ));
+
+                    // Gold per wave mini bar chart
+                    if !game_stats.wave_gold.is_empty() {
+                        col.spawn(TextBundle::from_section(
+                            "Gold Timeline:",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 11.0,
+                                color: GameColors::PRIMARY,
+                            },
+                        ).with_style(Style {
+                            margin: UiRect::top(Val::Px(6.0)),
+                            ..default()
+                        }));
+
+                        // Bar chart container
+                        col.spawn(NodeBundle {
+                            style: Style {
+                                flex_direction: FlexDirection::Row,
+                                align_items: AlignItems::FlexEnd,
+                                column_gap: Val::Px(2.0),
+                                height: Val::Px(40.0),
+                                ..default()
+                            },
+                            ..default()
+                        }).with_children(|chart| {
+                            let max_gold = game_stats.wave_gold.iter()
+                                .map(|w| w.gold_from_kills + w.gold_from_bonus + w.gold_from_interest + w.gold_from_early_send)
+                                .max()
+                                .unwrap_or(1)
+                                .max(1);
+
+                            // Show up to 20 bars
+                            let waves_to_show = game_stats.wave_gold.len().min(20);
+                            for record in game_stats.wave_gold.iter().take(waves_to_show) {
+                                let total = record.gold_from_kills + record.gold_from_bonus + record.gold_from_interest + record.gold_from_early_send;
+                                let height_pct = (total as f32 / max_gold as f32) * 36.0;
+                                chart.spawn(NodeBundle {
+                                    style: Style {
+                                        width: Val::Px(6.0),
+                                        height: Val::Px(height_pct.max(2.0)),
+                                        ..default()
+                                    },
+                                    background_color: GameColors::GOLD.into(),
+                                    border_radius: BorderRadius::all(Val::Px(1.0)),
+                                    ..default()
+                                });
+                            }
+                        });
+                    }
+                });
+            });
 
             parent
                 .spawn((
@@ -202,6 +388,19 @@ fn setup_game_over(
                         },
                     ));
                 });
+
+            // Hint
+            parent.spawn(TextBundle::from_section(
+                "Press R to restart",
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 13.0,
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                },
+            ).with_style(Style {
+                margin: UiRect::top(Val::Px(8.0)),
+                ..default()
+            }));
         });
 }
 
@@ -333,7 +532,18 @@ fn update_screen_shake(
     mut screen_shake: ResMut<ScreenShake>,
     mut camera_query: Query<&mut Transform, With<Camera2d>>,
     time: Res<Time>,
+    settings: Res<GameSettings>,
 ) {
+    if !settings.screen_shake {
+        // Still decay trauma so it doesn't accumulate while disabled
+        screen_shake.trauma = 0.0;
+        for mut transform in &mut camera_query {
+            transform.translation.x = 0.0;
+            transform.translation.y = 0.0;
+        }
+        return;
+    }
+
     if screen_shake.trauma > 0.01 {
         // Decay trauma
         screen_shake.trauma *= 0.92_f32.powf(time.delta_seconds() * 60.0);

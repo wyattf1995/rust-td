@@ -209,7 +209,6 @@ impl ShapeSizes {
     pub const DAMAGE_TEXT_SIZE: f32 = 14.0;
     pub const MUZZLE_FLASH: f32 = 12.0;
     pub const DEATH_PARTICLE_SIZE: f32 = 6.0;
-    pub const DEATH_PARTICLE_COUNT: usize = 5;
 }
 
 /// Combat tuning constants — projectile behavior, damage formulas, effect durations

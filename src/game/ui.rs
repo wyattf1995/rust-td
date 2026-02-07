@@ -2,13 +2,14 @@ use bevy::prelude::*;
 
 use crate::{loading::GameAssets, GameState, GameSpeed, ScreenInfo};
 use crate::graphics::shapes::GameColors;
+use crate::persistence::SettingsOpen;
 
 use super::{
     abilities::{PlayerAbilities, FreezeAbilityEvent, GoldRushAbilityEvent},
     economy::{PlayerEconomy, KillStreak},
-    enemy::{WaveManager, WaveModifier},
+    enemy::{EnemyType, WaveManager, WaveModifier},
     map::{GameMap, HoveredTile, TileType},
-    tower::{PlaceTowerEvent, SelectedTowerType, SelectedPlacedTower, SellTowerEvent, UpgradeTowerEvent, Tower, TowerType, TowerSynergies},
+    tower::{PlaceTowerEvent, SelectedTowerType, SelectedPlacedTower, SellTowerEvent, UpgradeTowerEvent, SpecializeTowerEvent, Specialization, Tower, TowerType, TowerSynergies},
     GameEntity,
 };
 
@@ -37,7 +38,9 @@ impl Plugin for GameUiPlugin {
                         start_wave_button,
                         tower_context_shortcuts,
                         update_tower_context_menu,
+                        update_spec_panel,
                         tower_context_buttons,
+                        spec_button_system,
                         speed_button_system,
                         ability_button_activate,
                     ),
@@ -60,6 +63,7 @@ impl Plugin for GameUiPlugin {
                         update_wave_announcement,
                         update_start_button_text,
                         update_info_panel,
+                        update_wave_preview,
                         pause_input,
                     ),
                 )
@@ -68,7 +72,7 @@ impl Plugin for GameUiPlugin {
             )
             .add_systems(
                 Update,
-                (pause_menu_buttons, pause_input_resume)
+                (pause_menu_buttons, pause_settings_button, pause_input_resume)
                     .run_if(in_state(GameState::Paused)),
             );
     }
@@ -129,6 +133,15 @@ struct ResumeButton;
 struct QuitButton;
 
 #[derive(Component)]
+struct PauseSettingsButton;
+
+#[derive(Component)]
+struct WavePreviewPanel;
+
+#[derive(Component)]
+struct WavePreviewText;
+
+#[derive(Component)]
 struct TowerContextMenu;
 
 #[derive(Component)]
@@ -166,6 +179,15 @@ struct TargetingText;
 
 #[derive(Component)]
 struct SynergyText;
+
+#[derive(Component)]
+struct SpecChoicePanel;
+
+#[derive(Component)]
+struct SpecButton(Specialization);
+
+#[derive(Component)]
+struct SpecButtonText;
 
 #[derive(Component)]
 pub struct TopHudBar;
@@ -697,6 +719,41 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                 });
         });
 
+    // Wave preview panel (positioned above START button, shown between waves)
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::all(Val::Px(8.0)),
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(8.0),
+                    bottom: Val::Px(72.0),
+                    display: Display::None,
+                    ..default()
+                },
+                background_color: Color::srgba(0.06, 0.06, 0.1, 0.9).into(),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                ..default()
+            },
+            WavePreviewPanel,
+            GameEntity,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_section(
+                    "",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 11.0,
+                        color: Color::srgba(1.0, 1.0, 1.0, 0.8),
+                    },
+                ),
+                WavePreviewText,
+            ));
+        });
+
     // Tower context menu (initially hidden) - for upgrade/sell with stats
     commands
         .spawn((
@@ -888,6 +945,73 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                         ),
                         TargetingText,
                     ));
+                });
+
+            // Specialization choice panel (hidden by default, shown when needs_specialization)
+            parent
+                .spawn((
+                    NodeBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Stretch,
+                            display: Display::None,
+                            margin: UiRect::bottom(Val::Px(6.0)),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    SpecChoicePanel,
+                ))
+                .with_children(|parent| {
+                    // Header
+                    parent.spawn(TextBundle::from_section(
+                        "Choose Specialization:",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 12.0,
+                            color: GameColors::PRIMARY,
+                        },
+                    ).with_style(Style {
+                        margin: UiRect::bottom(Val::Px(6.0)),
+                        ..default()
+                    }));
+
+                    // Two spec buttons (text updated dynamically)
+                    for i in 0..2 {
+                        parent
+                            .spawn((
+                                ButtonBundle {
+                                    style: Style {
+                                        width: Val::Percent(100.0),
+                                        min_height: Val::Px(40.0),
+                                        padding: UiRect::all(Val::Px(6.0)),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        margin: UiRect::bottom(Val::Px(4.0)),
+                                        ..default()
+                                    },
+                                    background_color: Color::srgb(0.2, 0.3, 0.5).into(),
+                                    border_radius: BorderRadius::all(Val::Px(4.0)),
+                                    ..default()
+                                },
+                                // Default to Marksman, will be updated dynamically
+                                SpecButton(if i == 0 { Specialization::Marksman } else { Specialization::Gunner }),
+                            ))
+                            .with_children(|parent| {
+                                parent.spawn((
+                                    TextBundle::from_section(
+                                        "",
+                                        TextStyle {
+                                            font: assets.font.clone(),
+                                            font_size: 11.0,
+                                            color: Color::WHITE,
+                                        },
+                                    ),
+                                    SpecButtonText,
+                                ));
+                            });
+                    }
                 });
 
             // Upgrade button
@@ -1603,6 +1727,7 @@ fn start_wave_button(
     time: Res<Time>,
     existing_announcements: Query<Entity, With<WaveAnnouncement>>,
     mut ui_clicked: ResMut<UiClicked>,
+    mut stats: ResMut<super::stats::GameStats>,
 ) {
     for (interaction, mut color) in &mut interaction_query {
         match *interaction {
@@ -1619,6 +1744,7 @@ fn start_wave_button(
                     if early_bonus > 0 {
                         economy.gold += early_bonus;
                         economy.score += early_bonus;
+                        stats.record_early_send(early_bonus);
                     }
 
                     // Despawn any existing announcement
@@ -1697,6 +1823,75 @@ fn start_wave_button(
                 *color = GameColors::BUTTON_START.into();
             }
         }
+    }
+}
+
+fn update_wave_preview(
+    wave_manager: Res<WaveManager>,
+    mut panel_query: Query<&mut Style, With<WavePreviewPanel>>,
+    mut text_query: Query<&mut Text, With<WavePreviewText>>,
+    mut cached_wave: Local<usize>,
+    mut cached_text: Local<String>,
+) {
+    for mut style in &mut panel_query {
+        if wave_manager.wave_active {
+            style.display = Display::None;
+            continue;
+        }
+
+        style.display = Display::Flex;
+
+        // Only recompute preview when wave changes
+        let next_wave = wave_manager.current_wave + 1;
+        if *cached_wave != next_wave {
+            *cached_wave = next_wave;
+
+            let preview = wave_manager.preview_next_wave();
+            let mut text = format!("NEXT: Wave {}", next_wave);
+
+            if preview.modifier != WaveModifier::None {
+                text.push_str(&format!("\n{}", preview.modifier.name()));
+            }
+
+            // Show fuzzy counts per enemy type
+            for (etype, count) in &preview.counts {
+                let fuzzy = fuzzy_count(*count);
+                let name = match etype {
+                    EnemyType::Basic => "Basic",
+                    EnemyType::Fast => "Fast",
+                    EnemyType::Tank => "Tank",
+                    EnemyType::Armored => "Armored",
+                    EnemyType::Flying => "Flying",
+                    EnemyType::Boss => "BOSS",
+                    EnemyType::Splitter => "Splitter",
+                    EnemyType::MiniSplitter => "Mini",
+                };
+                text.push_str(&format!("\n  {} x{}", name, fuzzy));
+            }
+
+            *cached_text = text;
+        }
+
+        for mut text in &mut text_query {
+            text.sections[0].value = cached_text.clone();
+        }
+    }
+}
+
+/// Display fuzzy counts: ~5, ~10, ~15, ~25, 30+
+fn fuzzy_count(count: usize) -> String {
+    if count <= 3 {
+        format!("{}", count)
+    } else if count <= 7 {
+        "~5".to_string()
+    } else if count <= 12 {
+        "~10".to_string()
+    } else if count <= 18 {
+        "~15".to_string()
+    } else if count <= 27 {
+        "~25".to_string()
+    } else {
+        "30+".to_string()
     }
 }
 
@@ -1990,6 +2185,34 @@ fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) {
                     ));
                 });
 
+            // Settings button
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(200.0),
+                            height: Val::Px(50.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::bottom(Val::Px(10.0)),
+                            ..default()
+                        },
+                        background_color: Color::srgba(1.0, 1.0, 1.0, 0.1).into(),
+                        ..default()
+                    },
+                    PauseSettingsButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn(TextBundle::from_section(
+                        "SETTINGS",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 24.0,
+                            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                        },
+                    ));
+                });
+
             // Quit button
             parent
                 .spawn((
@@ -2073,6 +2296,25 @@ fn pause_menu_buttons(
             }
             Interaction::None => {
                 *color = Color::srgb(0.5, 0.2, 0.2).into();
+            }
+        }
+    }
+}
+
+fn pause_settings_button(
+    mut query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<PauseSettingsButton>)>,
+    mut settings_open: ResMut<SettingsOpen>,
+) {
+    for (interaction, mut color) in &mut query {
+        match *interaction {
+            Interaction::Pressed => {
+                settings_open.0 = true;
+            }
+            Interaction::Hovered => {
+                *color = Color::srgba(1.0, 1.0, 1.0, 0.2).into();
+            }
+            Interaction::None => {
+                *color = Color::srgba(1.0, 1.0, 1.0, 0.1).into();
             }
         }
     }
@@ -2179,7 +2421,10 @@ fn update_tower_context_menu(
 
                 // Update stats text
                 for mut text in &mut stats_text {
-                    text.sections[0].value = format!("{} Lv{}\n", tower.tower_type.name(), tower.level);
+                    let spec_label = tower.specialization
+                        .map(|s| format!(" [{}]", s.name()))
+                        .unwrap_or_default();
+                    text.sections[0].value = format!("{}{} Lv{}\n", tower.tower_type.name(), spec_label, tower.level);
                     if is_buff_tower {
                         let buff_pct = tower.buff_percentage() * 100.0;
                         text.sections[1].value = format!(
@@ -2197,37 +2442,54 @@ fn update_tower_context_menu(
                     }
                 }
 
-                // Update upgrade preview text using the tower's preview method
-                for mut text in &mut preview_text {
-                    let (next_damage, next_range, next_speed) = tower.preview_upgrade();
-                    text.sections[0].value = format!("Level {} Preview\n", tower.level + 1);
-                    if is_buff_tower {
-                        let curr_buff = tower.buff_percentage() * 100.0;
-                        let next_buff = tower.buff_percentage_next() * 100.0;
-                        text.sections[1].value = format!(
-                            "BUFF: +{:.0}% (+{:.0}%)\nRNG: {:.0} (+{:.0})",
-                            next_buff, next_buff - curr_buff,
-                            next_range, next_range - tower.range
-                        );
-                    } else {
-                        text.sections[1].value = format!(
-                            "DMG: {:.0} (+{:.0})\nRNG: {:.0} (+{:.0})\nSPD: {:.2}/s (+{:.2})",
-                            next_damage, next_damage - tower.damage,
-                            next_range, next_range - tower.range,
-                            next_speed, next_speed - attack_speed
-                        );
-                    }
-                }
+                let needs_spec = tower.needs_specialization();
 
-                // Update button text
-                let upgrade_cost = tower.upgrade_cost();
-                let can_afford = economy.gold >= upgrade_cost;
-                for mut text in &mut upgrade_text {
-                    text.sections[0].value = if can_afford {
-                        format!("Upgrade [U] - {}g", upgrade_cost)
-                    } else {
-                        format!("Need {}g (have {})", upgrade_cost, economy.gold)
-                    };
+                if needs_spec {
+                    // Clear upgrade button/preview when spec choice is needed
+                    for mut text in &mut upgrade_text {
+                        text.sections[0].value = String::new();
+                    }
+                    for mut text in &mut preview_text {
+                        text.sections[0].value = "Choose Specialization\n".to_string();
+                        text.sections[1].value = String::new();
+                    }
+                } else {
+                    // Update upgrade preview text using the tower's preview method
+                    for mut text in &mut preview_text {
+                        let (next_damage, next_range, next_speed) = tower.preview_upgrade();
+                        text.sections[0].value = format!("Level {} Preview\n", tower.level + 1);
+                        if is_buff_tower {
+                            let curr_buff = tower.buff_percentage() * 100.0;
+                            let next_buff = tower.buff_percentage_next() * 100.0;
+                            text.sections[1].value = format!(
+                                "BUFF: +{:.0}% (+{:.0}%)\nRNG: {:.0} (+{:.0})",
+                                next_buff, next_buff - curr_buff,
+                                next_range, next_range - tower.range
+                            );
+                        } else {
+                            let spec_label = tower.specialization
+                                .map(|s| format!(" ({})", s.name()))
+                                .unwrap_or_default();
+                            text.sections[1].value = format!(
+                                "DMG: {:.0} (+{:.0})\nRNG: {:.0} (+{:.0})\nSPD: {:.2}/s (+{:.2}){}",
+                                next_damage, next_damage - tower.damage,
+                                next_range, next_range - tower.range,
+                                next_speed, next_speed - attack_speed,
+                                spec_label
+                            );
+                        }
+                    }
+
+                    // Update button text
+                    let upgrade_cost = tower.upgrade_cost();
+                    let can_afford = economy.gold >= upgrade_cost;
+                    for mut text in &mut upgrade_text {
+                        text.sections[0].value = if can_afford {
+                            format!("Upgrade [U] - {}g", upgrade_cost)
+                        } else {
+                            format!("Need {}g (have {})", upgrade_cost, economy.gold)
+                        };
+                    }
                 }
                 for mut text in &mut sell_text {
                     text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
@@ -2260,6 +2522,54 @@ fn update_tower_context_menu(
             }
         } else {
             style.display = Display::None;
+        }
+    }
+}
+
+fn update_spec_panel(
+    selected_tower: Res<SelectedPlacedTower>,
+    towers: Query<&Tower>,
+    mut spec_panel: Query<&mut Style, With<SpecChoicePanel>>,
+    mut spec_buttons: Query<(&mut SpecButton, &Children)>,
+    mut spec_texts: Query<&mut Text, With<SpecButtonText>>,
+) {
+    let Some(tower_entity) = selected_tower.0 else {
+        for mut style in &mut spec_panel {
+            style.display = Display::None;
+        }
+        return;
+    };
+
+    let Ok(tower) = towers.get(tower_entity) else {
+        for mut style in &mut spec_panel {
+            style.display = Display::None;
+        }
+        return;
+    };
+
+    let needs_spec = tower.needs_specialization();
+
+    for mut style in &mut spec_panel {
+        style.display = if needs_spec { Display::Flex } else { Display::None };
+    }
+
+    if needs_spec {
+        if let Some(choices) = Specialization::choices_for(tower.tower_type) {
+            let upgrade_cost = tower.upgrade_cost();
+            let mut button_iter = spec_buttons.iter_mut();
+            for spec in choices.iter() {
+                if let Some((mut spec_btn, children)) = button_iter.next() {
+                    spec_btn.0 = *spec;
+                    for child in children.iter() {
+                        if let Ok(mut text) = spec_texts.get_mut(*child) {
+                            text.sections[0].value = format!(
+                                "{}: {}\n{}g",
+                                spec.name(), spec.description(), upgrade_cost
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -2307,10 +2617,10 @@ fn tower_context_buttons(
         }
     }
 
-    // Check if we can afford upgrade
+    // Check if we can afford upgrade and it's allowed
     let can_afford = if let Some(tower_entity) = selected_tower.0 {
         if let Ok(tower) = towers.get(tower_entity) {
-            economy.gold >= tower.upgrade_cost()
+            tower.can_upgrade() && economy.gold >= tower.upgrade_cost()
         } else {
             false
         }
@@ -2325,7 +2635,7 @@ fn tower_context_buttons(
                 ui_clicked.0 = true;
                 if let Some(tower_entity) = selected_tower.0 {
                     if let Ok(tower) = towers.get(tower_entity) {
-                        if economy.gold >= tower.upgrade_cost() {
+                        if tower.can_upgrade() && economy.gold >= tower.upgrade_cost() {
                             upgrade_events.send(UpgradeTowerEvent { tower: tower_entity });
                         }
                     }
@@ -2403,6 +2713,43 @@ fn tower_context_buttons(
                 for mut text in &mut targeting_text {
                     text.sections[0].value = format!("Target: {} [T]", tower.targeting.name());
                 }
+            }
+        }
+    }
+}
+
+fn spec_button_system(
+    mut query: Query<
+        (&Interaction, &mut BackgroundColor, &SpecButton),
+        Changed<Interaction>,
+    >,
+    selected_tower: Res<SelectedPlacedTower>,
+    towers: Query<&Tower>,
+    economy: Res<PlayerEconomy>,
+    mut spec_events: EventWriter<SpecializeTowerEvent>,
+    mut ui_clicked: ResMut<UiClicked>,
+) {
+    for (interaction, mut color, spec_btn) in &mut query {
+        match *interaction {
+            Interaction::Pressed => {
+                ui_clicked.0 = true;
+                if let Some(tower_entity) = selected_tower.0 {
+                    if let Ok(tower) = towers.get(tower_entity) {
+                        if tower.needs_specialization() && economy.gold >= tower.upgrade_cost() {
+                            spec_events.send(SpecializeTowerEvent {
+                                tower: tower_entity,
+                                specialization: spec_btn.0,
+                            });
+                        }
+                    }
+                }
+            }
+            Interaction::Hovered => {
+                ui_clicked.0 = true;
+                *color = Color::srgb(0.3, 0.4, 0.65).into();
+            }
+            Interaction::None => {
+                *color = Color::srgb(0.2, 0.3, 0.5).into();
             }
         }
     }

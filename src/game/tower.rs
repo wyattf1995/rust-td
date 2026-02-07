@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use crate::GameState;
 use crate::graphics::shapes::{GameColors, ShapeSizes, ZDepth};
+use crate::persistence::GameSettings;
 
 use crate::loading::GameAssets;
 
@@ -12,6 +13,7 @@ use super::{
     map::GameMap,
     projectile::SpawnProjectileEvent,
     spatial::SpatialGrid,
+    stats::GameStats,
     GameEntity,
 };
 
@@ -30,12 +32,14 @@ impl Plugin for TowerPlugin {
             .add_event::<PlaceTowerEvent>()
             .add_event::<SellTowerEvent>()
             .add_event::<UpgradeTowerEvent>()
+            .add_event::<SpecializeTowerEvent>()
             .add_systems(
                 Update,
                 (
                     handle_tower_placement,
                     handle_tower_selling,
                     handle_tower_upgrade,
+                    handle_tower_specialization,
                     tower_targeting,
                     update_buff_auras,
                     update_tower_synergies,
@@ -119,6 +123,103 @@ pub enum TowerType {
     Chain,  // Lightning bounces between enemies
     Poison, // Deals damage over time
     Buff,   // Boosts nearby towers (doesn't attack)
+}
+
+/// Tower specializations — chosen at level 3 for towers that branch
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Specialization {
+    // Basic
+    Marksman,    // +damage, +range, -speed
+    Gunner,      // +speed, -damage per shot
+    // Splash
+    Napalm,      // Lingering ground DOT zone on impact
+    Shockwave,   // Knockback + larger splash radius
+    // Slow
+    Cryogenic,   // Freeze chance on hit (full stop 1s)
+    Blizzard,    // AOE slow field
+    // Sniper
+    Railgun,     // Pierces through enemies
+    Assassin,    // Crit chance for 3x damage
+    // Rapid
+    Minigun,     // Attack speed ramps up on same target
+    Shotgun,     // Fires 3-5 projectiles in cone
+    // Chain
+    Tesla,       // +2 extra bounces, wider range
+    Arc,         // Each bounce creates small AOE
+}
+
+impl Specialization {
+    /// Get the two specialization choices for a given tower type
+    pub fn choices_for(tower_type: TowerType) -> Option<[Specialization; 2]> {
+        match tower_type {
+            TowerType::Basic => Some([Specialization::Marksman, Specialization::Gunner]),
+            TowerType::Splash => Some([Specialization::Napalm, Specialization::Shockwave]),
+            TowerType::Slow => Some([Specialization::Cryogenic, Specialization::Blizzard]),
+            TowerType::Sniper => Some([Specialization::Railgun, Specialization::Assassin]),
+            TowerType::Rapid => Some([Specialization::Minigun, Specialization::Shotgun]),
+            TowerType::Chain => Some([Specialization::Tesla, Specialization::Arc]),
+            _ => None, // Buff and Poison stay linear
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Specialization::Marksman => "Marksman",
+            Specialization::Gunner => "Gunner",
+            Specialization::Napalm => "Napalm",
+            Specialization::Shockwave => "Shockwave",
+            Specialization::Cryogenic => "Cryogenic",
+            Specialization::Blizzard => "Blizzard",
+            Specialization::Railgun => "Railgun",
+            Specialization::Assassin => "Assassin",
+            Specialization::Minigun => "Minigun",
+            Specialization::Shotgun => "Shotgun",
+            Specialization::Tesla => "Tesla",
+            Specialization::Arc => "Arc",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            Specialization::Marksman => "+DMG, +Range, -Speed",
+            Specialization::Gunner => "+Speed, -DMG per shot",
+            Specialization::Napalm => "Leaves fire zones on impact",
+            Specialization::Shockwave => "Knockback + bigger splash",
+            Specialization::Cryogenic => "Chance to freeze enemies",
+            Specialization::Blizzard => "Creates AOE slow fields",
+            Specialization::Railgun => "Pierces through enemies",
+            Specialization::Assassin => "25% crit for 3x damage",
+            Specialization::Minigun => "Speed ramps on same target",
+            Specialization::Shotgun => "Fires 3-5 in a cone",
+            Specialization::Tesla => "+2 bounces, wider range",
+            Specialization::Arc => "AOE at each bounce point",
+        }
+    }
+
+    /// Returns (damage_mult, range_mult, speed_mult) modifiers
+    pub fn stat_modifiers(&self) -> (f32, f32, f32) {
+        match self {
+            Specialization::Marksman => (1.4, 1.2, 0.8),
+            Specialization::Gunner => (0.7, 1.0, 1.6),
+            Specialization::Napalm => (1.0, 1.0, 1.0),
+            Specialization::Shockwave => (0.9, 1.0, 1.0),
+            Specialization::Cryogenic => (1.0, 1.1, 1.0),
+            Specialization::Blizzard => (0.8, 1.2, 1.0),
+            Specialization::Railgun => (1.3, 1.15, 0.85),
+            Specialization::Assassin => (1.0, 1.0, 1.1),
+            Specialization::Minigun => (0.85, 1.0, 1.0),
+            Specialization::Shotgun => (0.6, 0.9, 0.8),
+            Specialization::Tesla => (0.9, 1.0, 1.0),
+            Specialization::Arc => (0.85, 1.0, 1.0),
+        }
+    }
+}
+
+/// Event to specialize a tower
+#[derive(Event)]
+pub struct SpecializeTowerEvent {
+    pub tower: Entity,
+    pub specialization: Specialization,
 }
 
 impl TowerType {
@@ -265,6 +366,11 @@ pub struct Tower {
     pub grid_y: usize,
     pub level: u32,
     pub targeting: TargetingPriority,
+    pub specialization: Option<Specialization>,
+    /// Minigun ramp-up: time spent targeting same enemy
+    pub ramp_up_timer: f32,
+    /// Minigun ramp-up: last target entity
+    pub ramp_up_target: Option<Entity>,
     /// Cached cumulative speed multiplier (updated on upgrade, avoids O(level) recalc)
     cached_speed_mult: f32,
     /// Cached buff percentage for Buff towers (updated on upgrade, avoids O(level) recalc)
@@ -286,6 +392,9 @@ impl Tower {
             grid_y,
             level: 1,
             targeting: TargetingPriority::default(),
+            specialization: None,
+            ramp_up_timer: 0.0,
+            ramp_up_target: None,
             cached_speed_mult: 1.0,
             cached_buff_pct: if tower_type == TowerType::Buff { 0.25 } else { 0.0 },
         }
@@ -319,8 +428,23 @@ impl Tower {
         total
     }
 
+    /// Returns true when tower is at level 2 and has branching options but hasn't chosen yet
+    pub fn needs_specialization(&self) -> bool {
+        self.level == 2
+            && self.specialization.is_none()
+            && Specialization::choices_for(self.tower_type).is_some()
+    }
+
     pub fn can_upgrade(&self) -> bool {
-        true // Infinite upgrades now!
+        // Block upgrades when specialization choice is required
+        !self.needs_specialization()
+    }
+
+    /// Apply specialization: sets spec, advances to level 3, recalculates stats
+    pub fn specialize(&mut self, spec: Specialization) {
+        self.specialization = Some(spec);
+        // Specialization costs same as a normal level 2→3 upgrade
+        self.upgrade(); // This handles level 3 stat recalc
     }
 
     pub fn upgrade(&mut self) {
@@ -339,9 +463,14 @@ impl Tower {
             range_mult *= 1.0 + b * 0.4;
         }
 
-        self.damage = self.tower_type.damage() * damage_mult;
-        self.range = self.tower_type.range() * range_mult;
-        let attack_speed = self.tower_type.attack_speed() * self.cached_speed_mult;
+        // Apply specialization stat modifiers on top of level scaling
+        let (spec_dmg, spec_rng, spec_spd) = self.specialization
+            .map(|s| s.stat_modifiers())
+            .unwrap_or((1.0, 1.0, 1.0));
+
+        self.damage = self.tower_type.damage() * damage_mult * spec_dmg;
+        self.range = self.tower_type.range() * range_mult * spec_rng;
+        let attack_speed = self.tower_type.attack_speed() * self.cached_speed_mult * spec_spd;
         // For towers that don't attack (like Buff), use a dummy timer
         let cooldown_secs = if attack_speed > 0.0 { 1.0 / attack_speed } else { 1.0 };
         self.attack_cooldown = Timer::from_seconds(cooldown_secs, TimerMode::Repeating);
@@ -366,16 +495,21 @@ impl Tower {
             damage_mult *= 1.0 + b;
             range_mult *= 1.0 + b * 0.4;
         }
+        let (spec_dmg, spec_rng, spec_spd) = self.specialization
+            .map(|s| s.stat_modifiers())
+            .unwrap_or((1.0, 1.0, 1.0));
+
         (
-            self.tower_type.damage() * damage_mult,
-            self.tower_type.range() * range_mult,
-            self.tower_type.attack_speed() * next_speed_mult,
+            self.tower_type.damage() * damage_mult * spec_dmg,
+            self.tower_type.range() * range_mult * spec_rng,
+            self.tower_type.attack_speed() * next_speed_mult * spec_spd,
         )
     }
 
     /// Get current attack speed (O(1) — uses cached multiplier)
     pub fn attack_speed(&self) -> f32 {
-        self.tower_type.attack_speed() * self.cached_speed_mult
+        let spec_spd = self.specialization.map(|s| s.stat_modifiers().2).unwrap_or(1.0);
+        self.tower_type.attack_speed() * self.cached_speed_mult * spec_spd
     }
 
     /// Get buff percentage for Buff towers (O(1) — uses cached value)
@@ -485,6 +619,7 @@ fn handle_tower_placement(
     mut map: ResMut<GameMap>,
     mut economy: ResMut<PlayerEconomy>,
     mut synergy_dirty: ResMut<SynergyDirty>,
+    mut stats: ResMut<GameStats>,
     assets: Res<GameAssets>,
 ) {
     for event in events.read() {
@@ -525,6 +660,8 @@ fn handle_tower_placement(
                 GameEntity,
             ))
             .id();
+
+        stats.register_tower(tower_entity, event.tower_type, cost);
 
         // Layer 2: Accent core (colored center showing tower type)
         commands.spawn((
@@ -700,19 +837,33 @@ fn tower_targeting(
 
 fn tower_attack(
     mut commands: Commands,
-    mut towers: Query<(&mut Tower, &Transform, Option<&BuffedStatus>, Option<&TowerSynergies>)>,
+    mut towers: Query<(Entity, &mut Tower, &Transform, Option<&BuffedStatus>, Option<&TowerSynergies>)>,
     enemies: Query<&Transform, With<Enemy>>,
     time: Res<Time>,
     mut projectile_events: EventWriter<SpawnProjectileEvent>,
 ) {
-    for (mut tower, tower_transform, buff_status, synergies) in &mut towers {
+    for (tower_entity, mut tower, tower_transform, buff_status, synergies) in &mut towers {
         // Buff towers don't attack
         if !tower.tower_type.can_attack() {
             continue;
         }
 
+        // Minigun ramp-up: track same-target duration
+        let minigun_speed_mult = if tower.specialization == Some(Specialization::Minigun) {
+            if tower.target == tower.ramp_up_target && tower.target.is_some() {
+                tower.ramp_up_timer += time.delta_seconds();
+            } else {
+                tower.ramp_up_timer = 0.0;
+                tower.ramp_up_target = tower.target;
+            }
+            // Ramp from 1x to 3x over 3 seconds
+            1.0 + (tower.ramp_up_timer / 3.0).min(1.0) * 2.0
+        } else {
+            1.0
+        };
+
         // Apply buff speed multiplier to attack cooldown
-        let speed_mult = buff_status.map(|b| b.speed_multiplier).unwrap_or(1.0);
+        let speed_mult = buff_status.map(|b| b.speed_multiplier).unwrap_or(1.0) * minigun_speed_mult;
         tower.attack_cooldown.tick(time.delta().mul_f32(speed_mult));
 
         if let Some(target) = tower.target {
@@ -725,17 +876,47 @@ fn tower_attack(
                     let final_damage = tower.damage * damage_mult;
 
                     // Get synergy bonuses
-                    let extra_chain_bounces = synergies.map(|s| s.extra_chain_bounces).unwrap_or(0);
+                    let mut extra_chain_bounces = synergies.map(|s| s.extra_chain_bounces).unwrap_or(0);
                     let poison_duration_bonus = synergies.map(|s| s.poison_duration_bonus).unwrap_or(0.0);
 
-                    projectile_events.send(SpawnProjectileEvent {
-                        start,
-                        target,
-                        damage: final_damage,
-                        tower_type: tower.tower_type,
-                        extra_chain_bounces,
-                        poison_duration_bonus,
-                    });
+                    // Tesla: +2 bounces
+                    if tower.specialization == Some(Specialization::Tesla) {
+                        extra_chain_bounces += 2;
+                    }
+
+                    let spec = tower.specialization;
+
+                    // Shotgun: fire 3 projectiles in a cone
+                    if spec == Some(Specialization::Shotgun) {
+                        for i in 0..3 {
+                            let offset = match i {
+                                0 => Vec2::new(-8.0, 4.0),
+                                1 => Vec2::ZERO,
+                                _ => Vec2::new(8.0, -4.0),
+                            };
+                            projectile_events.send(SpawnProjectileEvent {
+                                start: start + offset,
+                                target,
+                                damage: final_damage,
+                                tower_type: tower.tower_type,
+                                extra_chain_bounces,
+                                poison_duration_bonus,
+                                source_tower: Some(tower_entity),
+                                specialization: spec,
+                            });
+                        }
+                    } else {
+                        projectile_events.send(SpawnProjectileEvent {
+                            start,
+                            target,
+                            damage: final_damage,
+                            tower_type: tower.tower_type,
+                            extra_chain_bounces,
+                            poison_duration_bonus,
+                            source_tower: Some(tower_entity),
+                            specialization: spec,
+                        });
+                    }
 
                     // Spawn muzzle flash (different color for different tower types)
                     let flash_color = match tower.tower_type {
@@ -792,12 +973,17 @@ fn update_tower_visuals(
 
 fn update_range_indicators(
     hovered: Res<HoveredTower>,
+    selected: Res<SelectedPlacedTower>,
     towers: Query<&Transform, (With<Tower>, Without<RangeIndicator>)>,
     mut indicators: Query<(&RangeIndicator, &mut Sprite, &mut Transform), Without<Tower>>,
+    settings: Res<GameSettings>,
 ) {
     for (indicator, mut sprite, mut transform) in &mut indicators {
-        // Show range indicator if this tower is hovered
-        if hovered.0 == Some(indicator.tower) {
+        // Always show range for selected tower (context menu open)
+        // Only show on hover if setting is enabled
+        let is_selected = selected.0 == Some(indicator.tower);
+        let is_hovered = hovered.0 == Some(indicator.tower) && settings.show_range_on_hover;
+        if is_selected || is_hovered {
             sprite.color = GameColors::RANGE_INDICATOR;
         } else {
             sprite.color = Color::NONE;
@@ -817,6 +1003,7 @@ fn handle_tower_selling(
     mut economy: ResMut<PlayerEconomy>,
     mut map: ResMut<GameMap>,
     mut synergy_dirty: ResMut<SynergyDirty>,
+    mut stats: ResMut<GameStats>,
     towers: Query<&Tower>,
     range_indicators: Query<(Entity, &RangeIndicator)>,
     barrels: Query<(Entity, &TowerBarrel)>,
@@ -827,8 +1014,10 @@ fn handle_tower_selling(
     for event in events.read() {
         if let Ok(tower) = towers.get(event.tower) {
             // Refund gold
-            economy.gold += tower.sell_value();
+            let sell_value = tower.sell_value();
+            economy.gold += sell_value;
             synergy_dirty.0 = true;
+            stats.record_sell(event.tower, sell_value);
 
             // Clear map tile
             map.remove_tower(tower.grid_x, tower.grid_y);
@@ -878,6 +1067,7 @@ fn handle_tower_selling(
 fn handle_tower_upgrade(
     mut events: EventReader<UpgradeTowerEvent>,
     mut economy: ResMut<PlayerEconomy>,
+    mut stats: ResMut<GameStats>,
     mut towers: Query<(&mut Tower, &mut Sprite)>,
     mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
     mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>)>,
@@ -888,6 +1078,7 @@ fn handle_tower_upgrade(
             if cost > 0 && economy.gold >= cost {
                 economy.gold -= cost;
                 tower.upgrade();
+                stats.record_upgrade(event.tower, cost, tower.level);
 
                 // Update core visual - brighter accent with each level
                 let accent_color = tower.tower_type.color();
@@ -903,6 +1094,51 @@ fn handle_tower_upgrade(
                     if core.tower == event.tower {
                         core_sprite.color = upgraded_color;
                         // Slightly larger core with upgrades
+                        let core_size = ShapeSizes::TOWER_CORE + (tower.level - 1) as f32 * 1.5;
+                        core_sprite.custom_size = Some(Vec2::splat(core_size));
+                        break;
+                    }
+                }
+
+                // Update range indicator size
+                for (indicator, mut ind_sprite) in &mut range_indicators {
+                    if indicator.tower == event.tower {
+                        ind_sprite.custom_size = Some(Vec2::splat(tower.range * 2.0));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn handle_tower_specialization(
+    mut events: EventReader<SpecializeTowerEvent>,
+    mut economy: ResMut<PlayerEconomy>,
+    mut stats: ResMut<GameStats>,
+    mut towers: Query<(&mut Tower, &mut Sprite)>,
+    mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
+    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>)>,
+) {
+    for event in events.read() {
+        if let Ok((mut tower, _sprite)) = towers.get_mut(event.tower) {
+            let cost = tower.upgrade_cost();
+            if economy.gold >= cost {
+                economy.gold -= cost;
+                tower.specialize(event.specialization);
+                stats.record_upgrade(event.tower, cost, tower.level);
+
+                // Update core visual
+                let accent_color = tower.tower_type.color();
+                let brightness = 1.0 + 0.12 * (tower.level - 1) as f32;
+                let upgraded_color = Color::srgb(
+                    (accent_color.to_srgba().red * brightness).min(1.0),
+                    (accent_color.to_srgba().green * brightness).min(1.0),
+                    (accent_color.to_srgba().blue * brightness).min(1.0),
+                );
+
+                for (core, mut core_sprite) in &mut tower_cores {
+                    if core.tower == event.tower {
+                        core_sprite.color = upgraded_color;
                         let core_size = ShapeSizes::TOWER_CORE + (tower.level - 1) as f32 * 1.5;
                         core_sprite.custom_size = Some(Vec2::splat(core_size));
                         break;

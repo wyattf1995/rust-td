@@ -5,7 +5,7 @@ use crate::{
     analytics::{Analytics, track_with_context},
     game::map::{GameMap, MapPreset, SelectedMap, GRID_WIDTH, GRID_HEIGHT},
     loading::GameAssets,
-    persistence::HighScores,
+    persistence::{HighScores, SettingsOpen},
     GameState,
 };
 
@@ -21,6 +21,7 @@ impl Plugin for MenuPlugin {
                     map_button_hover,
                     button_interaction,
                     map_select_interaction,
+                    menu_settings_button,
                     animate_projectiles,
                     animate_title_glow,
                 )
@@ -49,6 +50,9 @@ struct MenuProjectile {
 
 #[derive(Component)]
 struct TitleText;
+
+#[derive(Component)]
+struct MenuSettingsButton;
 
 const BUTTON_NORMAL: Color = Color::srgb(0.91, 0.27, 0.38);
 const BUTTON_HOVER: Color = Color::srgb(1.0, 0.37, 0.48);
@@ -301,6 +305,35 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                     ..default()
                 }),
             );
+
+            // Settings button
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(120.0),
+                            height: Val::Px(36.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::top(Val::Px(20.0)),
+                            ..default()
+                        },
+                        background_color: Color::srgba(1.0, 1.0, 1.0, 0.1).into(),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
+                        ..default()
+                    },
+                    MenuSettingsButton,
+                ))
+                .with_children(|btn| {
+                    btn.spawn(TextBundle::from_section(
+                        "SETTINGS",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 14.0,
+                            color: Color::srgba(1.0, 1.0, 1.0, 0.6),
+                        },
+                    ));
+                });
         });
 }
 
@@ -484,6 +517,25 @@ fn map_select_interaction(
                         };
                     }
                 }
+            }
+        }
+    }
+}
+
+fn menu_settings_button(
+    mut query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<MenuSettingsButton>)>,
+    mut settings_open: ResMut<SettingsOpen>,
+) {
+    for (interaction, mut color) in &mut query {
+        match *interaction {
+            Interaction::Pressed => {
+                settings_open.0 = true;
+            }
+            Interaction::Hovered => {
+                *color = Color::srgba(1.0, 1.0, 1.0, 0.2).into();
+            }
+            Interaction::None => {
+                *color = Color::srgba(1.0, 1.0, 1.0, 0.1).into();
             }
         }
     }

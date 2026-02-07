@@ -6,6 +6,7 @@ mod graphics;
 mod loading;
 mod menu;
 mod persistence;
+mod settings_ui;
 
 /// Game states
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
@@ -79,6 +80,7 @@ fn main() {
             menu::MenuPlugin,
             game::GamePlugin,
             graphics::GraphicsPlugin,
+            settings_ui::SettingsPlugin,
         ))
         .add_systems(Update, (detect_screen_size, update_camera_projection))
         .run();

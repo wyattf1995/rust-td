@@ -6,11 +6,14 @@ use crate::graphics::shapes::{GameColors, ShapeSizes, ZDepth};
 
 use crate::loading::GameAssets;
 
+use crate::persistence::GameSettings;
+
 use super::{
     abilities::PlayerAbilities,
     economy::{PlayerEconomy, KillStreak},
     map::GameMap,
     rand_simple,
+    stats::GameStats,
     GameEntity,
     ScreenShake,
 };
@@ -160,6 +163,7 @@ pub struct Enemy {
     pub poison_damage: f32,         // Damage per second from poison
     pub poison_timer: Option<Timer>, // Duration of poison effect
     pub bonus_armor: f32,           // Extra armor from wave modifiers
+    pub last_hit_by: Option<Entity>, // Tower entity that last dealt damage (for stats)
 }
 
 impl Enemy {
@@ -177,6 +181,7 @@ impl Enemy {
             poison_damage: 0.0,
             poison_timer: None,
             bonus_armor: 0.0,
+            last_hit_by: None,
         }
     }
 
@@ -261,6 +266,12 @@ impl WaveModifier {
     }
 }
 
+/// Preview data for the next wave
+pub struct WavePreview {
+    pub counts: Vec<(EnemyType, usize)>,
+    pub modifier: WaveModifier,
+}
+
 /// Wave manager - infinite scaling survival mode
 #[derive(Resource)]
 pub struct WaveManager {
@@ -300,19 +311,32 @@ impl WaveManager {
     pub fn start_wave(&mut self) {
         let wave_num = self.current_wave + 1;
 
-        // Calculate health multiplier: gentle early, steep late game
-        // Wave 1: 1.0x, Wave 6: ~1.4x, Wave 10: ~2.0x, Wave 15: ~3.0x, Wave 20: ~4.2x
+        let (health_mult, modifier) = Self::compute_wave_params(wave_num);
+        self.health_multiplier = health_mult;
+        self.current_modifier = modifier;
+
+        // Calculate spawn delay: starts at 1.0s, decreases to minimum 0.3s
+        let spawn_delay = (1.0 - (wave_num as f32 * 0.03)).max(0.3);
+        self.spawn_timer = Timer::from_seconds(spawn_delay, TimerMode::Repeating);
+
+        // Generate enemies for this wave
+        self.enemies_to_spawn = Self::generate_wave_enemies(wave_num, self.health_multiplier, self.current_modifier);
+
+        self.wave_active = true;
+        self.perfect_wave = true;
+    }
+
+    /// Compute health_multiplier and modifier for a given wave number (without mutating)
+    fn compute_wave_params(wave_num: usize) -> (f32, WaveModifier) {
         let base_mult = 1.0 + (wave_num as f32).powf(1.25) * 0.05;
-        // Additional late-game scaling to counter upgraded towers
         let late_game_mult = if wave_num > 12 {
             1.0 + (wave_num - 12) as f32 * 0.08
         } else {
             1.0
         };
-        self.health_multiplier = base_mult * late_game_mult;
+        let mut health_multiplier = base_mult * late_game_mult;
 
-        // Determine wave modifier (every 3rd wave after wave 5)
-        self.current_modifier = if wave_num >= 6 && wave_num % 3 == 0 {
+        let modifier = if wave_num >= 6 && wave_num % 3 == 0 {
             match (wave_num / 3) % 5 {
                 0 => WaveModifier::SpeedBoost,
                 1 => WaveModifier::Swarm,
@@ -324,32 +348,45 @@ impl WaveManager {
             WaveModifier::None
         };
 
-        // Apply Swarm modifier: halve health, will double count in generate_wave_enemies
-        if self.current_modifier == WaveModifier::Swarm {
-            self.health_multiplier *= 0.5;
+        if modifier == WaveModifier::Swarm {
+            health_multiplier *= 0.5;
         }
 
-        // Calculate spawn delay: starts at 1.0s, decreases to minimum 0.3s
-        let spawn_delay = (1.0 - (wave_num as f32 * 0.03)).max(0.3);
-        self.spawn_timer = Timer::from_seconds(spawn_delay, TimerMode::Repeating);
+        (health_multiplier, modifier)
+    }
 
-        // Generate enemies for this wave
-        self.enemies_to_spawn = self.generate_wave_enemies(wave_num);
+    /// Preview the next wave composition (without starting it)
+    pub fn preview_next_wave(&self) -> WavePreview {
+        let wave_num = self.current_wave + 1;
+        let (health_mult, modifier) = Self::compute_wave_params(wave_num);
+        let enemies = Self::generate_wave_enemies(wave_num, health_mult, modifier);
 
-        self.wave_active = true;
-        self.perfect_wave = true;
+        // Aggregate counts per enemy type
+        let mut counts_map: Vec<(EnemyType, usize)> = Vec::new();
+        for (etype, _) in &enemies {
+            if let Some(entry) = counts_map.iter_mut().find(|(t, _)| t == etype) {
+                entry.1 += 1;
+            } else {
+                counts_map.push((*etype, 1));
+            }
+        }
+
+        WavePreview {
+            counts: counts_map,
+            modifier,
+        }
     }
 
     /// Procedurally generate enemies for a wave
-    fn generate_wave_enemies(&self, wave_num: usize) -> Vec<(EnemyType, f32)> {
-        let multiplier = self.health_multiplier;
+    fn generate_wave_enemies(wave_num: usize, health_multiplier: f32, modifier: WaveModifier) -> Vec<(EnemyType, f32)> {
+        let multiplier = health_multiplier;
 
         // Base enemy count scaling: ramps up more in late game
         // Early waves (1-7) have fewer enemies to give time to build economy
         let early_wave_factor = if wave_num <= 4 { 0.7 } else if wave_num <= 7 { 0.85 } else { 1.0 };
 
         // Apply wave modifier to enemy count
-        let modifier_factor = match self.current_modifier {
+        let modifier_factor = match modifier {
             WaveModifier::Swarm => 2.0,     // Double enemies (but half HP applied in start_wave)
             WaveModifier::GoldRush => 1.5,  // 50% more enemies
             _ => 1.0,
@@ -526,6 +563,7 @@ pub struct EnemyKilledEvent {
     pub position: Vec3,
     pub enemy_type: EnemyType,
     pub path_index: usize,
+    pub last_hit_by: Option<Entity>,
 }
 
 #[derive(Event)]
@@ -766,6 +804,7 @@ fn enemy_health_check(
                 position: transform.translation,
                 enemy_type: enemy.enemy_type,
                 path_index: enemy.path_index,
+                last_hit_by: enemy.last_hit_by,
             });
         }
     }
@@ -876,6 +915,8 @@ fn handle_enemy_killed(
     abilities: Res<PlayerAbilities>,
     assets: Res<GameAssets>,
     mut screen_shake: ResMut<ScreenShake>,
+    settings: Res<GameSettings>,
+    mut stats: ResMut<GameStats>,
     health_bars: Query<(Entity, &HealthBar)>,
     health_fills: Query<(Entity, &HealthBarFill)>,
     shadows: Query<(Entity, &FlyingShadow)>,
@@ -904,6 +945,13 @@ fn handle_enemy_killed(
         economy.gold += multiplied_reward;
         economy.score += multiplied_reward;
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
+
+        // Track stats
+        stats.record_kill(event.enemy_type, multiplied_reward);
+        stats.update_max_combo(kill_streak.count);
+        if let Some(tower_entity) = event.last_hit_by {
+            stats.record_kill_tower(tower_entity);
+        }
 
         // Spawn gold earned toast (bigger and brighter during Gold Rush)
         {
@@ -946,7 +994,10 @@ fn handle_enemy_killed(
         // Spawn death particle burst (type-colored scatter)
         let death_pos = event.position.truncate();
         let particle_color = event.enemy_type.color();
-        for i in 0..ShapeSizes::DEATH_PARTICLE_COUNT {
+        let particle_count = settings.particle_density.death_particle_count();
+
+        // Regular scatter particles
+        for i in 0..particle_count {
             let seed = death_pos.x + i as f32;
             let angle = rand_simple(seed) * std::f32::consts::TAU;
             let speed = 80.0 + rand_simple(seed + 100.0) * 40.0;
@@ -968,6 +1019,40 @@ fn handle_enemy_killed(
                 },
                 GameEntity,
             ));
+        }
+
+        // Core particles: larger, brighter, slower (Medium/High density only)
+        if particle_count >= 8 {
+            let core_count = if particle_count >= 12 { 3 } else { 2 };
+            let srgba = particle_color.to_srgba();
+            let bright_color = Color::srgb(
+                (srgba.red * 1.4).min(1.0),
+                (srgba.green * 1.4).min(1.0),
+                (srgba.blue * 1.4).min(1.0),
+            );
+            for i in 0..core_count {
+                let seed = death_pos.y + i as f32 * 3.7;
+                let angle = rand_simple(seed) * std::f32::consts::TAU;
+                let speed = 40.0 + rand_simple(seed + 200.0) * 30.0;
+                let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
+
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: bright_color,
+                            custom_size: Some(Vec2::splat(9.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(death_pos.extend(ZDepth::DEATH_EFFECT + 0.05)),
+                        ..default()
+                    },
+                    DeathEffect {
+                        lifetime: Timer::from_seconds(0.5, TimerMode::Once),
+                        velocity,
+                    },
+                    GameEntity,
+                ));
+            }
         }
 
         // Boss kills get extra screen shake
@@ -1105,6 +1190,7 @@ fn handle_enemy_escaped(
     mut economy: ResMut<PlayerEconomy>,
     mut wave_manager: ResMut<WaveManager>,
     mut next_state: ResMut<NextState<GameState>>,
+    mut stats: ResMut<GameStats>,
     health_bars: Query<(Entity, &HealthBar)>,
     health_fills: Query<(Entity, &HealthBarFill)>,
     shadows: Query<(Entity, &FlyingShadow)>,
@@ -1113,6 +1199,7 @@ fn handle_enemy_escaped(
         economy.lives = economy.lives.saturating_sub(1);
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
         wave_manager.perfect_wave = false;
+        stats.record_escape();
 
         // Despawn enemy
         if let Some(entity_commands) = commands.get_entity(event.enemy) {
@@ -1132,6 +1219,7 @@ fn check_wave_complete(
     mut economy: ResMut<PlayerEconomy>,
     analytics: Res<Analytics>,
     time: Res<Time>,
+    mut stats: ResMut<GameStats>,
 ) {
     if wave_manager.wave_active
         && wave_manager.enemies_to_spawn.is_empty()
@@ -1149,6 +1237,8 @@ fn check_wave_complete(
         // Store interest and bonus for UI display
         wave_manager.last_interest = interest;
         wave_manager.last_bonus = bonus;
+
+        stats.record_wave_complete(bonus, interest);
 
         let completed_wave = wave_manager.current_wave;
 
