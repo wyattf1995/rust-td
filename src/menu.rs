@@ -34,7 +34,6 @@ struct PlayButton;
 #[derive(Component)]
 struct MenuProjectile {
     velocity: Vec2,
-    color_index: usize,
 }
 
 #[derive(Component)]
@@ -182,8 +181,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>) {
 }
 
 fn spawn_projectile(commands: &mut Commands, rng: &mut impl Rng, random_x: bool) {
-    let color_index = rng.gen_range(0..NEON_COLORS.len());
-    let (r, g, b) = NEON_COLORS[color_index];
+    let (r, g, b) = NEON_COLORS[rng.gen_range(0..NEON_COLORS.len())];
 
     // Random position - spawn from left side (or random x for initial setup)
     let x = if random_x {
@@ -228,7 +226,6 @@ fn spawn_projectile(commands: &mut Commands, rng: &mut impl Rng, random_x: bool)
         },
         MenuProjectile {
             velocity,
-            color_index,
         },
         MenuScreen,
     ));

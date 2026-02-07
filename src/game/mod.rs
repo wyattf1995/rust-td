@@ -4,7 +4,6 @@ pub mod abilities;
 pub mod economy;
 pub mod enemy;
 pub mod map;
-pub mod pool;
 pub mod projectile;
 pub mod spatial;
 pub mod tower;
@@ -26,7 +25,6 @@ impl Plugin for GamePlugin {
             economy::EconomyPlugin,
             ui::GameUiPlugin,
             spatial::SpatialPlugin,
-            pool::PoolPlugin,
             abilities::AbilitiesPlugin,
         ))
         .init_resource::<ScreenShake>()

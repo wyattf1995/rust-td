@@ -92,7 +92,6 @@ pub struct Frozen {
 #[derive(Component)]
 pub struct ArtilleryStrike {
     pub lifetime: Timer,
-    pub radius: f32,
 }
 
 /// Component for artillery targeting cursor
@@ -270,7 +269,6 @@ fn handle_artillery_ability(
             },
             ArtilleryStrike {
                 lifetime: Timer::from_seconds(0.5, TimerMode::Once),
-                radius: artillery_radius,
             },
             GameEntity,
         ));
@@ -387,9 +385,4 @@ fn update_artillery_target(
             }
         }
     }
-}
-
-/// Check if gold rush is active (called from enemy.rs)
-pub fn is_gold_rush_active(abilities: &PlayerAbilities) -> bool {
-    abilities.gold_rush_active.is_some()
 }

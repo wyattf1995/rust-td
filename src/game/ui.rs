@@ -93,9 +93,6 @@ struct TowerButtonBorder(TowerType);
 struct InfoPanel;
 
 #[derive(Component)]
-struct InfoPanelText;
-
-#[derive(Component)]
 struct InfoPanelName;
 
 #[derive(Component)]
@@ -141,9 +138,6 @@ struct UpgradeCostText;
 struct SellValueText;
 
 #[derive(Component)]
-struct EndlessModeButton;
-
-#[derive(Component)]
 struct CloseMenuButton;
 
 #[derive(Component)]
@@ -157,9 +151,6 @@ struct ComboDisplay;
 
 #[derive(Component)]
 struct ComboText;
-
-#[derive(Component)]
-struct WaveModifierText;
 
 #[derive(Component)]
 struct TargetingButton;
@@ -1268,7 +1259,7 @@ fn update_ability_display(
     mut cooldown_text_query: Query<(&AbilityCooldownText, &mut Text)>,
 ) {
     for (button, mut bg_color, mut border_color) in &mut button_query {
-        let (ready, active, remaining) = match button.0 {
+        let (ready, active, _remaining) = match button.0 {
             AbilityType::Freeze => (
                 abilities.freeze_ready,
                 false,
@@ -1277,11 +1268,9 @@ fn update_ability_display(
             AbilityType::GoldRush => (
                 abilities.gold_rush_ready,
                 abilities.gold_rush_active.is_some(),
-                if abilities.gold_rush_active.is_some() {
-                    abilities.gold_rush_active.as_ref().unwrap().remaining_secs()
-                } else {
-                    abilities.gold_rush_cooldown.remaining_secs()
-                },
+                abilities.gold_rush_active.as_ref()
+                    .map(|t| t.remaining_secs())
+                    .unwrap_or_else(|| abilities.gold_rush_cooldown.remaining_secs()),
             ),
             AbilityType::Artillery => (
                 abilities.artillery_ready,
@@ -1319,11 +1308,9 @@ fn update_ability_display(
             AbilityType::GoldRush => (
                 abilities.gold_rush_ready,
                 abilities.gold_rush_active.is_some(),
-                if abilities.gold_rush_active.is_some() {
-                    abilities.gold_rush_active.as_ref().unwrap().remaining_secs()
-                } else {
-                    abilities.gold_rush_cooldown.remaining_secs()
-                },
+                abilities.gold_rush_active.as_ref()
+                    .map(|t| t.remaining_secs())
+                    .unwrap_or_else(|| abilities.gold_rush_cooldown.remaining_secs()),
             ),
             AbilityType::Artillery => (
                 abilities.artillery_ready,

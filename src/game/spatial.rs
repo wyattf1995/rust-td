@@ -73,14 +73,6 @@ impl SpatialGrid {
         self.entity_cells.insert(entity, cell);
     }
 
-    /// Remove an entity
-    pub fn remove(&mut self, entity: Entity) {
-        if let Some(cell) = self.entity_cells.remove(&entity) {
-            if let Some(entities) = self.cells.get_mut(&cell) {
-                entities.retain(|&e| e != entity);
-            }
-        }
-    }
 }
 
 /// Update spatial grid with enemy positions

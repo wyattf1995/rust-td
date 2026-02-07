@@ -18,15 +18,6 @@ impl GameColors {
     // CORE PALETTE - Foundation colors used throughout
     // ==========================================================================
 
-    /// Deep space black - main background
-    pub const BACKGROUND: Color = Color::srgb(0.06, 0.06, 0.09);
-
-    /// Gunmetal - primary surface color
-    pub const GUNMETAL: Color = Color::srgb(0.12, 0.13, 0.16);
-
-    /// Steel - secondary surface / highlights
-    pub const STEEL: Color = Color::srgb(0.22, 0.24, 0.28);
-
     /// Bright accent for important UI elements
     pub const PRIMARY: Color = Color::srgb(0.0, 0.85, 0.95);      // Cyan
     pub const SECONDARY: Color = Color::srgb(0.95, 0.3, 0.4);     // Coral red
@@ -52,9 +43,6 @@ impl GameColors {
 
     /// Tower barrel (darker than base for depth)
     pub const TOWER_BARREL: Color = Color::srgb(0.1, 0.1, 0.12);
-
-    /// Tower outline/border
-    pub const TOWER_OUTLINE: Color = Color::srgb(0.08, 0.08, 0.1);
 
     // ==========================================================================
     // GRID & MAP COLORS
@@ -82,11 +70,6 @@ impl GameColors {
 
     /// Range indicator
     pub const RANGE_INDICATOR: Color = Color::srgba(0.3, 0.8, 1.0, 0.15);
-    pub const RANGE_INDICATOR_BORDER: Color = Color::srgba(0.3, 0.8, 1.0, 0.4);
-
-    // Legacy aliases for compatibility
-    pub const TILE_BLOCKED: Color = Color::srgb(0.08, 0.08, 0.1);
-    pub const TILE_HOVER: Color = Color::srgb(0.25, 0.25, 0.35);
 
     // ==========================================================================
     // TERRAIN COLORS - Muted, doesn't compete with gameplay elements
@@ -114,9 +97,6 @@ impl GameColors {
     pub const ENEMY_SPLITTER: Color = Color::srgb(0.7, 0.35, 0.8); // Violet
     pub const ENEMY_MINI_SPLITTER: Color = Color::srgb(0.8, 0.5, 0.9); // Light violet
 
-    /// Enemy outline for better visibility
-    pub const ENEMY_OUTLINE: Color = Color::srgb(0.05, 0.05, 0.07);
-
     // ==========================================================================
     // PROJECTILE COLORS - Matching tower accents but brighter/glowing
     // ==========================================================================
@@ -143,16 +123,12 @@ impl GameColors {
     pub const BUTTON_NORMAL: Color = Color::srgb(0.14, 0.15, 0.18);
     pub const BUTTON_HOVER: Color = Color::srgb(0.2, 0.22, 0.26);
     pub const BUTTON_SELECTED: Color = Color::srgb(0.25, 0.28, 0.34);
-    pub const BUTTON_BORDER: Color = Color::srgb(0.28, 0.3, 0.35);
     pub const BUTTON_START: Color = Color::srgb(0.15, 0.4, 0.25);
     pub const BUTTON_START_HOVER: Color = Color::srgb(0.2, 0.5, 0.3);
     pub const BUTTON_START_PRESSED: Color = Color::srgb(0.1, 0.3, 0.18);
 
     pub const UI_OVERLAY: Color = Color::srgba(0.04, 0.04, 0.06, 0.85);
     pub const GAME_OVER_OVERLAY: Color = Color::srgba(0.02, 0.02, 0.03, 0.9);
-    pub const UI_PANEL: Color = Color::srgb(0.1, 0.1, 0.13);
-    pub const UI_PANEL_BORDER: Color = Color::srgb(0.2, 0.22, 0.26);
-
     // ==========================================================================
     // EFFECT COLORS
     // ==========================================================================
@@ -166,8 +142,6 @@ impl GameColors {
     pub const ABILITY_GOLD_RUSH: Color = Color::srgb(1.0, 0.9, 0.3);
     pub const ABILITY_NUKE: Color = Color::srgb(1.0, 0.45, 0.25);
 
-    pub const COMBO_TEXT: Color = Color::srgb(1.0, 0.8, 0.2);
-    pub const SYNERGY_TEXT: Color = Color::srgb(0.4, 1.0, 0.6);
 }
 
 /// Shape sizes - refined for visual polish
@@ -178,16 +152,13 @@ impl ShapeSizes {
     // GRID
     // ==========================================================================
     pub const TILE: f32 = 50.0;
-    pub const TILE_GAP: f32 = 2.0;
     pub const TILE_INNER: f32 = 46.0;  // TILE - TILE_GAP*2 for visual border
-    pub const TILE_BORDER: f32 = 1.0;
 
     // ==========================================================================
     // TOWERS
     // ==========================================================================
     pub const TOWER: f32 = 38.0;           // Main tower body
     pub const TOWER_CORE: f32 = 28.0;      // Inner accent area
-    pub const TOWER_BORDER: f32 = 2.0;     // Outline thickness
     pub const TOWER_BARREL_WIDTH: f32 = 6.0;
     pub const TOWER_BARREL_HEIGHT: f32 = 18.0;
 
@@ -202,18 +173,12 @@ impl ShapeSizes {
     pub const ENEMY_BOSS: f32 = 52.0;
     pub const ENEMY_SPLITTER: f32 = 32.0;
     pub const ENEMY_MINI_SPLITTER: f32 = 16.0;
-    pub const ENEMY_BORDER: f32 = 2.0;
-
     // ==========================================================================
     // PROJECTILES
     // ==========================================================================
     pub const PROJECTILE_BASIC: f32 = 7.0;
     pub const PROJECTILE_SPLASH: f32 = 10.0;
     pub const PROJECTILE_SLOW: f32 = 8.0;
-    pub const PROJECTILE_SNIPER: f32 = 12.0;
-    pub const PROJECTILE_RAPID: f32 = 5.0;
-    pub const PROJECTILE_CHAIN: f32 = 8.0;
-    pub const PROJECTILE_POISON: f32 = 8.0;
     pub const PROJECTILE_TRAIL: f32 = 3.0;
 
     // ==========================================================================
@@ -239,5 +204,4 @@ impl ShapeSizes {
     pub const BUFF_AURA_RANGE: f32 = 120.0;
     pub const DAMAGE_TEXT_SIZE: f32 = 14.0;
     pub const MUZZLE_FLASH: f32 = 12.0;
-    pub const DEATH_EFFECT: f32 = 35.0;
 }

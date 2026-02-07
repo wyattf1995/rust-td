@@ -215,7 +215,6 @@ pub struct HealthBarFill {
 #[derive(Component)]
 pub struct DeathEffect {
     pub lifetime: Timer,
-    pub initial_size: f32,
 }
 
 /// Floating gold number when enemy killed
@@ -467,11 +466,6 @@ impl WaveManager {
         }
 
         enemies
-    }
-
-    pub fn total_waves(&self) -> usize {
-        // Infinite mode - just show current progress
-        self.current_wave + 1
     }
 
     /// Calculate wave completion bonus
@@ -897,7 +891,6 @@ fn handle_enemy_killed(
             },
             DeathEffect {
                 lifetime: Timer::from_seconds(0.3, TimerMode::Once),
-                initial_size: event.size,
             },
             GameEntity,
         ));

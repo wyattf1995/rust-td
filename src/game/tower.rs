@@ -440,12 +440,6 @@ pub struct TowerSynergies {
     pub extra_chain_bounces: u32,   // Additional bounces for chain
 }
 
-impl TowerSynergies {
-    pub fn has_synergy(&self, synergy: SynergyType) -> bool {
-        self.active.contains(&synergy)
-    }
-}
-
 /// Event to place a tower
 #[derive(Event)]
 pub struct PlaceTowerEvent {

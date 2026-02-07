@@ -86,10 +86,6 @@ impl KillStreak {
         }
     }
 
-    /// Check if combo is active and worth displaying (3+ kills)
-    pub fn is_displayable(&self) -> bool {
-        self.active && self.count >= 3
-    }
 }
 
 fn reset_kill_streak(mut streak: ResMut<KillStreak>, active: Option<Res<super::GameActive>>) {
