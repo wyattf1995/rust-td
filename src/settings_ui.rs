@@ -314,9 +314,31 @@ fn settings_button_system(
                 }
             }
             Interaction::Hovered => {
-                *color = Color::srgba(1.0, 1.0, 1.0, 0.15).into();
+                // Brighten current on/off color for hover feedback
+                let is_on = match toggle.0 {
+                    SettingField::ScreenShake => settings.screen_shake,
+                    SettingField::ParticleDensity => true,
+                    SettingField::DamageNumbers => settings.show_damage_numbers,
+                    SettingField::RangeOnHover => settings.show_range_on_hover,
+                };
+                let base = if is_on { TOGGLE_ON } else { TOGGLE_OFF };
+                let srgba = base.to_srgba();
+                *color = Color::srgb(
+                    (srgba.red + 0.15).min(1.0),
+                    (srgba.green + 0.15).min(1.0),
+                    (srgba.blue + 0.15).min(1.0),
+                ).into();
             }
-            Interaction::None => {}
+            Interaction::None => {
+                // Restore correct on/off color
+                let is_on = match toggle.0 {
+                    SettingField::ScreenShake => settings.screen_shake,
+                    SettingField::ParticleDensity => true,
+                    SettingField::DamageNumbers => settings.show_damage_numbers,
+                    SettingField::RangeOnHover => settings.show_range_on_hover,
+                };
+                *color = if is_on { TOGGLE_ON } else { TOGGLE_OFF }.into();
+            }
         }
     }
 
