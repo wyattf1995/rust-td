@@ -142,7 +142,7 @@ struct WavePreviewPanel;
 struct WavePreviewText;
 
 #[derive(Component)]
-struct TowerContextMenu;
+struct TowerDetailPanel;
 
 #[derive(Component)]
 struct SellButton;
@@ -156,8 +156,6 @@ struct UpgradeCostText;
 #[derive(Component)]
 struct SellValueText;
 
-#[derive(Component)]
-struct CloseMenuButton;
 
 #[derive(Component)]
 struct TowerStatsText;
@@ -754,84 +752,38 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
             ));
         });
 
-    // Tower context menu (initially hidden) - for upgrade/sell with stats
+    // Tower detail panel (fixed right side, initially hidden) - for upgrade/sell with stats
     commands
         .spawn((
             NodeBundle {
                 style: Style {
-                    width: Val::Px(200.0),
+                    width: Val::Px(150.0),
                     height: Val::Auto,
                     flex_direction: FlexDirection::Column,
                     justify_content: JustifyContent::FlexStart,
                     align_items: AlignItems::Stretch,
-                    padding: UiRect::all(Val::Px(12.0)),
+                    padding: UiRect::all(Val::Px(8.0)),
                     position_type: PositionType::Absolute,
+                    right: Val::Px(10.0),
+                    top: Val::Px(60.0),
                     display: Display::None,
-                    border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
-                background_color: Color::srgba(0.08, 0.08, 0.12, 0.98).into(),
-                border_color: BorderColor(Color::srgba(0.3, 0.3, 0.4, 0.8)),
+                background_color: Color::srgba(0.0, 0.0, 0.0, 0.6).into(),
                 border_radius: BorderRadius::all(Val::Px(8.0)),
                 ..default()
             },
-            TowerContextMenu,
+            TowerDetailPanel,
             GameEntity,
         ))
         .with_children(|parent| {
-            // Header with tower name and close button
-            parent
-                .spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        align_items: AlignItems::Center,
-                        margin: UiRect::bottom(Val::Px(8.0)),
-                        ..default()
-                    },
-                    ..default()
-                })
-                .with_children(|parent| {
-                    // Tower name/level will be part of stats text
-                    parent.spawn(NodeBundle::default()); // Placeholder
-
-                    // Close button (X)
-                    parent
-                        .spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Px(22.0),
-                                    height: Val::Px(22.0),
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    ..default()
-                                },
-                                background_color: Color::srgba(0.4, 0.15, 0.15, 0.9).into(),
-                                border_radius: BorderRadius::all(Val::Px(4.0)),
-                                ..default()
-                            },
-                            CloseMenuButton,
-                        ))
-                        .with_children(|parent| {
-                            parent.spawn(TextBundle::from_section(
-                                "X",
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 14.0,
-                                    color: Color::WHITE,
-                                },
-                            ));
-                        });
-                });
-
             // Tower stats section with background
             parent
                 .spawn(NodeBundle {
                     style: Style {
                         width: Val::Percent(100.0),
-                        padding: UiRect::all(Val::Px(8.0)),
-                        margin: UiRect::bottom(Val::Px(8.0)),
+                        padding: UiRect::all(Val::Px(6.0)),
+                        margin: UiRect::bottom(Val::Px(6.0)),
                         ..default()
                     },
                     background_color: Color::srgba(0.15, 0.15, 0.2, 0.8).into(),
@@ -845,7 +797,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                 "Basic Tower Lv1\n",
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 13.0,
+                                    font_size: 12.0,
                                     color: Color::WHITE,
                                 },
                             ),
@@ -853,7 +805,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                 "DMG: 25  RNG: 150  SPD: 1.0/s",
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 11.0,
+                                    font_size: 10.0,
                                     color: Color::srgba(0.7, 0.8, 0.9, 1.0),
                                 },
                             ),
@@ -867,8 +819,8 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                 .spawn(NodeBundle {
                     style: Style {
                         width: Val::Percent(100.0),
-                        padding: UiRect::all(Val::Px(8.0)),
-                        margin: UiRect::bottom(Val::Px(8.0)),
+                        padding: UiRect::all(Val::Px(6.0)),
+                        margin: UiRect::bottom(Val::Px(6.0)),
                         ..default()
                     },
                     background_color: Color::srgba(0.1, 0.2, 0.15, 0.8).into(),
@@ -882,7 +834,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                 "Next Level\n",
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 11.0,
+                                    font_size: 10.0,
                                     color: GameColors::SUCCESS,
                                 },
                             ),
@@ -890,7 +842,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                 "DMG: 30 (+5)\nRNG: 165 (+15)\nSPD: 1.2/s (+0.2)",
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 10.0,
+                                    font_size: 9.0,
                                     color: Color::srgba(0.6, 0.95, 0.6, 1.0),
                                 },
                             ),
@@ -905,7 +857,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     "",
                     TextStyle {
                         font: assets.font.clone(),
-                        font_size: 11.0,
+                        font_size: 10.0,
                         color: Color::srgb(0.9, 0.7, 1.0), // Light purple for synergies
                     },
                 ).with_style(Style {
@@ -939,7 +891,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                             "Target: First [T]",
                             TextStyle {
                                 font: assets.font.clone(),
-                                font_size: 12.0,
+                                font_size: 11.0,
                                 color: Color::WHITE,
                             },
                         ),
@@ -969,7 +921,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                         "Choose Specialization:",
                         TextStyle {
                             font: assets.font.clone(),
-                            font_size: 12.0,
+                            font_size: 11.0,
                             color: GameColors::PRIMARY,
                         },
                     ).with_style(Style {
@@ -984,7 +936,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                 ButtonBundle {
                                     style: Style {
                                         width: Val::Percent(100.0),
-                                        min_height: Val::Px(40.0),
+                                        min_height: Val::Px(36.0),
                                         padding: UiRect::all(Val::Px(6.0)),
                                         justify_content: JustifyContent::Center,
                                         align_items: AlignItems::Center,
@@ -1004,7 +956,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                                         "",
                                         TextStyle {
                                             font: assets.font.clone(),
-                                            font_size: 11.0,
+                                            font_size: 10.0,
                                             color: Color::WHITE,
                                         },
                                     ),
@@ -1020,7 +972,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(32.0),
+                            height: Val::Px(28.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             margin: UiRect::bottom(Val::Px(6.0)),
@@ -1038,7 +990,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                             "Upgrade [U] - 30g",
                             TextStyle {
                                 font: assets.font.clone(),
-                                font_size: 13.0,
+                                font_size: 11.0,
                                 color: Color::WHITE,
                             },
                         ),
@@ -1052,7 +1004,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(32.0),
+                            height: Val::Px(28.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()
@@ -1069,7 +1021,7 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                             "Sell [S] +37g",
                             TextStyle {
                                 font: assets.font.clone(),
-                                font_size: 13.0,
+                                font_size: 11.0,
                                 color: Color::WHITE,
                             },
                         ),
@@ -2358,18 +2310,15 @@ fn update_tower_context_menu(
     map: Res<GameMap>,
     towers: Query<(Entity, &Tower, Option<&TowerSynergies>)>,
     mut selected_tower: ResMut<SelectedPlacedTower>,
-    mut context_menu: Query<(&mut Style, &Children), With<TowerContextMenu>>,
+    mut context_menu: Query<&mut Style, With<TowerDetailPanel>>,
     mut upgrade_text: Query<&mut Text, (With<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
     mut sell_text: Query<&mut Text, (With<SellValueText>, Without<UpgradeCostText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
     mut stats_text: Query<&mut Text, (With<TowerStatsText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
     mut preview_text: Query<&mut Text, (With<TowerUpgradePreview>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TargetingText>, Without<SynergyText>)>,
     mut targeting_text: Query<&mut Text, (With<TargetingText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<SynergyText>)>,
     mut synergy_text: Query<&mut Text, (With<SynergyText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>)>,
-    windows: Query<&Window>,
-    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     pointer: Res<super::PointerState>,
     economy: Res<PlayerEconomy>,
-    bevy_ui_scale: Res<bevy::ui::UiScale>,
 ) {
     // Left-click or touch to select/deselect towers
     if pointer.just_pressed {
@@ -2394,26 +2343,11 @@ fn update_tower_context_menu(
         }
     }
 
-    // Update context menu visibility and position
-    for (mut style, _) in &mut context_menu {
+    // Update detail panel visibility
+    for mut style in &mut context_menu {
         if let Some(tower_entity) = selected_tower.0 {
             if let Ok((_, tower, synergies)) = towers.get(tower_entity) {
                 style.display = Display::Flex;
-
-                // Position near the tower using camera projection
-                if let (Ok(window), Ok((camera, cam_transform))) = (windows.get_single(), camera_q.get_single()) {
-                    let world_pos = GameMap::grid_to_world(tower.grid_x, tower.grid_y);
-                    let ui_scale = bevy_ui_scale.0.max(0.01);
-                    if let Some(screen_pos) = camera.world_to_viewport(cam_transform, world_pos.extend(0.0)) {
-                        // Divide by UiScale since Val::Px values get multiplied by it
-                        let screen_x = (screen_pos.x + 40.0) / ui_scale;
-                        let screen_y = (screen_pos.y - 60.0) / ui_scale;
-                        let max_x = (window.width() - 200.0) / ui_scale;
-                        let max_y = (window.height() - 220.0) / ui_scale;
-                        style.left = Val::Px(screen_x.clamp(0.0, max_x.max(0.0)));
-                        style.top = Val::Px(screen_y.clamp(0.0, max_y.max(0.0)));
-                    }
-                }
 
                 // Get current attack speed
                 let attack_speed = tower.attack_speed();
@@ -2577,19 +2511,15 @@ fn update_spec_panel(
 fn tower_context_buttons(
     mut upgrade_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (With<UpgradeButton>, Without<SellButton>, Without<CloseMenuButton>, Without<TargetingButton>),
+        (With<UpgradeButton>, Without<SellButton>, Without<TargetingButton>),
     >,
     mut sell_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (With<SellButton>, Without<UpgradeButton>, Without<CloseMenuButton>, Without<TargetingButton>),
-    >,
-    mut close_query: Query<
-        (&Interaction, &mut BackgroundColor),
-        (With<CloseMenuButton>, Without<UpgradeButton>, Without<SellButton>, Without<TargetingButton>),
+        (With<SellButton>, Without<UpgradeButton>, Without<TargetingButton>),
     >,
     mut targeting_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (With<TargetingButton>, Without<UpgradeButton>, Without<SellButton>, Without<CloseMenuButton>),
+        (With<TargetingButton>, Without<UpgradeButton>, Without<SellButton>),
     >,
     mut selected_tower: ResMut<SelectedPlacedTower>,
     mut towers: Query<&mut Tower>,
@@ -2600,23 +2530,6 @@ fn tower_context_buttons(
     mut targeting_text: Query<&mut Text, With<TargetingText>>,
     mut ui_clicked: ResMut<UiClicked>,
 ) {
-    // Close button
-    for (interaction, mut color) in &mut close_query {
-        match *interaction {
-            Interaction::Pressed => {
-                selected_tower.0 = None;
-                ui_clicked.0 = true;
-            }
-            Interaction::Hovered => {
-                *color = Color::srgb(0.6, 0.25, 0.25).into();
-                ui_clicked.0 = true;
-            }
-            Interaction::None => {
-                *color = Color::srgba(0.4, 0.15, 0.15, 0.9).into();
-            }
-        }
-    }
-
     // Check if we can afford upgrade and it's allowed
     let can_afford = if let Some(tower_entity) = selected_tower.0 {
         if let Ok(tower) = towers.get(tower_entity) {
