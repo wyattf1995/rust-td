@@ -10,6 +10,7 @@ use super::{
     abilities::PlayerAbilities,
     economy::{PlayerEconomy, KillStreak},
     map::GameMap,
+    rand_simple,
     GameEntity,
     ScreenShake,
 };
@@ -805,6 +806,37 @@ fn update_health_bars(
     }
 }
 
+/// Despawn health bars, health fills, and flying shadows associated with an enemy.
+fn despawn_enemy_visuals(
+    commands: &mut Commands,
+    enemy: Entity,
+    health_bars: &Query<(Entity, &HealthBar)>,
+    health_fills: &Query<(Entity, &HealthBarFill)>,
+    shadows: &Query<(Entity, &FlyingShadow)>,
+) {
+    for (entity, bar) in health_bars {
+        if bar.enemy == enemy {
+            if let Some(entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn_recursive();
+            }
+        }
+    }
+    for (entity, fill) in health_fills {
+        if fill.enemy == enemy {
+            if let Some(entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn_recursive();
+            }
+        }
+    }
+    for (entity, shadow) in shadows {
+        if shadow.enemy == enemy {
+            if let Some(entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn_recursive();
+            }
+        }
+    }
+}
+
 fn handle_enemy_killed(
     mut commands: Commands,
     mut events: EventReader<EnemyKilledEvent>,
@@ -903,30 +935,7 @@ fn handle_enemy_killed(
             entity_commands.despawn_recursive();
         }
 
-        // Despawn health bars
-        for (entity, bar) in &health_bars {
-            if bar.enemy == event.enemy {
-                if let Some(entity_commands) = commands.get_entity(entity) {
-                    entity_commands.despawn_recursive();
-                }
-            }
-        }
-        for (entity, fill) in &health_fills {
-            if fill.enemy == event.enemy {
-                if let Some(entity_commands) = commands.get_entity(entity) {
-                    entity_commands.despawn_recursive();
-                }
-            }
-        }
-
-        // Despawn flying shadow
-        for (entity, shadow) in &shadows {
-            if shadow.enemy == event.enemy {
-                if let Some(entity_commands) = commands.get_entity(entity) {
-                    entity_commands.despawn_recursive();
-                }
-            }
-        }
+        despawn_enemy_visuals(&mut commands, event.enemy, &health_bars, &health_fills, &shadows);
     }
 }
 
@@ -1060,30 +1069,7 @@ fn handle_enemy_escaped(
             entity_commands.despawn_recursive();
         }
 
-        // Despawn health bars
-        for (entity, bar) in &health_bars {
-            if bar.enemy == event.enemy {
-                if let Some(entity_commands) = commands.get_entity(entity) {
-                    entity_commands.despawn_recursive();
-                }
-            }
-        }
-        for (entity, fill) in &health_fills {
-            if fill.enemy == event.enemy {
-                if let Some(entity_commands) = commands.get_entity(entity) {
-                    entity_commands.despawn_recursive();
-                }
-            }
-        }
-
-        // Despawn flying shadow
-        for (entity, shadow) in &shadows {
-            if shadow.enemy == event.enemy {
-                if let Some(entity_commands) = commands.get_entity(entity) {
-                    entity_commands.despawn_recursive();
-                }
-            }
-        }
+        despawn_enemy_visuals(&mut commands, event.enemy, &health_bars, &health_fills, &shadows);
 
         if economy.lives == 0 {
             next_state.set(GameState::GameOver);
@@ -1137,11 +1123,6 @@ fn check_wave_complete(
         // No victory condition - infinite survival mode!
         // Game continues until player loses all lives
     }
-}
-
-// Simple pseudo-random based on position (deterministic)
-fn rand_simple(seed: f32) -> f32 {
-    ((seed * 12.9898).sin() * 43758.5453).fract()
 }
 
 fn update_gold_numbers(

@@ -179,6 +179,11 @@ impl ShapeSizes {
     pub const PROJECTILE_BASIC: f32 = 7.0;
     pub const PROJECTILE_SPLASH: f32 = 10.0;
     pub const PROJECTILE_SLOW: f32 = 8.0;
+    pub const PROJECTILE_SNIPER: f32 = 14.0;
+    pub const PROJECTILE_RAPID: f32 = 5.0;
+    pub const PROJECTILE_CHAIN: f32 = 10.0;
+    pub const PROJECTILE_POISON: f32 = 9.0;
+    pub const PROJECTILE_BUFF: f32 = 0.0;
     pub const PROJECTILE_TRAIL: f32 = 3.0;
 
     // ==========================================================================

@@ -14,6 +14,11 @@ use crate::analytics::{Analytics, track_with_context};
 use crate::GameState;
 use crate::graphics::shapes::GameColors;
 
+/// Simple pseudo-random based on position (deterministic)
+pub(crate) fn rand_simple(seed: f32) -> f32 {
+    ((seed * 12.9898).sin() * 43758.5453).fract()
+}
+
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {

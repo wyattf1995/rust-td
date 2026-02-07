@@ -208,6 +208,32 @@ impl TowerType {
         }
     }
 
+    pub fn projectile_color(&self) -> Color {
+        match self {
+            TowerType::Basic => GameColors::PROJECTILE_BASIC,
+            TowerType::Splash => GameColors::PROJECTILE_SPLASH,
+            TowerType::Slow => GameColors::PROJECTILE_SLOW,
+            TowerType::Sniper => GameColors::PROJECTILE_SNIPER,
+            TowerType::Rapid => GameColors::PROJECTILE_RAPID,
+            TowerType::Chain => GameColors::PROJECTILE_CHAIN,
+            TowerType::Poison => GameColors::PROJECTILE_POISON,
+            TowerType::Buff => GameColors::PROJECTILE_BASIC, // Buff doesn't shoot
+        }
+    }
+
+    pub fn projectile_size(&self) -> f32 {
+        match self {
+            TowerType::Basic => ShapeSizes::PROJECTILE_BASIC,
+            TowerType::Splash => ShapeSizes::PROJECTILE_SPLASH,
+            TowerType::Slow => ShapeSizes::PROJECTILE_SLOW,
+            TowerType::Sniper => ShapeSizes::PROJECTILE_SNIPER,
+            TowerType::Rapid => ShapeSizes::PROJECTILE_RAPID,
+            TowerType::Chain => ShapeSizes::PROJECTILE_CHAIN,
+            TowerType::Poison => ShapeSizes::PROJECTILE_POISON,
+            TowerType::Buff => ShapeSizes::PROJECTILE_BUFF,
+        }
+    }
+
     /// Whether this tower can attack enemies
     pub fn can_attack(&self) -> bool {
         !matches!(self, TowerType::Buff)

@@ -6,6 +6,7 @@ use crate::loading::GameAssets;
 
 use super::{
     enemy::Enemy,
+    rand_simple,
     spatial::SpatialGrid,
     tower::TowerType,
     GameEntity,
@@ -73,27 +74,8 @@ fn spawn_projectiles(
     enemies: Query<(&Transform, &Enemy)>,
 ) {
     for event in events.read() {
-        let color = match event.tower_type {
-            TowerType::Basic => GameColors::PROJECTILE_BASIC,
-            TowerType::Splash => GameColors::PROJECTILE_SPLASH,
-            TowerType::Slow => GameColors::PROJECTILE_SLOW,
-            TowerType::Sniper => GameColors::PROJECTILE_SNIPER,
-            TowerType::Rapid => GameColors::PROJECTILE_RAPID,
-            TowerType::Chain => GameColors::PROJECTILE_CHAIN,
-            TowerType::Poison => GameColors::PROJECTILE_POISON,
-            TowerType::Buff => GameColors::PROJECTILE_BASIC, // Buff doesn't shoot
-        };
-
-        let size = match event.tower_type {
-            TowerType::Basic => ShapeSizes::PROJECTILE_BASIC,
-            TowerType::Splash => ShapeSizes::PROJECTILE_SPLASH,
-            TowerType::Slow => ShapeSizes::PROJECTILE_SLOW,
-            TowerType::Sniper => 14.0,  // Larger sniper bullet
-            TowerType::Rapid => 5.0,    // Small rapid bullets
-            TowerType::Chain => 10.0,   // Medium chain lightning
-            TowerType::Poison => 9.0,   // Poison blob
-            TowerType::Buff => 0.0,     // Buff doesn't shoot
-        };
+        let color = event.tower_type.projectile_color();
+        let size = event.tower_type.projectile_size();
 
         let projectile_speed = 400.0;
 
@@ -192,16 +174,8 @@ fn projectile_movement(
         transform.translation.y += movement.y;
 
         // Spawn trail particle
-        let trail_color = match projectile.tower_type {
-            TowerType::Basic => GameColors::PROJECTILE_BASIC.with_alpha(0.5),
-            TowerType::Splash => GameColors::PROJECTILE_SPLASH.with_alpha(0.5),
-            TowerType::Slow => GameColors::PROJECTILE_SLOW.with_alpha(0.5),
-            TowerType::Sniper => GameColors::PROJECTILE_SNIPER.with_alpha(0.5),
-            TowerType::Rapid => GameColors::PROJECTILE_RAPID.with_alpha(0.5),
-            TowerType::Chain => GameColors::PROJECTILE_CHAIN.with_alpha(0.6),
-            TowerType::Poison => GameColors::PROJECTILE_POISON.with_alpha(0.5),
-            TowerType::Buff => GameColors::PROJECTILE_BASIC.with_alpha(0.5),
-        };
+        let trail_alpha = if matches!(projectile.tower_type, TowerType::Chain) { 0.6 } else { 0.5 };
+        let trail_color = projectile.tower_type.projectile_color().with_alpha(trail_alpha);
 
         commands.spawn((
             SpriteBundle {
@@ -427,11 +401,6 @@ fn spawn_damage_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, 
         },
         GameEntity,
     ));
-}
-
-// Simple pseudo-random based on position (deterministic)
-fn rand_simple(seed: f32) -> f32 {
-    ((seed * 12.9898).sin() * 43758.5453).fract()
 }
 
 fn update_damage_numbers(
