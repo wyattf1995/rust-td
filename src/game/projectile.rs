@@ -295,7 +295,7 @@ fn projectile_collision(
                     // Cryogenic: 15% chance to freeze (speed = 0 for 1s)
                     if projectile.specialization == Some(Specialization::Cryogenic) {
                         let freeze_roll = rand_simple(proj_pos.x * 7.3 + proj_pos.y);
-                        if freeze_roll < 0.15 {
+                        if freeze_roll < 0.12 {
                             enemy.apply_slow(1.0, 0.0); // Full freeze
                         }
                     }
@@ -402,8 +402,8 @@ fn projectile_collision(
                                 ..default()
                             },
                             NapalmZone {
-                                lifetime: Timer::from_seconds(3.0, TimerMode::Once),
-                                damage_per_sec: projectile.damage * 0.3,
+                                lifetime: Timer::from_seconds(2.5, TimerMode::Once),
+                                damage_per_sec: projectile.damage * 0.25,
                                 radius: splash_radius,
                                 tick_timer: Timer::from_seconds(0.5, TimerMode::Repeating),
                             },
@@ -539,8 +539,8 @@ fn projectile_collision(
         if let Some((next_target, _)) = best_target {
             // Arc: spawn mini AOE at bounce point
             if spec == Some(Specialization::Arc) {
-                let arc_radius = 25.0;
-                let arc_damage = bounce_damage * 0.4;
+                let arc_radius = 20.0;
+                let arc_damage = bounce_damage * 0.35;
                 let nearby_for_arc = spatial_grid.query_range(origin_pos, arc_radius);
                 for entity in nearby_for_arc {
                     if let Ok((_, mut arc_enemy, arc_transform)) = enemies.get_mut(entity) {

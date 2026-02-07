@@ -187,7 +187,7 @@ fn update_tower_idle_glow(
 
     for (core, mut sprite) in &mut cores {
         if let Ok((tower, _)) = towers.get(core.tower) {
-            let base_color = tower.tower_type.color();
+            let base_color = tower.accent_color();
             let brightness = 1.0 + 0.12 * (tower.level - 1) as f32;
 
             // Phase offset per tower grid position so they don't sync

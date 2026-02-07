@@ -196,6 +196,48 @@ impl Specialization {
         }
     }
 
+    /// Unique accent color for each specialization (for visual distinction)
+    pub fn color(&self) -> Color {
+        match self {
+            // Basic pair (blue base)
+            Specialization::Marksman => Color::srgb(0.5, 0.85, 1.0),   // Bright ice-blue (precision)
+            Specialization::Gunner => Color::srgb(0.85, 0.75, 0.3),    // Warm amber (aggressive)
+            // Splash pair (orange base)
+            Specialization::Napalm => Color::srgb(1.0, 0.3, 0.15),     // Deep red-orange (fire)
+            Specialization::Shockwave => Color::srgb(1.0, 0.9, 0.5),   // White-yellow (blast)
+            // Slow pair (cyan base)
+            Specialization::Cryogenic => Color::srgb(0.2, 0.6, 0.9),   // Deep ice blue (frozen)
+            Specialization::Blizzard => Color::srgb(0.7, 0.95, 1.0),   // White-cyan (snow)
+            // Sniper pair (magenta base)
+            Specialization::Railgun => Color::srgb(0.4, 0.5, 1.0),     // Blue-violet (energy beam)
+            Specialization::Assassin => Color::srgb(0.95, 0.2, 0.4),   // Crimson-red (lethal)
+            // Rapid pair (gold base)
+            Specialization::Minigun => Color::srgb(0.75, 0.8, 0.85),   // Silver (mechanical)
+            Specialization::Shotgun => Color::srgb(1.0, 0.55, 0.25),   // Red-orange (scattered fire)
+            // Chain pair (blue base)
+            Specialization::Tesla => Color::srgb(0.6, 0.9, 1.0),       // Bright white-blue (electric)
+            Specialization::Arc => Color::srgb(0.6, 0.4, 1.0),         // Purple-blue (plasma)
+        }
+    }
+
+    /// Short initial letter for level badge display
+    pub fn initial(&self) -> &'static str {
+        match self {
+            Specialization::Marksman => "M",
+            Specialization::Gunner => "G",
+            Specialization::Napalm => "N",
+            Specialization::Shockwave => "S",
+            Specialization::Cryogenic => "C",
+            Specialization::Blizzard => "B",
+            Specialization::Railgun => "R",
+            Specialization::Assassin => "A",
+            Specialization::Minigun => "M",
+            Specialization::Shotgun => "S",
+            Specialization::Tesla => "T",
+            Specialization::Arc => "A",
+        }
+    }
+
     /// Returns (damage_mult, range_mult, speed_mult) modifiers
     pub fn stat_modifiers(&self) -> (f32, f32, f32) {
         match self {
@@ -208,7 +250,7 @@ impl Specialization {
             Specialization::Railgun => (1.3, 1.15, 0.85),
             Specialization::Assassin => (1.0, 1.0, 1.1),
             Specialization::Minigun => (0.85, 1.0, 1.0),
-            Specialization::Shotgun => (0.6, 0.9, 0.8),
+            Specialization::Shotgun => (0.65, 0.95, 0.85),
             Specialization::Tesla => (0.9, 1.0, 1.0),
             Specialization::Arc => (0.85, 1.0, 1.0),
         }
@@ -398,6 +440,11 @@ impl Tower {
             cached_speed_mult: 1.0,
             cached_buff_pct: if tower_type == TowerType::Buff { 0.25 } else { 0.0 },
         }
+    }
+
+    /// Returns the spec color if specialized, otherwise the base tower type color
+    pub fn accent_color(&self) -> Color {
+        self.specialization.map(|s| s.color()).unwrap_or_else(|| self.tower_type.color())
     }
 
     pub fn cycle_targeting(&mut self) {
@@ -856,8 +903,8 @@ fn tower_attack(
                 tower.ramp_up_timer = 0.0;
                 tower.ramp_up_target = tower.target;
             }
-            // Ramp from 1x to 3x over 3 seconds
-            1.0 + (tower.ramp_up_timer / 3.0).min(1.0) * 2.0
+            // Ramp from 1x to 2.5x over 3.5 seconds
+            1.0 + (tower.ramp_up_timer / 3.5).min(1.0) * 1.5
         } else {
             1.0
         };
@@ -1070,7 +1117,8 @@ fn handle_tower_upgrade(
     mut stats: ResMut<GameStats>,
     mut towers: Query<(&mut Tower, &mut Sprite)>,
     mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
-    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>)>,
+    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<TowerBarrel>)>,
+    mut barrels: Query<(&TowerBarrel, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>)>,
 ) {
     for event in events.read() {
         if let Ok((mut tower, _sprite)) = towers.get_mut(event.tower) {
@@ -1080,8 +1128,8 @@ fn handle_tower_upgrade(
                 tower.upgrade();
                 stats.record_upgrade(event.tower, cost, tower.level);
 
-                // Update core visual - brighter accent with each level
-                let accent_color = tower.tower_type.color();
+                // Update core visual - use spec color if specialized, else tower type color
+                let accent_color = tower.accent_color();
                 let brightness = 1.0 + 0.12 * (tower.level - 1) as f32;
                 let upgraded_color = Color::srgb(
                     (accent_color.to_srgba().red * brightness).min(1.0),
@@ -1097,6 +1145,24 @@ fn handle_tower_upgrade(
                         let core_size = ShapeSizes::TOWER_CORE + (tower.level - 1) as f32 * 1.5;
                         core_sprite.custom_size = Some(Vec2::splat(core_size));
                         break;
+                    }
+                }
+
+                // Keep barrel tinted if tower has a specialization
+                if let Some(spec) = tower.specialization {
+                    let spec_color = spec.color();
+                    let barrel_base = GameColors::TOWER_BARREL.to_srgba();
+                    let spec_srgba = spec_color.to_srgba();
+                    let barrel_tint = Color::srgb(
+                        barrel_base.red * 0.85 + spec_srgba.red * 0.15,
+                        barrel_base.green * 0.85 + spec_srgba.green * 0.15,
+                        barrel_base.blue * 0.85 + spec_srgba.blue * 0.15,
+                    );
+                    for (barrel, mut barrel_sprite) in &mut barrels {
+                        if barrel.tower == event.tower {
+                            barrel_sprite.color = barrel_tint;
+                            break;
+                        }
                     }
                 }
 
@@ -1117,7 +1183,8 @@ fn handle_tower_specialization(
     mut stats: ResMut<GameStats>,
     mut towers: Query<(&mut Tower, &mut Sprite)>,
     mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
-    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>)>,
+    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<TowerBarrel>)>,
+    mut barrels: Query<(&TowerBarrel, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>)>,
 ) {
     for event in events.read() {
         if let Ok((mut tower, _sprite)) = towers.get_mut(event.tower) {
@@ -1127,8 +1194,8 @@ fn handle_tower_specialization(
                 tower.specialize(event.specialization);
                 stats.record_upgrade(event.tower, cost, tower.level);
 
-                // Update core visual
-                let accent_color = tower.tower_type.color();
+                // Update core visual with specialization-specific color
+                let accent_color = tower.accent_color();
                 let brightness = 1.0 + 0.12 * (tower.level - 1) as f32;
                 let upgraded_color = Color::srgb(
                     (accent_color.to_srgba().red * brightness).min(1.0),
@@ -1141,6 +1208,22 @@ fn handle_tower_specialization(
                         core_sprite.color = upgraded_color;
                         let core_size = ShapeSizes::TOWER_CORE + (tower.level - 1) as f32 * 1.5;
                         core_sprite.custom_size = Some(Vec2::splat(core_size));
+                        break;
+                    }
+                }
+
+                // Tint barrel with spec color (15% blend)
+                let spec_color = event.specialization.color();
+                let barrel_base = GameColors::TOWER_BARREL.to_srgba();
+                let spec_srgba = spec_color.to_srgba();
+                let barrel_tint = Color::srgb(
+                    barrel_base.red * 0.85 + spec_srgba.red * 0.15,
+                    barrel_base.green * 0.85 + spec_srgba.green * 0.15,
+                    barrel_base.blue * 0.85 + spec_srgba.blue * 0.15,
+                );
+                for (barrel, mut barrel_sprite) in &mut barrels {
+                    if barrel.tower == event.tower {
+                        barrel_sprite.color = barrel_tint;
                         break;
                     }
                 }
@@ -1204,8 +1287,12 @@ fn update_level_badges(
 ) {
     for (badge, mut text, mut badge_transform) in &mut badges {
         if let Ok((tower, tower_transform)) = towers.get(badge.tower) {
-            // Update badge text to show current level
-            text.sections[0].value = format!("{}", tower.level);
+            // Update badge text to show current level + spec initial
+            text.sections[0].value = if let Some(spec) = tower.specialization {
+                format!("{}{}", tower.level, spec.initial())
+            } else {
+                format!("{}", tower.level)
+            };
 
             // Keep badge position synced with tower (bottom-right corner)
             let badge_offset = Vec2::new(12.0, -12.0);
