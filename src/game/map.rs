@@ -648,6 +648,22 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>, sel
             ));
 
 
+            // Grid crosshair dot on buildable tiles
+            if tile_type == TileType::Empty {
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: Color::srgba(0.25, 0.28, 0.35, 0.2),
+                            custom_size: Some(Vec2::splat(3.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(pos.extend(ZDepth::GRID_DOT)),
+                        ..default()
+                    },
+                    GameEntity,
+                ));
+            }
+
             // Add decoration overlay for terrain tiles
             if let TileType::Blocked(terrain) = tile_type {
                 let decoration_color = match terrain {
@@ -770,6 +786,86 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>, sel
             },
             GameEntity,
         ));
+    }
+
+    // Path edge glow lines along path-to-non-path boundaries
+    {
+        let path_set: HashSet<(usize, usize)> = map.path.iter().cloned().collect();
+        for &(px, py) in &path_set {
+            let pos = GameMap::grid_to_world(px, py);
+            let half_tile = TILE_SIZE / 2.0 - 3.0; // inset from tile edge
+            let glow_color = Color::srgba(0.35, 0.4, 0.55, 0.15);
+
+            // Check 4 cardinal neighbors
+            // Up (+y)
+            if py + 1 >= GRID_HEIGHT || !path_set.contains(&(px, py + 1)) {
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: glow_color,
+                            custom_size: Some(Vec2::new(44.0, 1.5)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(
+                            Vec3::new(pos.x, pos.y + half_tile, ZDepth::PATH_EDGE_GLOW)
+                        ),
+                        ..default()
+                    },
+                    GameEntity,
+                ));
+            }
+            // Down (-y)
+            if py == 0 || !path_set.contains(&(px, py - 1)) {
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: glow_color,
+                            custom_size: Some(Vec2::new(44.0, 1.5)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(
+                            Vec3::new(pos.x, pos.y - half_tile, ZDepth::PATH_EDGE_GLOW)
+                        ),
+                        ..default()
+                    },
+                    GameEntity,
+                ));
+            }
+            // Right (+x)
+            if px + 1 >= GRID_WIDTH || !path_set.contains(&(px + 1, py)) {
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: glow_color,
+                            custom_size: Some(Vec2::new(1.5, 44.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(
+                            Vec3::new(pos.x + half_tile, pos.y, ZDepth::PATH_EDGE_GLOW)
+                        ),
+                        ..default()
+                    },
+                    GameEntity,
+                ));
+            }
+            // Left (-x)
+            if px == 0 || !path_set.contains(&(px - 1, py)) {
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: glow_color,
+                            custom_size: Some(Vec2::new(1.5, 44.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(
+                            Vec3::new(pos.x - half_tile, pos.y, ZDepth::PATH_EDGE_GLOW)
+                        ),
+                        ..default()
+                    },
+                    GameEntity,
+                ));
+            }
+        }
     }
 
     // Spawn entry point indicator (enemy spawn)

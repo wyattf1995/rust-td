@@ -49,6 +49,7 @@ impl Plugin for TowerPlugin {
                     update_muzzle_flashes,
                     update_level_badges,
                     update_buff_aura_visuals,
+                    update_upgrade_flashes,
                     tower_hotkeys,
                 )
                     .run_if(in_state(GameState::Playing)),
@@ -605,6 +606,31 @@ pub struct TowerCore {
     pub tower: Entity,
 }
 
+/// Corner bracket marks around tower base
+#[derive(Component)]
+pub struct TowerBracket {
+    pub tower: Entity,
+}
+
+/// Shadow beneath tower for visual grounding
+#[derive(Component)]
+pub struct TowerShadow {
+    pub tower: Entity,
+}
+
+/// Level ring glow at level 3+ (44px square behind 38px base)
+#[derive(Component)]
+pub struct TowerLevelRing {
+    pub tower: Entity,
+}
+
+/// Expanding white flash on upgrade/specialize
+#[derive(Component)]
+pub struct UpgradeFlash {
+    pub lifetime: Timer,
+    pub start_size: f32,
+    pub end_size: f32,
+}
 
 /// Tracks if a tower is being buffed
 #[derive(Component, Default)]
@@ -806,6 +832,59 @@ fn handle_tower_placement(
                     ..default()
                 },
                 BuffAuraIndicator { tower: tower_entity },
+                GameEntity,
+            ));
+        }
+
+        // Tower shadow (slightly offset for directional light feel)
+        commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: Color::srgba(0.02, 0.02, 0.04, 0.35),
+                    custom_size: Some(Vec2::splat(42.0)),
+                    ..default()
+                },
+                transform: Transform::from_translation(
+                    Vec3::new(pos.x + 1.5, pos.y - 1.5, ZDepth::TOWER_SHADOW)
+                ),
+                ..default()
+            },
+            TowerShadow { tower: tower_entity },
+            GameEntity,
+        ));
+
+        // Corner brackets (4 corners × 2 bars each = 8 sprites)
+        let bracket_color = accent_color.with_alpha(0.25);
+        let bracket_positions: [(f32, f32, f32, f32); 8] = [
+            // (x_offset, y_offset, width, height)
+            // Top-left
+            (-15.0, 20.0, 8.0, 1.5),   // horizontal
+            (-20.0, 15.0, 1.5, 8.0),   // vertical
+            // Top-right
+            (15.0, 20.0, 8.0, 1.5),
+            (20.0, 15.0, 1.5, 8.0),
+            // Bottom-left
+            (-15.0, -20.0, 8.0, 1.5),
+            (-20.0, -15.0, 1.5, 8.0),
+            // Bottom-right
+            (15.0, -20.0, 8.0, 1.5),
+            (20.0, -15.0, 1.5, 8.0),
+        ];
+
+        for (ox, oy, w, h) in bracket_positions {
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: bracket_color,
+                        custom_size: Some(Vec2::new(w, h)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(
+                        Vec3::new(pos.x + ox, pos.y + oy, ZDepth::TOWER_BRACKET)
+                    ),
+                    ..default()
+                },
+                TowerBracket { tower: tower_entity },
                 GameEntity,
             ));
         }
@@ -1057,6 +1136,9 @@ fn handle_tower_selling(
     badges: Query<(Entity, &TowerLevelBadge)>,
     buff_indicators: Query<(Entity, &BuffAuraIndicator)>,
     tower_cores: Query<(Entity, &TowerCore)>,
+    tower_brackets: Query<(Entity, &TowerBracket)>,
+    tower_shadows: Query<(Entity, &TowerShadow)>,
+    tower_rings: Query<(Entity, &TowerLevelRing)>,
 ) {
     for event in events.read() {
         if let Ok(tower) = towers.get(event.tower) {
@@ -1107,21 +1189,44 @@ fn handle_tower_selling(
                 }
             }
 
+            // Despawn corner brackets
+            for (entity, bracket) in &tower_brackets {
+                if bracket.tower == event.tower {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
+
+            // Despawn shadow
+            for (entity, shadow) in &tower_shadows {
+                if shadow.tower == event.tower {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
+
+            // Despawn level ring
+            for (entity, ring) in &tower_rings {
+                if ring.tower == event.tower {
+                    commands.entity(entity).despawn_recursive();
+                }
+            }
         }
     }
 }
 
 fn handle_tower_upgrade(
+    mut commands: Commands,
     mut events: EventReader<UpgradeTowerEvent>,
     mut economy: ResMut<PlayerEconomy>,
     mut stats: ResMut<GameStats>,
-    mut towers: Query<(&mut Tower, &mut Sprite)>,
+    mut towers: Query<(&mut Tower, &Transform, &mut Sprite)>,
     mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
-    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<TowerBarrel>)>,
-    mut barrels: Query<(&TowerBarrel, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>)>,
+    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<TowerBarrel>, Without<TowerBracket>)>,
+    mut barrels: Query<(&TowerBarrel, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>, Without<TowerBracket>)>,
+    mut brackets: Query<(&TowerBracket, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>, Without<TowerBarrel>)>,
+    level_rings: Query<&TowerLevelRing>,
 ) {
     for event in events.read() {
-        if let Ok((mut tower, _sprite)) = towers.get_mut(event.tower) {
+        if let Ok((mut tower, tower_transform, _sprite)) = towers.get_mut(event.tower) {
             let cost = tower.upgrade_cost();
             if cost > 0 && economy.gold >= cost {
                 economy.gold -= cost;
@@ -1166,6 +1271,63 @@ fn handle_tower_upgrade(
                     }
                 }
 
+                // Update bracket brightness (scales with level)
+                let bracket_alpha = (0.25 + 0.08 * (tower.level - 1) as f32).min(0.85);
+                let bracket_color = accent_color.with_alpha(bracket_alpha);
+                for (bracket, mut bracket_sprite) in &mut brackets {
+                    if bracket.tower == event.tower {
+                        bracket_sprite.color = bracket_color;
+                    }
+                }
+
+                // Spawn level ring at level 3+ (if not already present)
+                if tower.level >= 3 {
+                    let has_ring = level_rings.iter().any(|r| r.tower == event.tower);
+                    if !has_ring {
+                        let pos = tower_transform.translation.truncate();
+                        let ring_color = accent_color.with_alpha(0.12);
+                        commands.spawn((
+                            SpriteBundle {
+                                sprite: Sprite {
+                                    color: ring_color,
+                                    custom_size: Some(Vec2::splat(44.0)),
+                                    ..default()
+                                },
+                                transform: Transform::from_translation(
+                                    pos.extend(ZDepth::TOWER_LEVEL_RING)
+                                ),
+                                ..default()
+                            },
+                            TowerLevelRing { tower: event.tower },
+                            GameEntity,
+                        ));
+                    } else {
+                        // Update ring color/alpha for higher levels
+                        // Ring alpha increases +0.03 per level above 3
+                        // (handled in a separate pass below isn't needed since we just set it)
+                    }
+                }
+
+                // Spawn upgrade flash
+                let pos = tower_transform.translation.truncate();
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: Color::srgba(1.0, 1.0, 1.0, 0.6),
+                            custom_size: Some(Vec2::splat(30.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(pos.extend(ZDepth::UPGRADE_FLASH)),
+                        ..default()
+                    },
+                    UpgradeFlash {
+                        lifetime: Timer::from_seconds(0.15, TimerMode::Once),
+                        start_size: 30.0,
+                        end_size: 50.0,
+                    },
+                    GameEntity,
+                ));
+
                 // Update range indicator size
                 for (indicator, mut ind_sprite) in &mut range_indicators {
                     if indicator.tower == event.tower {
@@ -1178,16 +1340,19 @@ fn handle_tower_upgrade(
 }
 
 fn handle_tower_specialization(
+    mut commands: Commands,
     mut events: EventReader<SpecializeTowerEvent>,
     mut economy: ResMut<PlayerEconomy>,
     mut stats: ResMut<GameStats>,
-    mut towers: Query<(&mut Tower, &mut Sprite)>,
+    mut towers: Query<(&mut Tower, &Transform, &mut Sprite)>,
     mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
-    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<TowerBarrel>)>,
-    mut barrels: Query<(&TowerBarrel, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>)>,
+    mut range_indicators: Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<TowerBarrel>, Without<TowerBracket>)>,
+    mut barrels: Query<(&TowerBarrel, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>, Without<TowerBracket>)>,
+    mut brackets: Query<(&TowerBracket, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>, Without<TowerBarrel>)>,
+    level_rings: Query<&TowerLevelRing>,
 ) {
     for event in events.read() {
-        if let Ok((mut tower, _sprite)) = towers.get_mut(event.tower) {
+        if let Ok((mut tower, tower_transform, _sprite)) = towers.get_mut(event.tower) {
             let cost = tower.upgrade_cost();
             if economy.gold >= cost {
                 economy.gold -= cost;
@@ -1228,6 +1393,59 @@ fn handle_tower_specialization(
                     }
                 }
 
+                // Update bracket color to spec color + brightness scaling
+                let bracket_alpha = (0.25 + 0.08 * (tower.level - 1) as f32).min(0.85);
+                let bracket_color = accent_color.with_alpha(bracket_alpha);
+                for (bracket, mut bracket_sprite) in &mut brackets {
+                    if bracket.tower == event.tower {
+                        bracket_sprite.color = bracket_color;
+                    }
+                }
+
+                // Spawn level ring (specialization goes to level 3)
+                if tower.level >= 3 {
+                    let has_ring = level_rings.iter().any(|r| r.tower == event.tower);
+                    if !has_ring {
+                        let pos = tower_transform.translation.truncate();
+                        let ring_color = accent_color.with_alpha(0.12);
+                        commands.spawn((
+                            SpriteBundle {
+                                sprite: Sprite {
+                                    color: ring_color,
+                                    custom_size: Some(Vec2::splat(44.0)),
+                                    ..default()
+                                },
+                                transform: Transform::from_translation(
+                                    pos.extend(ZDepth::TOWER_LEVEL_RING)
+                                ),
+                                ..default()
+                            },
+                            TowerLevelRing { tower: event.tower },
+                            GameEntity,
+                        ));
+                    }
+                }
+
+                // Spawn upgrade flash
+                let pos = tower_transform.translation.truncate();
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: Color::srgba(1.0, 1.0, 1.0, 0.6),
+                            custom_size: Some(Vec2::splat(30.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(pos.extend(ZDepth::UPGRADE_FLASH)),
+                        ..default()
+                    },
+                    UpgradeFlash {
+                        lifetime: Timer::from_seconds(0.15, TimerMode::Once),
+                        start_size: 30.0,
+                        end_size: 50.0,
+                    },
+                    GameEntity,
+                ));
+
                 // Update range indicator size
                 for (indicator, mut ind_sprite) in &mut range_indicators {
                     if indicator.tower == event.tower {
@@ -1250,6 +1468,29 @@ fn update_muzzle_flashes(
         // Fade out
         let alpha = 1.0 - flash.lifetime.fraction();
         sprite.color = GameColors::MUZZLE_FLASH.with_alpha(alpha);
+
+        if flash.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+fn update_upgrade_flashes(
+    mut commands: Commands,
+    mut flashes: Query<(Entity, &mut UpgradeFlash, &mut Sprite)>,
+    time: Res<Time>,
+) {
+    for (entity, mut flash, mut sprite) in &mut flashes {
+        flash.lifetime.tick(time.delta());
+
+        let frac = flash.lifetime.fraction();
+        // Interpolate size from start to end
+        let size = flash.start_size + (flash.end_size - flash.start_size) * frac;
+        sprite.custom_size = Some(Vec2::splat(size));
+
+        // Fade out alpha
+        let alpha = (1.0 - frac) * 0.6;
+        sprite.color = Color::srgba(1.0, 1.0, 1.0, alpha);
 
         if flash.lifetime.finished() {
             commands.entity(entity).despawn_recursive();

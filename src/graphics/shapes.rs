@@ -250,6 +250,8 @@ impl ZDepth {
     // === Map / Grid layer (−0.1 .. 1.0) ===
     pub const TILE_BORDER: f32 = -0.1;
     pub const TILE: f32 = 0.0;
+    pub const GRID_DOT: f32 = 0.02;
+    pub const PATH_EDGE_GLOW: f32 = 0.03;
     pub const PATH_LANE: f32 = 0.05;
     pub const TERRAIN_DECORATION: f32 = 0.1;
     pub const TERRAIN_ACCENT: f32 = 0.12;
@@ -262,8 +264,12 @@ impl ZDepth {
     // === Tower layer (1.2 .. 2.8) ===
     pub const BUFF_AURA: f32 = 1.2;
     pub const RANGE_INDICATOR: f32 = 1.5;
+    pub const TOWER_SHADOW: f32 = 1.9;
+    pub const TOWER_LEVEL_RING: f32 = 1.92;
+    pub const TOWER_BRACKET: f32 = 1.95;
     pub const TOWER_BASE: f32 = 2.0;
     pub const TOWER_CORE: f32 = 2.1;
+    pub const UPGRADE_FLASH: f32 = 2.15;
     pub const TOWER_BARREL: f32 = 2.5;
     pub const MUZZLE_FLASH: f32 = 2.8;
 
