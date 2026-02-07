@@ -15,6 +15,10 @@ use super::{
     GameEntity,
 };
 
+/// Set to true when towers are placed or sold — triggers synergy recalculation.
+#[derive(Resource, Default)]
+pub struct SynergyDirty(pub bool);
+
 pub struct TowerPlugin;
 
 impl Plugin for TowerPlugin {
@@ -22,6 +26,7 @@ impl Plugin for TowerPlugin {
         app.init_resource::<SelectedTowerType>()
             .init_resource::<HoveredTower>()
             .init_resource::<SelectedPlacedTower>()
+            .init_resource::<SynergyDirty>()
             .add_event::<PlaceTowerEvent>()
             .add_event::<SellTowerEvent>()
             .add_event::<UpgradeTowerEvent>()
@@ -479,6 +484,7 @@ fn handle_tower_placement(
     mut events: EventReader<PlaceTowerEvent>,
     mut map: ResMut<GameMap>,
     mut economy: ResMut<PlayerEconomy>,
+    mut synergy_dirty: ResMut<SynergyDirty>,
     assets: Res<GameAssets>,
 ) {
     for event in events.read() {
@@ -491,6 +497,7 @@ fn handle_tower_placement(
 
         // Deduct cost
         economy.gold -= cost;
+        synergy_dirty.0 = true;
 
         // Mark tile as occupied
         map.place_tower(event.grid_x, event.grid_y);
@@ -809,6 +816,7 @@ fn handle_tower_selling(
     mut events: EventReader<SellTowerEvent>,
     mut economy: ResMut<PlayerEconomy>,
     mut map: ResMut<GameMap>,
+    mut synergy_dirty: ResMut<SynergyDirty>,
     towers: Query<&Tower>,
     range_indicators: Query<(Entity, &RangeIndicator)>,
     barrels: Query<(Entity, &TowerBarrel)>,
@@ -820,6 +828,7 @@ fn handle_tower_selling(
         if let Ok(tower) = towers.get(event.tower) {
             // Refund gold
             economy.gold += tower.sell_value();
+            synergy_dirty.0 = true;
 
             // Clear map tile
             map.remove_tower(tower.grid_x, tower.grid_y);
@@ -1026,7 +1035,13 @@ fn update_buff_auras(
 /// Update tower synergies based on adjacent towers
 fn update_tower_synergies(
     mut towers: Query<(Entity, &Tower, &mut TowerSynergies)>,
+    mut synergy_dirty: ResMut<SynergyDirty>,
 ) {
+    if !synergy_dirty.0 {
+        return;
+    }
+    synergy_dirty.0 = false;
+
     // Build grid-indexed lookup: O(T) instead of scanning all towers per neighbor
     let mut tower_grid: HashMap<(usize, usize), (Entity, TowerType)> = HashMap::new();
     for (entity, tower, _) in towers.iter() {

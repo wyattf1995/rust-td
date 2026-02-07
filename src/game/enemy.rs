@@ -190,6 +190,17 @@ impl Enemy {
         self.slow_timer = Some(Timer::from_seconds(duration, TimerMode::Once));
     }
 
+    /// Apply damage after armor reduction. Returns actual damage dealt.
+    /// Returns 0.0 if enemy is already dead.
+    pub fn apply_armor_damage(&mut self, raw_damage: f32) -> f32 {
+        if self.marked_dead || self.health <= 0.0 {
+            return 0.0;
+        }
+        let actual = (raw_damage * (1.0 - self.total_armor())).max(0.0);
+        self.health = (self.health - actual).max(0.0);
+        actual
+    }
+
     pub fn apply_poison(&mut self, dps: f32, duration: f32) {
         // Stack poison damage
         self.poison_damage += dps;
@@ -216,6 +227,7 @@ pub struct HealthBarFill {
 #[derive(Component)]
 pub struct DeathEffect {
     pub lifetime: Timer,
+    pub velocity: Vec2,
 }
 
 /// Floating gold number when enemy killed
@@ -493,7 +505,6 @@ pub struct EnemyKilledEvent {
     pub enemy: Entity,
     pub reward: u32,
     pub position: Vec3,
-    pub size: f32,
     pub enemy_type: EnemyType,
     pub path_index: usize,
 }
@@ -734,7 +745,6 @@ fn enemy_health_check(
                 enemy: entity,
                 reward: enemy.reward,
                 position: transform.translation,
-                size: enemy.enemy_type.size(),
                 enemy_type: enemy.enemy_type,
                 path_index: enemy.path_index,
             });
@@ -851,11 +861,12 @@ fn handle_enemy_killed(
     health_fills: Query<(Entity, &HealthBarFill)>,
     shadows: Query<(Entity, &FlyingShadow)>,
 ) {
-    // Gold Rush modifier gives 2x gold (from wave OR ability)
+    // Gold Rush modifier: scales 2x base → 3x max at wave 20+
     let wave_gold_rush = wave_manager.current_modifier == WaveModifier::GoldRush;
     let ability_gold_rush = abilities.gold_rush_active.is_some();
     let gold_rush_multiplier = if wave_gold_rush || ability_gold_rush {
-        2.0
+        let wave = wave_manager.current_wave as f32;
+        2.0 + (wave * 0.05).min(1.0)
     } else {
         1.0
     };
@@ -913,22 +924,37 @@ fn handle_enemy_killed(
             });
         }
 
-        // Spawn death effect
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: GameColors::DEATH_EFFECT,
-                    custom_size: Some(Vec2::splat(event.size)),
+        // Spawn death particle burst (type-colored scatter)
+        let death_pos = event.position.truncate();
+        let particle_color = event.enemy_type.color();
+        for i in 0..ShapeSizes::DEATH_PARTICLE_COUNT {
+            let seed = death_pos.x + i as f32;
+            let angle = rand_simple(seed) * std::f32::consts::TAU;
+            let speed = 80.0 + rand_simple(seed + 100.0) * 40.0;
+            let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
+
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: particle_color,
+                        custom_size: Some(Vec2::splat(ShapeSizes::DEATH_PARTICLE_SIZE)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(death_pos.extend(ZDepth::DEATH_EFFECT)),
                     ..default()
                 },
-                transform: Transform::from_translation(event.position.truncate().extend(ZDepth::DEATH_EFFECT)),
-                ..default()
-            },
-            DeathEffect {
-                lifetime: Timer::from_seconds(0.3, TimerMode::Once),
-            },
-            GameEntity,
-        ));
+                DeathEffect {
+                    lifetime: Timer::from_seconds(0.4, TimerMode::Once),
+                    velocity,
+                },
+                GameEntity,
+            ));
+        }
+
+        // Boss kills get extra screen shake
+        if event.enemy_type == EnemyType::Boss {
+            screen_shake.trauma = (screen_shake.trauma + 0.3).min(1.0);
+        }
 
         // Despawn enemy
         if let Some(entity_commands) = commands.get_entity(event.enemy) {
@@ -1036,12 +1062,17 @@ fn update_death_effects(
         effect.lifetime.tick(time.delta());
 
         let progress = effect.lifetime.fraction();
-        // Expand and fade out
-        let scale = 1.0 + progress * 0.5;
         let alpha = 1.0 - progress;
 
+        // Move particle and decelerate
+        transform.translation.x += effect.velocity.x * time.delta_seconds();
+        transform.translation.y += effect.velocity.y * time.delta_seconds();
+        effect.velocity *= 0.92_f32.powf(time.delta_seconds() * 60.0);
+
+        // Shrink and fade
+        let scale = 1.0 - progress * 0.6;
         transform.scale = Vec3::splat(scale);
-        sprite.color = GameColors::DEATH_EFFECT.with_alpha(alpha * 0.8);
+        sprite.color = sprite.color.with_alpha(alpha * 0.9);
 
         if effect.lifetime.finished() {
             commands.entity(entity).despawn_recursive();

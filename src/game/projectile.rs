@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::GameState;
-use crate::graphics::shapes::{GameColors, ShapeSizes, ZDepth};
+use crate::graphics::shapes::{CombatConstants, GameColors, ShapeSizes, ZDepth};
 use crate::loading::GameAssets;
 
 use super::{
@@ -77,7 +77,7 @@ fn spawn_projectiles(
         let color = event.tower_type.projectile_color();
         let size = event.tower_type.projectile_size();
 
-        let projectile_speed = 400.0;
+        let projectile_speed = CombatConstants::PROJECTILE_SPEED;
 
         // Calculate predicted position (leading the target)
         let predicted_pos = if let Ok((enemy_transform, enemy)) = enemies.get(event.target) {
@@ -87,7 +87,7 @@ fn spawn_projectiles(
 
             // Predict where enemy will be based on its current velocity direction
             // Approximate by using enemy speed (we don't store velocity directly)
-            let prediction_offset = enemy.speed * travel_time * 0.8; // 0.8 factor for some inaccuracy
+            let prediction_offset = enemy.speed * travel_time * CombatConstants::PREDICTION_INACCURACY;
 
             // Simple prediction: move in the direction enemy is facing
             // Since enemies follow path, we just add speed in their movement direction
@@ -146,11 +146,11 @@ fn projectile_movement(
 
             // Lead the target based on enemy speed and predicted travel time
             // This creates a more accurate interception point
-            let lead_distance = enemy.speed * travel_time * 0.7;
+            let lead_distance = enemy.speed * travel_time * CombatConstants::LEAD_TARGET_FACTOR;
 
             // Blend between direct aim and predicted position
             // Closer projectiles aim more directly, farther ones lead more
-            let blend = (distance / 200.0).min(1.0);
+            let blend = (distance / CombatConstants::LEAD_BLEND_DISTANCE).min(1.0);
 
             if let Some(predicted) = projectile.predicted_pos {
                 // Update prediction as we get closer
@@ -188,7 +188,7 @@ fn projectile_movement(
                 ..default()
             },
             ProjectileTrail {
-                lifetime: Timer::from_seconds(0.15, TimerMode::Once),
+                lifetime: Timer::from_seconds(CombatConstants::TRAIL_LIFETIME, TimerMode::Once),
             },
             GameEntity,
         ));
@@ -214,26 +214,24 @@ fn projectile_collision(
             let enemy_pos = enemy_transform.translation.truncate();
             let distance = proj_pos.distance(enemy_pos);
 
-            if distance < 20.0 {
-                // Calculate damage with armor reduction
-                let armor = enemy.total_armor();
-                let actual_damage = projectile.damage * (1.0 - armor);
-                enemy.health = (enemy.health - actual_damage).max(0.0);
+            if distance < CombatConstants::HIT_RADIUS {
+                // Calculate damage with armor reduction (skips dead enemies)
+                let actual_damage = enemy.apply_armor_damage(projectile.damage);
 
                 // Spawn damage number
-                spawn_damage_number(&mut commands, &assets, enemy_pos, actual_damage);
+                if actual_damage > 0.0 {
+                    spawn_damage_number(&mut commands, &assets, enemy_pos, actual_damage);
+                }
 
                 // Apply slow effect for slow towers
                 if projectile.tower_type == TowerType::Slow {
-                    enemy.apply_slow(2.0, 0.5);
+                    enemy.apply_slow(CombatConstants::SLOW_DURATION, CombatConstants::SLOW_FACTOR);
                 }
 
                 // Apply poison effect
                 if projectile.tower_type == TowerType::Poison {
-                    // 8 DPS for 4 seconds (stacks), +synergy bonus duration
-                    let base_duration = 4.0;
-                    let duration = base_duration * (1.0 + projectile.poison_duration_bonus);
-                    enemy.apply_poison(8.0, duration);
+                    let duration = CombatConstants::POISON_BASE_DURATION * (1.0 + projectile.poison_duration_bonus);
+                    enemy.apply_poison(CombatConstants::POISON_DPS, duration);
 
                     // Spawn poison effect
                     commands.spawn((
@@ -259,7 +257,7 @@ fn projectile_collision(
                     hit_list.push(enemy_entity);
 
                     // Find next target for bounce (30% damage reduction per bounce)
-                    let bounce_damage = projectile.damage * 0.7;
+                    let bounce_damage = projectile.damage * CombatConstants::CHAIN_DAMAGE_DECAY;
                     let remaining_bounces = projectile.chain_bounces.saturating_sub(1);
 
                     chain_bounces.push((enemy_pos, bounce_damage, hit_list, remaining_bounces));
@@ -268,7 +266,7 @@ fn projectile_collision(
                 // Splash damage (spatial grid narrows search to nearby enemies)
                 if projectile.tower_type == TowerType::Splash {
                     let splash_radius = ShapeSizes::SPLASH_RADIUS;
-                    let splash_damage = projectile.damage * 0.5;
+                    let splash_damage = projectile.damage * CombatConstants::SPLASH_DAMAGE_RATIO;
 
                     let nearby = spatial_grid.query_range(enemy_pos, splash_radius);
                     for other_entity in nearby {
@@ -278,10 +276,10 @@ fn projectile_collision(
                         if let Ok((_, mut other_enemy, other_transform)) = enemies.get_mut(other_entity) {
                             let other_pos = other_transform.translation.truncate();
                             if enemy_pos.distance(other_pos) < splash_radius {
-                                let other_armor = other_enemy.total_armor();
-                                let other_actual_damage = splash_damage * (1.0 - other_armor);
-                                other_enemy.health = (other_enemy.health - other_actual_damage).max(0.0);
-                                spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage);
+                                let other_actual_damage = other_enemy.apply_armor_damage(splash_damage);
+                                if other_actual_damage > 0.0 {
+                                    spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage);
+                                }
                             }
                         }
                     }
@@ -363,7 +361,7 @@ fn projectile_collision(
                     Projectile {
                         target: next_target,
                         damage: bounce_damage,
-                        speed: 600.0, // Faster bounce
+                        speed: CombatConstants::CHAIN_BOUNCE_SPEED,
                         tower_type: TowerType::Chain,
                         predicted_pos: Some(next_pos),
                         chain_bounces: remaining_bounces,
@@ -396,7 +394,7 @@ fn spawn_damage_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, 
             ..default()
         },
         DamageNumber {
-            lifetime: Timer::from_seconds(0.6, TimerMode::Once),
+            lifetime: Timer::from_seconds(CombatConstants::DAMAGE_NUMBER_LIFETIME, TimerMode::Once),
             velocity,
         },
         GameEntity,

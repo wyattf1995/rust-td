@@ -136,7 +136,6 @@ impl GameColors {
     pub const DAMAGE_TEXT: Color = Color::srgb(1.0, 0.4, 0.35);
     pub const GOLD_TEXT: Color = Color::srgb(1.0, 0.9, 0.3);
     pub const MUZZLE_FLASH: Color = Color::srgb(1.0, 0.95, 0.7);
-    pub const DEATH_EFFECT: Color = Color::srgba(1.0, 0.5, 0.35, 0.9);
 
     pub const ABILITY_FREEZE: Color = Color::srgb(0.5, 0.95, 1.0);
     pub const ABILITY_GOLD_RUSH: Color = Color::srgb(1.0, 0.9, 0.3);
@@ -209,6 +208,39 @@ impl ShapeSizes {
     pub const BUFF_AURA_RANGE: f32 = 120.0;
     pub const DAMAGE_TEXT_SIZE: f32 = 14.0;
     pub const MUZZLE_FLASH: f32 = 12.0;
+    pub const DEATH_PARTICLE_SIZE: f32 = 6.0;
+    pub const DEATH_PARTICLE_COUNT: usize = 5;
+}
+
+/// Combat tuning constants — projectile behavior, damage formulas, effect durations
+pub struct CombatConstants;
+
+impl CombatConstants {
+    // ==========================================================================
+    // PROJECTILE MOVEMENT
+    // ==========================================================================
+    pub const PROJECTILE_SPEED: f32 = 400.0;
+    pub const CHAIN_BOUNCE_SPEED: f32 = 600.0;
+    pub const PREDICTION_INACCURACY: f32 = 0.8;
+    pub const LEAD_TARGET_FACTOR: f32 = 0.7;
+    pub const LEAD_BLEND_DISTANCE: f32 = 200.0;
+    pub const HIT_RADIUS: f32 = 20.0;
+
+    // ==========================================================================
+    // DAMAGE & STATUS EFFECTS
+    // ==========================================================================
+    pub const CHAIN_DAMAGE_DECAY: f32 = 0.7;
+    pub const SPLASH_DAMAGE_RATIO: f32 = 0.5;
+    pub const SLOW_DURATION: f32 = 2.0;
+    pub const SLOW_FACTOR: f32 = 0.5;
+    pub const POISON_DPS: f32 = 8.0;
+    pub const POISON_BASE_DURATION: f32 = 4.0;
+
+    // ==========================================================================
+    // VISUAL EFFECTS
+    // ==========================================================================
+    pub const TRAIL_LIFETIME: f32 = 0.15;
+    pub const DAMAGE_NUMBER_LIFETIME: f32 = 0.6;
 }
 
 /// Z-depth ordering constants — higher values render in front of lower ones.

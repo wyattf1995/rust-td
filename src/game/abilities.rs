@@ -4,7 +4,7 @@ use crate::GameState;
 use crate::graphics::shapes::{GameColors, ZDepth};
 
 use super::{
-    enemy::Enemy,
+    enemy::{Enemy, WaveManager},
     ui::UiZones,
     GameEntity,
 };
@@ -191,15 +191,19 @@ fn handle_freeze_ability(
     mut commands: Commands,
     mut events: EventReader<FreezeAbilityEvent>,
     mut enemies: Query<(Entity, &mut Enemy, &Transform), Without<Frozen>>,
+    wave_manager: Res<WaveManager>,
 ) {
     for _ in events.read() {
-        // Freeze all enemies for 3 seconds
+        // Freeze scales with wave: 3s base → 5s max
+        let wave = wave_manager.current_wave as f32;
+        let duration = FREEZE_DURATION + (wave * 0.1).min(2.0);
+
         for (entity, mut enemy, transform) in &mut enemies {
             let original_speed = enemy.speed;
             enemy.speed = 0.0;
 
             commands.entity(entity).try_insert(Frozen {
-                timer: Timer::from_seconds(FREEZE_DURATION, TimerMode::Once),
+                timer: Timer::from_seconds(duration, TimerMode::Once),
                 original_speed,
             });
 
@@ -215,7 +219,7 @@ fn handle_freeze_ability(
                     ..default()
                 },
                 FreezeEffect {
-                    lifetime: Timer::from_seconds(FREEZE_DURATION, TimerMode::Once),
+                    lifetime: Timer::from_seconds(duration, TimerMode::Once),
                 },
                 GameEntity,
             ));
@@ -237,9 +241,12 @@ fn handle_artillery_ability(
     mut commands: Commands,
     mut events: EventReader<ArtilleryAbilityEvent>,
     mut enemies: Query<(&mut Enemy, &Transform)>,
+    wave_manager: Res<WaveManager>,
 ) {
-    let artillery_damage = ARTILLERY_DAMAGE;
-    let artillery_radius = ARTILLERY_RADIUS;
+    // Artillery scales with wave: damage +15%/wave, radius +2/wave (capped at 160)
+    let wave = wave_manager.current_wave as f32;
+    let artillery_damage = ARTILLERY_DAMAGE * (1.0 + wave * 0.15);
+    let artillery_radius = (ARTILLERY_RADIUS + wave * 2.0).min(160.0);
 
     for event in events.read() {
         // Damage all enemies in radius
@@ -250,8 +257,7 @@ fn handle_artillery_ability(
             if distance <= artillery_radius {
                 // Full damage at center, falloff at edges
                 let damage_falloff = 1.0 - (distance / artillery_radius) * 0.5;
-                let actual_damage = artillery_damage * damage_falloff * (1.0 - enemy.total_armor());
-                enemy.health = (enemy.health - actual_damage).max(0.0);
+                enemy.apply_armor_damage(artillery_damage * damage_falloff);
             }
         }
 
