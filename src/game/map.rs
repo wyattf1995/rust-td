@@ -3,7 +3,7 @@ use rand::Rng;
 use std::collections::HashSet;
 
 use crate::GameState;
-use crate::graphics::shapes::{GameColors, ShapeSizes};
+use crate::graphics::shapes::{GameColors, ShapeSizes, ZDepth};
 
 use super::GameEntity;
 use super::tower::{SelectedTowerType, Tower};
@@ -426,7 +426,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                         custom_size: Some(Vec2::splat(TILE_SIZE - 1.0)),
                         ..default()
                     },
-                    transform: Transform::from_translation(pos.extend(-0.1)),
+                    transform: Transform::from_translation(pos.extend(ZDepth::TILE_BORDER)),
                     ..default()
                 },
                 GameEntity,
@@ -447,7 +447,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                         custom_size: Some(Vec2::splat(ShapeSizes::TILE_INNER)),
                         ..default()
                     },
-                    transform: Transform::from_translation(pos.extend(0.0)),
+                    transform: Transform::from_translation(pos.extend(ZDepth::TILE)),
                     ..default()
                 },
                 MapTile { x, y, base_color: color },
@@ -477,7 +477,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                             ..default()
                         },
                         transform: Transform::from_translation(
-                            Vec3::new(pos.x + offset_x, pos.y + offset_y, 0.1)
+                            Vec3::new(pos.x + offset_x, pos.y + offset_y, ZDepth::TERRAIN_DECORATION)
                         ),
                         ..default()
                     },
@@ -517,7 +517,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                     transform: Transform::from_translation(Vec3::new(
                         pos.x + dx as f32 * dash_offset,
                         pos.y + dy as f32 * dash_offset,
-                        0.05,
+                        ZDepth::PATH_LANE,
                     )),
                     ..default()
                 },
@@ -546,7 +546,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                     transform: Transform::from_translation(Vec3::new(
                         pos.x + dx as f32 * dash_offset,
                         pos.y + dy as f32 * dash_offset,
-                        0.05,
+                        ZDepth::PATH_LANE,
                     )),
                     ..default()
                 },
@@ -572,7 +572,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                     custom_size: Some(Vec2::splat(ShapeSizes::PATH_INDICATOR)),
                     ..default()
                 },
-                transform: Transform::from_translation(mid.extend(0.5)),
+                transform: Transform::from_translation(mid.extend(ZDepth::PATH_INDICATOR)),
                 ..default()
             },
             GameEntity,
@@ -590,7 +590,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                     custom_size: Some(Vec2::splat(ShapeSizes::SPAWN_INDICATOR + 8.0)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(0.9)),
+                transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_GLOW)),
                 ..default()
             },
             SpawnExitMarker { is_spawn: true },
@@ -604,7 +604,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                     custom_size: Some(Vec2::splat(ShapeSizes::SPAWN_INDICATOR)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(1.0)),
+                transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_MARKER)),
                 ..default()
             },
             SpawnExitMarker { is_spawn: true },
@@ -623,7 +623,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                     custom_size: Some(Vec2::splat(ShapeSizes::EXIT_INDICATOR + 8.0)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(0.9)),
+                transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_GLOW)),
                 ..default()
             },
             SpawnExitMarker { is_spawn: false },
@@ -637,7 +637,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                     custom_size: Some(Vec2::splat(ShapeSizes::EXIT_INDICATOR)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(1.0)),
+                transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_MARKER)),
                 ..default()
             },
             SpawnExitMarker { is_spawn: false },
@@ -653,7 +653,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                 custom_size: Some(Vec2::splat(300.0)),
                 ..default()
             },
-            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.8)),
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, ZDepth::RANGE_PREVIEW)),
             ..default()
         },
         TileRangePreview,
@@ -670,7 +670,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                     custom_size: Some(Vec2::splat(4.0)),
                     ..default()
                 },
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.6)),
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, ZDepth::PATH_FLOW_DOT)),
                 ..default()
             },
             PathFlowDot {
@@ -711,7 +711,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>) {
                             ..default()
                         },
                         transform: Transform::from_translation(
-                            Vec3::new(pos.x + off_x, pos.y + off_y, 0.12)
+                            Vec3::new(pos.x + off_x, pos.y + off_y, ZDepth::TERRAIN_ACCENT)
                         ),
                         ..default()
                     },
@@ -808,14 +808,14 @@ fn update_tile_visuals(
             if tile_type == TileType::Empty {
                 // Show range preview for placing new tower
                 let pos = GameMap::grid_to_world(hx, hy);
-                preview_transform.translation = pos.extend(0.8);
+                preview_transform.translation = pos.extend(ZDepth::RANGE_PREVIEW);
                 let range = selected_tower.0.range();
                 preview_sprite.custom_size = Some(Vec2::splat(range * 2.0));
                 preview_sprite.color = GameColors::RANGE_INDICATOR;
             } else if tile_type == TileType::Tower {
                 // Show range of existing tower
                 let pos = GameMap::grid_to_world(hx, hy);
-                preview_transform.translation = pos.extend(0.8);
+                preview_transform.translation = pos.extend(ZDepth::RANGE_PREVIEW);
 
                 // Find the tower at this position
                 let mut found_range = 150.0;

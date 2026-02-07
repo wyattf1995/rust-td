@@ -216,6 +216,29 @@ impl AbilityType {
     }
 }
 
+/// Returns (ready, active, remaining_secs) for a given ability type.
+fn ability_state(abilities: &PlayerAbilities, ability: AbilityType) -> (bool, bool, f32) {
+    match ability {
+        AbilityType::Freeze => (
+            abilities.freeze_ready,
+            false,
+            abilities.freeze_cooldown.remaining_secs(),
+        ),
+        AbilityType::GoldRush => (
+            abilities.gold_rush_ready,
+            abilities.gold_rush_active.is_some(),
+            abilities.gold_rush_active.as_ref()
+                .map(|t| t.remaining_secs())
+                .unwrap_or_else(|| abilities.gold_rush_cooldown.remaining_secs()),
+        ),
+        AbilityType::Artillery => (
+            abilities.artillery_ready,
+            abilities.artillery_targeting,
+            abilities.artillery_cooldown.remaining_secs(),
+        ),
+    }
+}
+
 fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<super::GameActive>>) {
     if active.is_some() { return; }
     // Top bar - HUD
@@ -1259,25 +1282,7 @@ fn update_ability_display(
     mut cooldown_text_query: Query<(&AbilityCooldownText, &mut Text)>,
 ) {
     for (button, mut bg_color, mut border_color) in &mut button_query {
-        let (ready, active, _remaining) = match button.0 {
-            AbilityType::Freeze => (
-                abilities.freeze_ready,
-                false,
-                abilities.freeze_cooldown.remaining_secs(),
-            ),
-            AbilityType::GoldRush => (
-                abilities.gold_rush_ready,
-                abilities.gold_rush_active.is_some(),
-                abilities.gold_rush_active.as_ref()
-                    .map(|t| t.remaining_secs())
-                    .unwrap_or_else(|| abilities.gold_rush_cooldown.remaining_secs()),
-            ),
-            AbilityType::Artillery => (
-                abilities.artillery_ready,
-                abilities.artillery_targeting,
-                abilities.artillery_cooldown.remaining_secs(),
-            ),
-        };
+        let (ready, active, _remaining) = ability_state(&abilities, button.0);
 
         // Update button opacity based on ready state
         let base_color = match button.0 {
@@ -1299,25 +1304,7 @@ fn update_ability_display(
     }
 
     for (cooldown_text, mut text) in &mut cooldown_text_query {
-        let (ready, active, remaining) = match cooldown_text.0 {
-            AbilityType::Freeze => (
-                abilities.freeze_ready,
-                false,
-                abilities.freeze_cooldown.remaining_secs(),
-            ),
-            AbilityType::GoldRush => (
-                abilities.gold_rush_ready,
-                abilities.gold_rush_active.is_some(),
-                abilities.gold_rush_active.as_ref()
-                    .map(|t| t.remaining_secs())
-                    .unwrap_or_else(|| abilities.gold_rush_cooldown.remaining_secs()),
-            ),
-            AbilityType::Artillery => (
-                abilities.artillery_ready,
-                abilities.artillery_targeting,
-                abilities.artillery_cooldown.remaining_secs(),
-            ),
-        };
+        let (ready, active, remaining) = ability_state(&abilities, cooldown_text.0);
 
         if ready {
             text.sections[0].value = "Ready".to_string();

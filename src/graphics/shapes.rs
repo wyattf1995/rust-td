@@ -205,3 +205,45 @@ impl ShapeSizes {
     pub const DAMAGE_TEXT_SIZE: f32 = 14.0;
     pub const MUZZLE_FLASH: f32 = 12.0;
 }
+
+/// Z-depth ordering constants — higher values render in front of lower ones.
+/// Grouped by layer so relative ordering is easy to reason about.
+pub struct ZDepth;
+
+impl ZDepth {
+    // === Map / Grid layer (−0.1 .. 1.0) ===
+    pub const TILE_BORDER: f32 = -0.1;
+    pub const TILE: f32 = 0.0;
+    pub const PATH_LANE: f32 = 0.05;
+    pub const TERRAIN_DECORATION: f32 = 0.1;
+    pub const TERRAIN_ACCENT: f32 = 0.12;
+    pub const PATH_INDICATOR: f32 = 0.5;
+    pub const PATH_FLOW_DOT: f32 = 0.6;
+    pub const RANGE_PREVIEW: f32 = 0.8;
+    pub const SPAWN_EXIT_GLOW: f32 = 0.9;
+    pub const SPAWN_EXIT_MARKER: f32 = 1.0;
+
+    // === Tower layer (1.2 .. 2.8) ===
+    pub const BUFF_AURA: f32 = 1.2;
+    pub const RANGE_INDICATOR: f32 = 1.5;
+    pub const TOWER_BASE: f32 = 2.0;
+    pub const TOWER_CORE: f32 = 2.1;
+    pub const TOWER_BARREL: f32 = 2.5;
+    pub const MUZZLE_FLASH: f32 = 2.8;
+
+    // === Enemy layer (2.9 .. 3.9) ===
+    pub const FLYING_SHADOW: f32 = 2.9;
+    pub const ENEMY: f32 = 3.0;
+    pub const HEALTH_BAR_BG: f32 = 3.5;
+    pub const HEALTH_BAR_FILL: f32 = 3.6;
+    pub const BADGE_BG: f32 = 3.4;
+    pub const BADGE_TEXT: f32 = 3.5;
+    pub const FREEZE_EFFECT: f32 = 3.7;
+    pub const ABILITY_EFFECT: f32 = 3.8;
+    pub const DEATH_EFFECT: f32 = 3.9;
+
+    // === Projectile / overlay layer (4.0 .. 10.0) ===
+    pub const PROJECTILE: f32 = 4.0;
+    pub const ARTILLERY_CURSOR: f32 = 5.0;
+    pub const FLOATING_TEXT: f32 = 10.0;
+}

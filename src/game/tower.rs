@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::GameState;
-use crate::graphics::shapes::{GameColors, ShapeSizes};
+use crate::graphics::shapes::{GameColors, ShapeSizes, ZDepth};
 
 use crate::loading::GameAssets;
 
@@ -484,7 +484,7 @@ fn handle_tower_placement(
                         custom_size: Some(Vec2::splat(ShapeSizes::TOWER)),
                         ..default()
                     },
-                    transform: Transform::from_translation(pos.extend(2.0)),
+                    transform: Transform::from_translation(pos.extend(ZDepth::TOWER_BASE)),
                     ..default()
                 },
                 tower,
@@ -501,7 +501,7 @@ fn handle_tower_placement(
                     custom_size: Some(Vec2::splat(ShapeSizes::TOWER_CORE)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(2.1)),
+                transform: Transform::from_translation(pos.extend(ZDepth::TOWER_CORE)),
                 ..default()
             },
             TowerCore { tower: tower_entity },
@@ -516,7 +516,7 @@ fn handle_tower_placement(
                     custom_size: Some(Vec2::splat(range * 2.0)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(1.5)),
+                transform: Transform::from_translation(pos.extend(ZDepth::RANGE_INDICATOR)),
                 ..default()
             },
             RangeIndicator { tower: tower_entity },
@@ -531,7 +531,7 @@ fn handle_tower_placement(
                     custom_size: Some(Vec2::new(ShapeSizes::TOWER_BARREL_WIDTH, ShapeSizes::TOWER_BARREL_HEIGHT)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(2.5)),
+                transform: Transform::from_translation(pos.extend(ZDepth::TOWER_BARREL)),
                 ..default()
             },
             TowerBarrel { tower: tower_entity },
@@ -549,7 +549,7 @@ fn handle_tower_placement(
                     custom_size: Some(Vec2::splat(16.0)),
                     ..default()
                 },
-                transform: Transform::from_translation((pos + badge_offset).extend(3.4)),
+                transform: Transform::from_translation((pos + badge_offset).extend(ZDepth::BADGE_BG)),
                 ..default()
             },
             TowerLevelBadge { tower: tower_entity },
@@ -568,7 +568,7 @@ fn handle_tower_placement(
                     },
                 ).with_justify(JustifyText::Center),
                 transform: Transform::from_translation(
-                    (pos + badge_offset).extend(3.5)
+                    (pos + badge_offset).extend(ZDepth::BADGE_TEXT)
                 ),
                 ..default()
             },
@@ -585,7 +585,7 @@ fn handle_tower_placement(
                         custom_size: Some(Vec2::splat(ShapeSizes::BUFF_AURA_RANGE * 2.0)),
                         ..default()
                     },
-                    transform: Transform::from_translation(pos.extend(1.2)),
+                    transform: Transform::from_translation(pos.extend(ZDepth::BUFF_AURA)),
                     ..default()
                 },
                 BuffAuraIndicator { tower: tower_entity },
@@ -718,7 +718,7 @@ fn tower_attack(
                                 custom_size: Some(Vec2::splat(ShapeSizes::MUZZLE_FLASH)),
                                 ..default()
                             },
-                            transform: Transform::from_translation(start.extend(2.8)),
+                            transform: Transform::from_translation(start.extend(ZDepth::MUZZLE_FLASH)),
                             ..default()
                         },
                         MuzzleFlash {

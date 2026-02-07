@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::analytics::{Analytics, track_with_context};
 use crate::GameState;
-use crate::graphics::shapes::{GameColors, ShapeSizes};
+use crate::graphics::shapes::{GameColors, ShapeSizes, ZDepth};
 
 use crate::loading::GameAssets;
 
@@ -548,7 +548,7 @@ fn wave_spawner(
                                 custom_size: Some(Vec2::splat(size)),
                                 ..default()
                             },
-                            transform: Transform::from_translation(pos.extend(3.0)),
+                            transform: Transform::from_translation(pos.extend(ZDepth::ENEMY)),
                             ..default()
                         },
                         enemy,
@@ -566,7 +566,7 @@ fn wave_spawner(
                                 ..default()
                             },
                             transform: Transform::from_translation(
-                                Vec3::new(pos.x + 4.0, pos.y - 4.0, 2.9)
+                                Vec3::new(pos.x + 4.0, pos.y - 4.0, ZDepth::FLYING_SHADOW)
                             ),
                             ..default()
                         },
@@ -583,7 +583,7 @@ fn wave_spawner(
                             custom_size: Some(Vec2::new(size + 4.0, ShapeSizes::HEALTH_BAR_BG_HEIGHT)),
                             ..default()
                         },
-                        transform: Transform::from_translation(Vec3::new(pos.x, pos.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET, 3.5)),
+                        transform: Transform::from_translation(Vec3::new(pos.x, pos.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET, ZDepth::HEALTH_BAR_BG)),
                         ..default()
                     },
                     HealthBar { enemy: enemy_entity },
@@ -598,7 +598,7 @@ fn wave_spawner(
                             custom_size: Some(Vec2::new(size, ShapeSizes::HEALTH_BAR_HEIGHT)),
                             ..default()
                         },
-                        transform: Transform::from_translation(Vec3::new(pos.x, pos.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET, 3.6)),
+                        transform: Transform::from_translation(Vec3::new(pos.x, pos.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET, ZDepth::HEALTH_BAR_FILL)),
                         ..default()
                     },
                     HealthBarFill { enemy: enemy_entity },
@@ -741,6 +741,35 @@ fn enemy_health_check(
     }
 }
 
+struct HealthBarData {
+    health_pct: f32,
+    size: f32,
+    bar_x: f32,
+    bar_y: f32,
+    visible: Visibility,
+}
+
+fn get_health_bar_data(enemy: &Enemy, enemy_transform: &Transform) -> HealthBarData {
+    let size = enemy.enemy_type.size();
+    let health_pct = if enemy.max_health > 0.0 {
+        (enemy.health / enemy.max_health).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let visible = if health_pct >= 1.0 {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
+    HealthBarData {
+        health_pct,
+        size,
+        bar_x: enemy_transform.translation.x,
+        bar_y: enemy_transform.translation.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET,
+        visible,
+    }
+}
+
 fn update_health_bars(
     enemies: Query<(&Enemy, &Transform)>,
     mut health_bars: Query<(&HealthBar, &mut Transform, &mut Visibility), Without<Enemy>>,
@@ -748,52 +777,26 @@ fn update_health_bars(
 ) {
     for (health_bar, mut bar_transform, mut visibility) in &mut health_bars {
         if let Ok((enemy, enemy_transform)) = enemies.get(health_bar.enemy) {
-            let size = enemy.enemy_type.size();
-            // Guard against division by zero
-            let health_pct = if enemy.max_health > 0.0 {
-                (enemy.health / enemy.max_health).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
-
-            // Cull health bars for full-health enemies (optimization + cleaner visuals)
-            *visibility = if health_pct >= 1.0 {
-                Visibility::Hidden
-            } else {
-                Visibility::Inherited
-            };
-
-            bar_transform.translation.x = enemy_transform.translation.x;
-            bar_transform.translation.y = enemy_transform.translation.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET;
+            let data = get_health_bar_data(enemy, enemy_transform);
+            *visibility = data.visible;
+            bar_transform.translation.x = data.bar_x;
+            bar_transform.translation.y = data.bar_y;
         }
     }
 
     for (health_fill, mut fill_transform, mut sprite, mut visibility) in &mut health_fills {
         if let Ok((enemy, enemy_transform)) = enemies.get(health_fill.enemy) {
-            let size = enemy.enemy_type.size();
-            // Guard against division by zero
-            let health_pct = if enemy.max_health > 0.0 {
-                (enemy.health / enemy.max_health).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
+            let data = get_health_bar_data(enemy, enemy_transform);
+            *visibility = data.visible;
+            fill_transform.translation.x = data.bar_x;
+            fill_transform.translation.y = data.bar_y;
 
-            // Cull health bars for full-health enemies
-            *visibility = if health_pct >= 1.0 {
-                Visibility::Hidden
-            } else {
-                Visibility::Inherited
-            };
-
-            fill_transform.translation.x = enemy_transform.translation.x;
-            fill_transform.translation.y = enemy_transform.translation.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET;
-
-            sprite.custom_size = Some(Vec2::new(size * health_pct, ShapeSizes::HEALTH_BAR_HEIGHT));
+            sprite.custom_size = Some(Vec2::new(data.size * data.health_pct, ShapeSizes::HEALTH_BAR_HEIGHT));
 
             // Color based on health
-            sprite.color = if health_pct > 0.6 {
+            sprite.color = if data.health_pct > 0.6 {
                 GameColors::HEALTH_HIGH
-            } else if health_pct > 0.3 {
+            } else if data.health_pct > 0.3 {
                 GameColors::HEALTH_MID
             } else {
                 GameColors::HEALTH_LOW
@@ -858,7 +861,7 @@ fn handle_enemy_killed(
                             color: toast_color,
                         },
                     ),
-                    transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 20.0, 10.0)),
+                    transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 20.0, ZDepth::FLOATING_TEXT)),
                     ..default()
                 },
                 GoldNumber {
@@ -886,7 +889,7 @@ fn handle_enemy_killed(
                     custom_size: Some(Vec2::splat(event.size)),
                     ..default()
                 },
-                transform: Transform::from_translation(event.position.truncate().extend(3.9)),
+                transform: Transform::from_translation(event.position.truncate().extend(ZDepth::DEATH_EFFECT)),
                 ..default()
             },
             DeathEffect {
@@ -964,7 +967,7 @@ fn spawn_mini_splitters(
                             custom_size: Some(Vec2::splat(size)),
                             ..default()
                         },
-                        transform: Transform::from_translation(pos.extend(3.0)),
+                        transform: Transform::from_translation(pos.extend(ZDepth::ENEMY)),
                         ..default()
                     },
                     enemy,
@@ -983,7 +986,7 @@ fn spawn_mini_splitters(
                     transform: Transform::from_translation(Vec3::new(
                         pos.x,
                         pos.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET,
-                        3.5,
+                        ZDepth::HEALTH_BAR_BG,
                     )),
                     ..default()
                 },
@@ -1002,7 +1005,7 @@ fn spawn_mini_splitters(
                     transform: Transform::from_translation(Vec3::new(
                         pos.x,
                         pos.y + size / 2.0 + ShapeSizes::HEALTH_BAR_OFFSET,
-                        3.6,
+                        ZDepth::HEALTH_BAR_FILL,
                     )),
                     ..default()
                 },

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::GameState;
-use crate::graphics::shapes::{GameColors, ShapeSizes};
+use crate::graphics::shapes::{GameColors, ShapeSizes, ZDepth};
 use crate::loading::GameAssets;
 
 use super::{
@@ -128,7 +128,7 @@ fn spawn_projectiles(
                     custom_size: Some(Vec2::splat(size)),
                     ..default()
                 },
-                transform: Transform::from_translation(event.start.extend(4.0)),
+                transform: Transform::from_translation(event.start.extend(ZDepth::PROJECTILE)),
                 ..default()
             },
             Projectile {
@@ -269,7 +269,7 @@ fn projectile_collision(
                                 custom_size: Some(Vec2::splat(30.0)),
                                 ..default()
                             },
-                            transform: Transform::from_translation(enemy_pos.extend(3.8)),
+                            transform: Transform::from_translation(enemy_pos.extend(ZDepth::ABILITY_EFFECT)),
                             ..default()
                         },
                         SplashEffect {
@@ -320,7 +320,7 @@ fn projectile_collision(
                                 custom_size: Some(Vec2::splat(splash_radius * 2.0)),
                                 ..default()
                             },
-                            transform: Transform::from_translation(enemy_pos.extend(3.8)),
+                            transform: Transform::from_translation(enemy_pos.extend(ZDepth::ABILITY_EFFECT)),
                             ..default()
                         },
                         SplashEffect {
@@ -383,7 +383,7 @@ fn projectile_collision(
                             custom_size: Some(Vec2::splat(8.0)),
                             ..default()
                         },
-                        transform: Transform::from_translation(origin_pos.extend(4.0)),
+                        transform: Transform::from_translation(origin_pos.extend(ZDepth::PROJECTILE)),
                         ..default()
                     },
                     Projectile {
@@ -418,7 +418,7 @@ fn spawn_damage_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, 
                     color: GameColors::DAMAGE_TEXT,
                 },
             ),
-            transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, 10.0)),
+            transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, ZDepth::FLOATING_TEXT)),
             ..default()
         },
         DamageNumber {

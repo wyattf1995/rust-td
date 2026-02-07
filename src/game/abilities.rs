@@ -1,13 +1,22 @@
 use bevy::prelude::*;
 
 use crate::GameState;
-use crate::graphics::shapes::GameColors;
+use crate::graphics::shapes::{GameColors, ZDepth};
 
 use super::{
     enemy::Enemy,
     ui::UiZones,
     GameEntity,
 };
+
+// Ability tuning constants
+const FREEZE_COOLDOWN: f32 = 45.0;
+const FREEZE_DURATION: f32 = 3.0;
+const GOLD_RUSH_COOLDOWN: f32 = 60.0;
+const GOLD_RUSH_DURATION: f32 = 10.0;
+const ARTILLERY_COOLDOWN: f32 = 90.0;
+const ARTILLERY_DAMAGE: f32 = 400.0;
+const ARTILLERY_RADIUS: f32 = 100.0;
 
 pub struct AbilitiesPlugin;
 
@@ -51,12 +60,12 @@ pub struct PlayerAbilities {
 impl Default for PlayerAbilities {
     fn default() -> Self {
         Self {
-            freeze_cooldown: Timer::from_seconds(45.0, TimerMode::Once),
+            freeze_cooldown: Timer::from_seconds(FREEZE_COOLDOWN, TimerMode::Once),
             freeze_ready: true,
-            gold_rush_cooldown: Timer::from_seconds(60.0, TimerMode::Once),
+            gold_rush_cooldown: Timer::from_seconds(GOLD_RUSH_COOLDOWN, TimerMode::Once),
             gold_rush_ready: true,
             gold_rush_active: None,
-            artillery_cooldown: Timer::from_seconds(90.0, TimerMode::Once),
+            artillery_cooldown: Timer::from_seconds(ARTILLERY_COOLDOWN, TimerMode::Once),
             artillery_ready: true,
             artillery_targeting: false,
         }
@@ -98,6 +107,17 @@ pub struct ArtilleryStrike {
 #[derive(Component)]
 pub struct ArtilleryTargetCursor;
 
+/// Tick a cooldown timer and mark ready when finished.
+fn tick_cooldown(ready: &mut bool, cooldown: &mut Timer, delta: std::time::Duration) {
+    if !*ready {
+        cooldown.tick(delta);
+        if cooldown.finished() {
+            *ready = true;
+            cooldown.reset();
+        }
+    }
+}
+
 fn reset_abilities(mut abilities: ResMut<PlayerAbilities>, active: Option<Res<super::GameActive>>) {
     if active.is_some() { return; }
     *abilities = PlayerAbilities::default();
@@ -107,32 +127,11 @@ fn ability_cooldowns(
     mut abilities: ResMut<PlayerAbilities>,
     time: Res<Time>,
 ) {
-    // Freeze cooldown
-    if !abilities.freeze_ready {
-        abilities.freeze_cooldown.tick(time.delta());
-        if abilities.freeze_cooldown.finished() {
-            abilities.freeze_ready = true;
-            abilities.freeze_cooldown.reset();
-        }
-    }
-
-    // Gold Rush cooldown
-    if !abilities.gold_rush_ready {
-        abilities.gold_rush_cooldown.tick(time.delta());
-        if abilities.gold_rush_cooldown.finished() {
-            abilities.gold_rush_ready = true;
-            abilities.gold_rush_cooldown.reset();
-        }
-    }
-
-    // Artillery cooldown
-    if !abilities.artillery_ready {
-        abilities.artillery_cooldown.tick(time.delta());
-        if abilities.artillery_cooldown.finished() {
-            abilities.artillery_ready = true;
-            abilities.artillery_cooldown.reset();
-        }
-    }
+    let delta = time.delta();
+    let a = &mut *abilities;
+    tick_cooldown(&mut a.freeze_ready, &mut a.freeze_cooldown, delta);
+    tick_cooldown(&mut a.gold_rush_ready, &mut a.gold_rush_cooldown, delta);
+    tick_cooldown(&mut a.artillery_ready, &mut a.artillery_cooldown, delta);
 }
 
 fn ability_input(
@@ -200,7 +199,7 @@ fn handle_freeze_ability(
             enemy.speed = 0.0;
 
             commands.entity(entity).try_insert(Frozen {
-                timer: Timer::from_seconds(3.0, TimerMode::Once),
+                timer: Timer::from_seconds(FREEZE_DURATION, TimerMode::Once),
                 original_speed,
             });
 
@@ -212,11 +211,11 @@ fn handle_freeze_ability(
                         custom_size: Some(Vec2::splat(enemy.enemy_type.size() + 10.0)),
                         ..default()
                     },
-                    transform: Transform::from_translation(transform.translation.truncate().extend(3.7)),
+                    transform: Transform::from_translation(transform.translation.truncate().extend(ZDepth::FREEZE_EFFECT)),
                     ..default()
                 },
                 FreezeEffect {
-                    lifetime: Timer::from_seconds(3.0, TimerMode::Once),
+                    lifetime: Timer::from_seconds(FREEZE_DURATION, TimerMode::Once),
                 },
                 GameEntity,
             ));
@@ -230,7 +229,7 @@ fn handle_gold_rush_ability(
 ) {
     for _ in events.read() {
         // Activate gold rush for 10 seconds
-        abilities.gold_rush_active = Some(Timer::from_seconds(10.0, TimerMode::Once));
+        abilities.gold_rush_active = Some(Timer::from_seconds(GOLD_RUSH_DURATION, TimerMode::Once));
     }
 }
 
@@ -239,8 +238,8 @@ fn handle_artillery_ability(
     mut events: EventReader<ArtilleryAbilityEvent>,
     mut enemies: Query<(&mut Enemy, &Transform)>,
 ) {
-    let artillery_damage = 400.0;
-    let artillery_radius = 100.0;
+    let artillery_damage = ARTILLERY_DAMAGE;
+    let artillery_radius = ARTILLERY_RADIUS;
 
     for event in events.read() {
         // Damage all enemies in radius
@@ -264,7 +263,7 @@ fn handle_artillery_ability(
                     custom_size: Some(Vec2::splat(artillery_radius * 2.0)),
                     ..default()
                 },
-                transform: Transform::from_translation(event.position.extend(3.8)),
+                transform: Transform::from_translation(event.position.extend(ZDepth::ABILITY_EFFECT)),
                 ..default()
             },
             ArtilleryStrike {
@@ -355,7 +354,7 @@ fn update_artillery_target(
                 if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
                     // Update or spawn cursor
                     if let Ok((_, mut transform)) = cursor_query.get_single_mut() {
-                        transform.translation = world_pos.extend(5.0);
+                        transform.translation = world_pos.extend(ZDepth::ARTILLERY_CURSOR);
                     } else {
                         // Spawn targeting cursor
                         commands.spawn((
@@ -365,7 +364,7 @@ fn update_artillery_target(
                                     custom_size: Some(Vec2::splat(200.0)), // Preview radius
                                     ..default()
                                 },
-                                transform: Transform::from_translation(world_pos.extend(5.0)),
+                                transform: Transform::from_translation(world_pos.extend(ZDepth::ARTILLERY_CURSOR)),
                                 ..default()
                             },
                             ArtilleryTargetCursor,
