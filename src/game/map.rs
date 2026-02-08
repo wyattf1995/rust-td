@@ -871,67 +871,13 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>, sel
     // Spawn entry point indicator (enemy spawn)
     if let Some(&(x, y)) = map.path.first() {
         let pos = GameMap::grid_to_world(x, y);
-        // Outer glow
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: GameColors::SECONDARY.with_alpha(0.3),
-                    custom_size: Some(Vec2::splat(ShapeSizes::SPAWN_INDICATOR + 8.0)),
-                    ..default()
-                },
-                transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_GLOW)),
-                ..default()
-            },
-            SpawnExitMarker { is_spawn: true },
-            GameEntity,
-        ));
-        // Inner marker
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: GameColors::SECONDARY,
-                    custom_size: Some(Vec2::splat(ShapeSizes::SPAWN_INDICATOR)),
-                    ..default()
-                },
-                transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_MARKER)),
-                ..default()
-            },
-            SpawnExitMarker { is_spawn: true },
-            GameEntity,
-        ));
+        spawn_point_marker(&mut commands, pos, GameColors::SECONDARY, ShapeSizes::SPAWN_INDICATOR, true);
     }
 
     // Spawn exit point indicator (goal)
     if let Some(&(x, y)) = map.path.last() {
         let pos = GameMap::grid_to_world(x, y);
-        // Outer glow
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: GameColors::ACCENT.with_alpha(0.3),
-                    custom_size: Some(Vec2::splat(ShapeSizes::EXIT_INDICATOR + 8.0)),
-                    ..default()
-                },
-                transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_GLOW)),
-                ..default()
-            },
-            SpawnExitMarker { is_spawn: false },
-            GameEntity,
-        ));
-        // Inner marker
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: GameColors::ACCENT,
-                    custom_size: Some(Vec2::splat(ShapeSizes::EXIT_INDICATOR)),
-                    ..default()
-                },
-                transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_MARKER)),
-                ..default()
-            },
-            SpawnExitMarker { is_spawn: false },
-            GameEntity,
-        ));
+        spawn_point_marker(&mut commands, pos, GameColors::ACCENT, ShapeSizes::EXIT_INDICATOR, false);
     }
 
     // Spawn range preview circle (initially hidden)
@@ -1166,6 +1112,43 @@ fn update_path_flow_dots(
 }
 
 /// Pulse spawn and exit markers for visibility
+fn spawn_point_marker(
+    commands: &mut Commands,
+    pos: Vec2,
+    color: Color,
+    size: f32,
+    is_spawn: bool,
+) {
+    // Outer glow
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: color.with_alpha(0.3),
+                custom_size: Some(Vec2::splat(size + 8.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_GLOW)),
+            ..default()
+        },
+        SpawnExitMarker { is_spawn },
+        GameEntity,
+    ));
+    // Inner marker
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color,
+                custom_size: Some(Vec2::splat(size)),
+                ..default()
+            },
+            transform: Transform::from_translation(pos.extend(ZDepth::SPAWN_EXIT_MARKER)),
+            ..default()
+        },
+        SpawnExitMarker { is_spawn },
+        GameEntity,
+    ));
+}
+
 fn update_spawn_exit_markers(
     mut markers: Query<(&SpawnExitMarker, &mut Transform, &mut Sprite)>,
     time: Res<Time>,

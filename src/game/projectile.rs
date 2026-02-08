@@ -241,9 +241,9 @@ fn projectile_collision(
 ) {
     // Collect chain bounce data to spawn after iteration
     // (origin_pos, bounce_damage, hit_list, remaining_bounces, source_tower, specialization)
-    let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32, Option<Entity>, Option<Specialization>)> = Vec::new();
+    let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32, Option<Entity>, Option<Specialization>)> = Vec::with_capacity(8);
     // Collect piercing projectile updates (entity, new hit list entry)
-    let mut pierce_updates: Vec<Entity> = Vec::new();
+    let mut pierce_updates: Vec<Entity> = Vec::with_capacity(8);
 
     // Check projectile collisions
     for (proj_entity, projectile, proj_transform) in &projectiles {
@@ -276,9 +276,9 @@ fn projectile_collision(
                         stats.record_damage(tower_entity, actual_damage);
                     }
                     if is_crit {
-                        spawn_crit_number(&mut commands, &assets, enemy_pos, actual_damage, settings.show_damage_numbers);
+                        spawn_damage_text(&mut commands, &assets, enemy_pos, actual_damage, true, settings.show_damage_numbers);
                     } else {
-                        spawn_damage_number(&mut commands, &assets, enemy_pos, actual_damage, settings.show_damage_numbers);
+                        spawn_damage_text(&mut commands, &assets, enemy_pos, actual_damage, false, settings.show_damage_numbers);
                     }
 
                     // Hit sparks (density-aware)
@@ -378,7 +378,7 @@ fn projectile_collision(
                             if enemy_pos.distance(other_pos) < splash_radius {
                                 let other_actual_damage = other_enemy.apply_armor_damage(splash_damage);
                                 if other_actual_damage > 0.0 {
-                                    spawn_damage_number(&mut commands, &assets, other_pos, other_actual_damage, settings.show_damage_numbers);
+                                    spawn_damage_text(&mut commands, &assets, other_pos, other_actual_damage, false, settings.show_damage_numbers);
                                 }
 
                                 // Shockwave: push enemies backward along path
@@ -447,32 +447,35 @@ fn projectile_collision(
         }
     }
 
-    // Handle Railgun piercing: find next target and update projectile
-    for proj_entity in pierce_updates {
+    // Post-loop: handle pierce continuations and chain bounces
+    handle_pierce_continuation(&mut commands, &pierce_updates, &projectiles, &enemies, &spatial_grid);
+    handle_chain_bounces(&mut commands, chain_bounces, &mut enemies, &spatial_grid, &assets, &settings);
+}
+
+const PIERCE_SEARCH_RANGE: f32 = 80.0;
+const ARC_AOE_RADIUS: f32 = 20.0;
+const ARC_DAMAGE_RATIO: f32 = 0.35;
+const TESLA_RANGE_MULT: f32 = 1.2;
+
+/// Handle Railgun piercing: find next target for each piercing projectile and spawn continuation.
+fn handle_pierce_continuation(
+    commands: &mut Commands,
+    pierce_updates: &[Entity],
+    projectiles: &Query<(Entity, &Projectile, &Transform)>,
+    enemies: &Query<(Entity, &mut Enemy, &Transform)>,
+    spatial_grid: &SpatialGrid,
+) {
+    for &proj_entity in pierce_updates {
         if let Ok((_, projectile, proj_transform)) = projectiles.get(proj_entity) {
             let proj_pos = proj_transform.translation.truncate();
             let mut hit_list = projectile.hit_enemies.clone();
             hit_list.push(projectile.target);
 
-            // Find nearest enemy not already hit
-            let mut best_target: Option<(Entity, f32)> = None;
-            let pierce_range = 80.0; // Look ahead range for next pierce target
-            let nearby = spatial_grid.query_range(proj_pos, pierce_range);
-            for entity in nearby {
-                if hit_list.contains(&entity) { continue; }
-                if let Ok((_, enemy, transform)) = enemies.get(entity) {
-                    if enemy.marked_dead || enemy.health <= 0.0 { continue; }
-                    let dist = proj_pos.distance(transform.translation.truncate());
-                    if dist <= pierce_range {
-                        if best_target.map_or(true, |(_, bd)| dist < bd) {
-                            best_target = Some((entity, dist));
-                        }
-                    }
-                }
-            }
+            let next_target = find_nearest_unhit_enemy(
+                &hit_list, proj_pos, PIERCE_SEARCH_RANGE, enemies, spatial_grid,
+            );
 
-            if let Some((next_target, _)) = best_target {
-                // Spawn new piercing projectile with decremented count
+            if let Some((target, _)) = next_target {
                 commands.spawn((
                     SpriteBundle {
                         sprite: Sprite {
@@ -484,7 +487,7 @@ fn projectile_collision(
                         ..default()
                     },
                     Projectile {
-                        target: next_target,
+                        target,
                         damage: projectile.damage,
                         speed: projectile.speed,
                         tower_type: projectile.tower_type,
@@ -502,79 +505,35 @@ fn projectile_collision(
             commands.entity(proj_entity).despawn_recursive();
         }
     }
+}
 
-    // Spawn chain bounce projectiles (spatial grid narrows search to nearby enemies)
+/// Handle chain bounce projectiles: find next bounce target and spawn continuation.
+#[allow(clippy::too_many_arguments)]
+fn handle_chain_bounces(
+    commands: &mut Commands,
+    chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32, Option<Entity>, Option<Specialization>)>,
+    enemies: &mut Query<(Entity, &mut Enemy, &Transform)>,
+    spatial_grid: &SpatialGrid,
+    assets: &GameAssets,
+    settings: &GameSettings,
+) {
     for (origin_pos, bounce_damage, hit_list, remaining_bounces, source_tower, spec) in chain_bounces {
-        // Find nearest enemy not in hit list
-        let mut best_target: Option<(Entity, f32)> = None;
-        // Tesla: +20% bounce range
-        let range_mult = if spec == Some(Specialization::Tesla) { 1.2 } else { 1.0 };
+        let range_mult = if spec == Some(Specialization::Tesla) { TESLA_RANGE_MULT } else { 1.0 };
         let bounce_range = ShapeSizes::CHAIN_BOUNCE_RANGE * range_mult;
 
-        let nearby = spatial_grid.query_range(origin_pos, bounce_range);
-        for entity in nearby {
-            if hit_list.contains(&entity) {
-                continue;
-            }
-            if let Ok((_, enemy, transform)) = enemies.get(entity) {
-                if enemy.marked_dead || enemy.health <= 0.0 {
-                    continue;
-                }
+        let next_target = find_nearest_unhit_enemy(
+            &hit_list, origin_pos, bounce_range, enemies, spatial_grid,
+        );
 
-                let enemy_pos = transform.translation.truncate();
-                let dist = origin_pos.distance(enemy_pos);
-
-                if dist <= bounce_range {
-                    if let Some((_, best_dist)) = best_target {
-                        if dist < best_dist {
-                            best_target = Some((entity, dist));
-                        }
-                    } else {
-                        best_target = Some((entity, dist));
-                    }
-                }
-            }
-        }
-
-        if let Some((next_target, _)) = best_target {
-            // Arc: spawn mini AOE at bounce point
+        if let Some((target, _)) = next_target {
+            // Arc specialization: spawn mini AOE at bounce point
             if spec == Some(Specialization::Arc) {
-                let arc_radius = 20.0;
-                let arc_damage = bounce_damage * 0.35;
-                let nearby_for_arc = spatial_grid.query_range(origin_pos, arc_radius);
-                for entity in nearby_for_arc {
-                    if let Ok((_, mut arc_enemy, arc_transform)) = enemies.get_mut(entity) {
-                        let arc_pos = arc_transform.translation.truncate();
-                        if origin_pos.distance(arc_pos) < arc_radius {
-                            let arc_actual = arc_enemy.apply_armor_damage(arc_damage);
-                            if arc_actual > 0.0 {
-                                spawn_damage_number(&mut commands, &assets, arc_pos, arc_actual, settings.show_damage_numbers);
-                            }
-                        }
-                    }
-                }
-                // Arc visual
-                commands.spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
-                            color: GameColors::PROJECTILE_CHAIN.with_alpha(0.3),
-                            custom_size: Some(Vec2::splat(arc_radius * 2.0)),
-                            ..default()
-                        },
-                        transform: Transform::from_translation(origin_pos.extend(ZDepth::ABILITY_EFFECT)),
-                        ..default()
-                    },
-                    SplashEffect {
-                        lifetime: Timer::from_seconds(0.15, TimerMode::Once),
-                    },
-                    GameEntity,
-                ));
+                handle_arc_aoe(commands, origin_pos, bounce_damage, enemies, spatial_grid, assets, settings);
             }
 
-            // Spawn chain lightning visual effect (line from origin to new target)
-            if let Ok((_, _, next_transform)) = enemies.get(next_target) {
+            // Spawn chain bounce projectile
+            if let Ok((_, _, next_transform)) = enemies.get(target) {
                 let next_pos = next_transform.translation.truncate();
-
                 commands.spawn((
                     SpriteBundle {
                         sprite: Sprite {
@@ -586,7 +545,7 @@ fn projectile_collision(
                         ..default()
                     },
                     Projectile {
-                        target: next_target,
+                        target,
                         damage: bounce_damage,
                         speed: CombatConstants::CHAIN_BOUNCE_SPEED,
                         tower_type: TowerType::Chain,
@@ -605,58 +564,95 @@ fn projectile_collision(
     }
 }
 
-fn spawn_damage_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, damage: f32, show: bool) {
-    if !show {
-        return;
+/// Arc specialization: deal AOE damage at the bounce point.
+fn handle_arc_aoe(
+    commands: &mut Commands,
+    origin_pos: Vec2,
+    bounce_damage: f32,
+    enemies: &mut Query<(Entity, &mut Enemy, &Transform)>,
+    spatial_grid: &SpatialGrid,
+    assets: &GameAssets,
+    settings: &GameSettings,
+) {
+    let arc_damage = bounce_damage * ARC_DAMAGE_RATIO;
+    let nearby = spatial_grid.query_range(origin_pos, ARC_AOE_RADIUS);
+    for entity in nearby {
+        if let Ok((_, mut enemy, transform)) = enemies.get_mut(entity) {
+            let pos = transform.translation.truncate();
+            if origin_pos.distance(pos) < ARC_AOE_RADIUS {
+                let actual = enemy.apply_armor_damage(arc_damage);
+                if actual > 0.0 {
+                    spawn_damage_text(commands, assets, pos, actual, false, settings.show_damage_numbers);
+                }
+            }
+        }
     }
-    // Random offset and velocity for variety
-    let offset_x = (rand_simple(pos.x) - 0.5) * 20.0;
-    let velocity = Vec2::new(offset_x, 40.0);
-
+    // Arc visual effect
     commands.spawn((
-        Text2dBundle {
-            text: Text::from_section(
-                format!("{:.0}", damage),
-                TextStyle {
-                    font: assets.font.clone(),
-                    font_size: ShapeSizes::DAMAGE_TEXT_SIZE,
-                    color: GameColors::DAMAGE_TEXT,
-                },
-            ),
-            transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, ZDepth::FLOATING_TEXT)),
+        SpriteBundle {
+            sprite: Sprite {
+                color: GameColors::PROJECTILE_CHAIN.with_alpha(0.3),
+                custom_size: Some(Vec2::splat(ARC_AOE_RADIUS * 2.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(origin_pos.extend(ZDepth::ABILITY_EFFECT)),
             ..default()
         },
-        DamageNumber {
-            lifetime: Timer::from_seconds(CombatConstants::DAMAGE_NUMBER_LIFETIME, TimerMode::Once),
-            velocity,
+        SplashEffect {
+            lifetime: Timer::from_seconds(0.15, TimerMode::Once),
         },
         GameEntity,
     ));
 }
 
-fn spawn_crit_number(commands: &mut Commands, assets: &GameAssets, pos: Vec2, damage: f32, show: bool) {
+/// Find the nearest living enemy not in the hit list within the given range.
+fn find_nearest_unhit_enemy(
+    hit_list: &[Entity],
+    origin: Vec2,
+    range: f32,
+    enemies: &Query<(Entity, &mut Enemy, &Transform)>,
+    spatial_grid: &SpatialGrid,
+) -> Option<(Entity, f32)> {
+    let mut best: Option<(Entity, f32)> = None;
+    let nearby = spatial_grid.query_range(origin, range);
+    for entity in nearby {
+        if hit_list.contains(&entity) { continue; }
+        if let Ok((_, enemy, transform)) = enemies.get(entity) {
+            if enemy.marked_dead || enemy.health <= 0.0 { continue; }
+            let dist = origin.distance(transform.translation.truncate());
+            if dist <= range && best.map_or(true, |(_, bd)| dist < bd) {
+                best = Some((entity, dist));
+            }
+        }
+    }
+    best
+}
+
+/// Spawn floating damage text (regular or crit).
+fn spawn_damage_text(commands: &mut Commands, assets: &GameAssets, pos: Vec2, damage: f32, is_crit: bool, show: bool) {
     if !show {
         return;
     }
     let offset_x = (rand_simple(pos.x) - 0.5) * 20.0;
-    let velocity = Vec2::new(offset_x, 50.0);
+    let (text, font_size, color, velocity_y) = if is_crit {
+        (format!("CRIT {:.0}", damage), ShapeSizes::DAMAGE_TEXT_SIZE + 4.0, Color::srgb(1.0, 0.3, 0.3), 50.0)
+    } else {
+        (format!("{:.0}", damage), ShapeSizes::DAMAGE_TEXT_SIZE, GameColors::DAMAGE_TEXT, 40.0)
+    };
 
     commands.spawn((
         Text2dBundle {
-            text: Text::from_section(
-                format!("CRIT {:.0}", damage),
-                TextStyle {
-                    font: assets.font.clone(),
-                    font_size: ShapeSizes::DAMAGE_TEXT_SIZE + 4.0,
-                    color: Color::srgb(1.0, 0.3, 0.3), // Red for crit
-                },
-            ),
+            text: Text::from_section(text, TextStyle {
+                font: assets.font.clone(),
+                font_size,
+                color,
+            }),
             transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, ZDepth::FLOATING_TEXT)),
             ..default()
         },
         DamageNumber {
             lifetime: Timer::from_seconds(CombatConstants::DAMAGE_NUMBER_LIFETIME, TimerMode::Once),
-            velocity,
+            velocity: Vec2::new(offset_x, velocity_y),
         },
         GameEntity,
     ));

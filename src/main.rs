@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+#[cfg(debug_assertions)]
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 
 mod analytics;
 mod game;
@@ -53,8 +55,8 @@ fn main() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
 
-    App::new()
-        .add_plugins(
+    let mut app = App::new();
+    app.add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
@@ -82,8 +84,12 @@ fn main() {
             graphics::GraphicsPlugin,
             settings_ui::SettingsPlugin,
         ))
-        .add_systems(Update, (detect_screen_size, update_camera_projection))
-        .run();
+        .add_systems(Update, (detect_screen_size, update_camera_projection));
+
+    #[cfg(debug_assertions)]
+    app.add_plugins((FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin::default()));
+
+    app.run();
 }
 
 /// Detect screen size and update UI scale for responsive layout

@@ -12,6 +12,7 @@ use super::{
     enemy::Enemy,
     map::GameMap,
     projectile::SpawnProjectileEvent,
+    rules,
     spatial::SpatialGrid,
     stats::GameStats,
     GameEntity,
@@ -453,27 +454,11 @@ impl Tower {
     }
 
     pub fn sell_value(&self) -> u32 {
-        // Return 75% of total invested cost
-        let base_cost = self.tower_type.cost();
-        let upgrade_cost = self.upgrade_cost_total();
-        ((base_cost + upgrade_cost) as f32 * 0.75) as u32
+        rules::sell_value(self.tower_type.cost(), self.level)
     }
 
     pub fn upgrade_cost(&self) -> u32 {
-        // Infinite upgrades with exponentially increasing cost
-        // Level 2: 50% of base, Level 3: 75%, Level 4: 112%, Level 5: 168%...
-        let base = self.tower_type.cost() as f32;
-        (base * 0.5 * (1.5_f32).powf((self.level - 1) as f32)) as u32
-    }
-
-    fn upgrade_cost_total(&self) -> u32 {
-        // Total spent on upgrades
-        let mut total = 0;
-        let base = self.tower_type.cost() as f32;
-        for lvl in 1..self.level {
-            total += (base * 0.5 * (1.5_f32).powf((lvl - 1) as f32)) as u32;
-        }
-        total
+        rules::upgrade_cost(self.tower_type.cost(), self.level)
     }
 
     /// Returns true when tower is at level 2 and has branching options but hasn't chosen yet
@@ -498,59 +483,45 @@ impl Tower {
     pub fn upgrade(&mut self) {
         self.level += 1;
 
-        // Incrementally update cached speed multiplier with this level's bonus
-        let bonus = 0.20 / (1.0 + (self.level - 2) as f32 * 0.15);
-        self.cached_speed_mult *= 1.0 + bonus * 0.6;
+        // Update cached speed multiplier
+        self.cached_speed_mult = rules::speed_multiplier(self.level);
 
-        // Calculate cumulative damage and range multipliers
-        let mut damage_mult = 1.0;
-        let mut range_mult = 1.0;
-        for lvl in 2..=self.level {
-            let b = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
-            damage_mult *= 1.0 + b;
-            range_mult *= 1.0 + b * 0.4;
-        }
-
-        // Apply specialization stat modifiers on top of level scaling
-        let (spec_dmg, spec_rng, spec_spd) = self.specialization
+        // Calculate stats via pure rules functions
+        let spec_mods = self.specialization
             .map(|s| s.stat_modifiers())
             .unwrap_or((1.0, 1.0, 1.0));
 
-        self.damage = self.tower_type.damage() * damage_mult * spec_dmg;
-        self.range = self.tower_type.range() * range_mult * spec_rng;
-        let attack_speed = self.tower_type.attack_speed() * self.cached_speed_mult * spec_spd;
-        // For towers that don't attack (like Buff), use a dummy timer
-        let cooldown_secs = if attack_speed > 0.0 { 1.0 / attack_speed } else { 1.0 };
+        let (dmg, rng, spd) = rules::tower_stats_at_level(
+            self.tower_type.damage(),
+            self.tower_type.range(),
+            self.tower_type.attack_speed(),
+            self.level,
+            spec_mods,
+        );
+
+        self.damage = dmg;
+        self.range = rng;
+        let cooldown_secs = if spd > 0.0 { 1.0 / spd } else { 1.0 };
         self.attack_cooldown = Timer::from_seconds(cooldown_secs, TimerMode::Repeating);
 
         // Update cached buff percentage
         if self.tower_type == TowerType::Buff {
-            let level_bonus: f32 = (1..self.level).map(|l| 0.05 / (1.0 + (l - 1) as f32 * 0.3)).sum();
-            self.cached_buff_pct = 0.25 + level_bonus;
+            self.cached_buff_pct = rules::buff_percentage(self.level);
         }
     }
 
     /// Calculate stats for next level (for preview — must compute from scratch)
     pub fn preview_upgrade(&self) -> (f32, f32, f32) {
-        let next_level = self.level + 1;
-        let bonus = 0.20 / (1.0 + (next_level - 2) as f32 * 0.15);
-        let next_speed_mult = self.cached_speed_mult * (1.0 + bonus * 0.6);
-
-        let mut damage_mult = 1.0;
-        let mut range_mult = 1.0;
-        for lvl in 2..=next_level {
-            let b = 0.20 / (1.0 + (lvl - 2) as f32 * 0.15);
-            damage_mult *= 1.0 + b;
-            range_mult *= 1.0 + b * 0.4;
-        }
-        let (spec_dmg, spec_rng, spec_spd) = self.specialization
+        let spec_mods = self.specialization
             .map(|s| s.stat_modifiers())
             .unwrap_or((1.0, 1.0, 1.0));
 
-        (
-            self.tower_type.damage() * damage_mult * spec_dmg,
-            self.tower_type.range() * range_mult * spec_rng,
-            self.tower_type.attack_speed() * next_speed_mult * spec_spd,
+        rules::tower_stats_at_level(
+            self.tower_type.damage(),
+            self.tower_type.range(),
+            self.tower_type.attack_speed(),
+            self.level + 1,
+            spec_mods,
         )
     }
 
@@ -570,11 +541,27 @@ impl Tower {
         if self.tower_type != TowerType::Buff {
             return 0.0;
         }
-        let next_level = self.level + 1;
-        let next_bonus = 0.05 / (1.0 + (next_level - 2) as f32 * 0.3);
-        self.cached_buff_pct + next_bonus
+        self.cached_buff_pct + rules::buff_percentage_next_delta(self.level)
     }
 }
+
+// =============================================================================
+// TOWER VISUAL CONSTANTS
+// =============================================================================
+const BRIGHTNESS_PER_LEVEL: f32 = 0.12;
+const CORE_SIZE_PER_LEVEL: f32 = 1.5;
+const BARREL_BASE_BLEND: f32 = 0.85;
+const BARREL_SPEC_BLEND: f32 = 0.15;
+const BRACKET_ALPHA_BASE: f32 = 0.25;
+const BRACKET_ALPHA_PER_LEVEL: f32 = 0.08;
+const BRACKET_ALPHA_MAX: f32 = 0.85;
+const LEVEL_RING_ALPHA: f32 = 0.12;
+const LEVEL_RING_SIZE: f32 = 44.0;
+const LEVEL_RING_MIN_LEVEL: u32 = 3;
+const UPGRADE_FLASH_ALPHA: f32 = 0.6;
+const UPGRADE_FLASH_START_SIZE: f32 = 30.0;
+const UPGRADE_FLASH_END_SIZE: f32 = 50.0;
+const UPGRADE_FLASH_DURATION: f32 = 0.15;
 
 /// Range indicator component
 #[derive(Component)]
@@ -1213,6 +1200,117 @@ fn handle_tower_selling(
     }
 }
 
+/// Shared visual update logic for tower upgrades and specializations.
+/// Updates core color/size, barrel tint, bracket alpha, level ring, range indicator,
+/// and spawns an upgrade flash effect.
+#[allow(clippy::too_many_arguments)]
+fn apply_tower_visual_update(
+    commands: &mut Commands,
+    tower_entity: Entity,
+    tower: &Tower,
+    tower_pos: Vec2,
+    tower_cores: &mut Query<(&TowerCore, &mut Sprite), Without<Tower>>,
+    barrels: &mut Query<(&TowerBarrel, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>, Without<TowerBracket>)>,
+    brackets: &mut Query<(&TowerBracket, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>, Without<TowerBarrel>)>,
+    range_indicators: &mut Query<(&RangeIndicator, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<TowerBarrel>, Without<TowerBracket>)>,
+    level_rings: &Query<&TowerLevelRing>,
+) {
+    let accent_color = tower.accent_color();
+    let brightness = 1.0 + BRIGHTNESS_PER_LEVEL * (tower.level - 1) as f32;
+    let accent_srgba = accent_color.to_srgba();
+    let upgraded_color = Color::srgb(
+        (accent_srgba.red * brightness).min(1.0),
+        (accent_srgba.green * brightness).min(1.0),
+        (accent_srgba.blue * brightness).min(1.0),
+    );
+
+    // Update core sprite
+    for (core, mut core_sprite) in tower_cores.iter_mut() {
+        if core.tower == tower_entity {
+            core_sprite.color = upgraded_color;
+            let core_size = ShapeSizes::TOWER_CORE + (tower.level - 1) as f32 * CORE_SIZE_PER_LEVEL;
+            core_sprite.custom_size = Some(Vec2::splat(core_size));
+            break;
+        }
+    }
+
+    // Tint barrel if tower has a specialization
+    if let Some(spec) = tower.specialization {
+        let spec_srgba = spec.color().to_srgba();
+        let barrel_base = GameColors::TOWER_BARREL.to_srgba();
+        let barrel_tint = Color::srgb(
+            barrel_base.red * BARREL_BASE_BLEND + spec_srgba.red * BARREL_SPEC_BLEND,
+            barrel_base.green * BARREL_BASE_BLEND + spec_srgba.green * BARREL_SPEC_BLEND,
+            barrel_base.blue * BARREL_BASE_BLEND + spec_srgba.blue * BARREL_SPEC_BLEND,
+        );
+        for (barrel, mut barrel_sprite) in barrels.iter_mut() {
+            if barrel.tower == tower_entity {
+                barrel_sprite.color = barrel_tint;
+                break;
+            }
+        }
+    }
+
+    // Update bracket brightness
+    let bracket_alpha = (BRACKET_ALPHA_BASE + BRACKET_ALPHA_PER_LEVEL * (tower.level - 1) as f32)
+        .min(BRACKET_ALPHA_MAX);
+    let bracket_color = accent_color.with_alpha(bracket_alpha);
+    for (bracket, mut bracket_sprite) in brackets.iter_mut() {
+        if bracket.tower == tower_entity {
+            bracket_sprite.color = bracket_color;
+        }
+    }
+
+    // Spawn level ring at level 3+ (if not already present)
+    if tower.level >= LEVEL_RING_MIN_LEVEL {
+        let has_ring = level_rings.iter().any(|r| r.tower == tower_entity);
+        if !has_ring {
+            let ring_color = accent_color.with_alpha(LEVEL_RING_ALPHA);
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: ring_color,
+                        custom_size: Some(Vec2::splat(LEVEL_RING_SIZE)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(
+                        tower_pos.extend(ZDepth::TOWER_LEVEL_RING)
+                    ),
+                    ..default()
+                },
+                TowerLevelRing { tower: tower_entity },
+                GameEntity,
+            ));
+        }
+    }
+
+    // Spawn upgrade flash
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::srgba(1.0, 1.0, 1.0, UPGRADE_FLASH_ALPHA),
+                custom_size: Some(Vec2::splat(UPGRADE_FLASH_START_SIZE)),
+                ..default()
+            },
+            transform: Transform::from_translation(tower_pos.extend(ZDepth::UPGRADE_FLASH)),
+            ..default()
+        },
+        UpgradeFlash {
+            lifetime: Timer::from_seconds(UPGRADE_FLASH_DURATION, TimerMode::Once),
+            start_size: UPGRADE_FLASH_START_SIZE,
+            end_size: UPGRADE_FLASH_END_SIZE,
+        },
+        GameEntity,
+    ));
+
+    // Update range indicator size
+    for (indicator, mut ind_sprite) in range_indicators.iter_mut() {
+        if indicator.tower == tower_entity {
+            ind_sprite.custom_size = Some(Vec2::splat(tower.range * 2.0));
+        }
+    }
+}
+
 fn handle_tower_upgrade(
     mut commands: Commands,
     mut events: EventReader<UpgradeTowerEvent>,
@@ -1233,107 +1331,12 @@ fn handle_tower_upgrade(
                 tower.upgrade();
                 stats.record_upgrade(event.tower, cost, tower.level);
 
-                // Update core visual - use spec color if specialized, else tower type color
-                let accent_color = tower.accent_color();
-                let brightness = 1.0 + 0.12 * (tower.level - 1) as f32;
-                let upgraded_color = Color::srgb(
-                    (accent_color.to_srgba().red * brightness).min(1.0),
-                    (accent_color.to_srgba().green * brightness).min(1.0),
-                    (accent_color.to_srgba().blue * brightness).min(1.0),
+                let tower_pos = tower_transform.translation.truncate();
+                apply_tower_visual_update(
+                    &mut commands, event.tower, &tower, tower_pos,
+                    &mut tower_cores, &mut barrels, &mut brackets,
+                    &mut range_indicators, &level_rings,
                 );
-
-                // Find and update the core sprite for this tower
-                for (core, mut core_sprite) in &mut tower_cores {
-                    if core.tower == event.tower {
-                        core_sprite.color = upgraded_color;
-                        // Slightly larger core with upgrades
-                        let core_size = ShapeSizes::TOWER_CORE + (tower.level - 1) as f32 * 1.5;
-                        core_sprite.custom_size = Some(Vec2::splat(core_size));
-                        break;
-                    }
-                }
-
-                // Keep barrel tinted if tower has a specialization
-                if let Some(spec) = tower.specialization {
-                    let spec_color = spec.color();
-                    let barrel_base = GameColors::TOWER_BARREL.to_srgba();
-                    let spec_srgba = spec_color.to_srgba();
-                    let barrel_tint = Color::srgb(
-                        barrel_base.red * 0.85 + spec_srgba.red * 0.15,
-                        barrel_base.green * 0.85 + spec_srgba.green * 0.15,
-                        barrel_base.blue * 0.85 + spec_srgba.blue * 0.15,
-                    );
-                    for (barrel, mut barrel_sprite) in &mut barrels {
-                        if barrel.tower == event.tower {
-                            barrel_sprite.color = barrel_tint;
-                            break;
-                        }
-                    }
-                }
-
-                // Update bracket brightness (scales with level)
-                let bracket_alpha = (0.25 + 0.08 * (tower.level - 1) as f32).min(0.85);
-                let bracket_color = accent_color.with_alpha(bracket_alpha);
-                for (bracket, mut bracket_sprite) in &mut brackets {
-                    if bracket.tower == event.tower {
-                        bracket_sprite.color = bracket_color;
-                    }
-                }
-
-                // Spawn level ring at level 3+ (if not already present)
-                if tower.level >= 3 {
-                    let has_ring = level_rings.iter().any(|r| r.tower == event.tower);
-                    if !has_ring {
-                        let pos = tower_transform.translation.truncate();
-                        let ring_color = accent_color.with_alpha(0.12);
-                        commands.spawn((
-                            SpriteBundle {
-                                sprite: Sprite {
-                                    color: ring_color,
-                                    custom_size: Some(Vec2::splat(44.0)),
-                                    ..default()
-                                },
-                                transform: Transform::from_translation(
-                                    pos.extend(ZDepth::TOWER_LEVEL_RING)
-                                ),
-                                ..default()
-                            },
-                            TowerLevelRing { tower: event.tower },
-                            GameEntity,
-                        ));
-                    } else {
-                        // Update ring color/alpha for higher levels
-                        // Ring alpha increases +0.03 per level above 3
-                        // (handled in a separate pass below isn't needed since we just set it)
-                    }
-                }
-
-                // Spawn upgrade flash
-                let pos = tower_transform.translation.truncate();
-                commands.spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
-                            color: Color::srgba(1.0, 1.0, 1.0, 0.6),
-                            custom_size: Some(Vec2::splat(30.0)),
-                            ..default()
-                        },
-                        transform: Transform::from_translation(pos.extend(ZDepth::UPGRADE_FLASH)),
-                        ..default()
-                    },
-                    UpgradeFlash {
-                        lifetime: Timer::from_seconds(0.15, TimerMode::Once),
-                        start_size: 30.0,
-                        end_size: 50.0,
-                    },
-                    GameEntity,
-                ));
-
-                // Update range indicator size
-                for (indicator, mut ind_sprite) in &mut range_indicators {
-                    if indicator.tower == event.tower {
-                        ind_sprite.custom_size = Some(Vec2::splat(tower.range * 2.0));
-                    }
-                }
             }
         }
     }
@@ -1359,99 +1362,12 @@ fn handle_tower_specialization(
                 tower.specialize(event.specialization);
                 stats.record_upgrade(event.tower, cost, tower.level);
 
-                // Update core visual with specialization-specific color
-                let accent_color = tower.accent_color();
-                let brightness = 1.0 + 0.12 * (tower.level - 1) as f32;
-                let upgraded_color = Color::srgb(
-                    (accent_color.to_srgba().red * brightness).min(1.0),
-                    (accent_color.to_srgba().green * brightness).min(1.0),
-                    (accent_color.to_srgba().blue * brightness).min(1.0),
+                let tower_pos = tower_transform.translation.truncate();
+                apply_tower_visual_update(
+                    &mut commands, event.tower, &tower, tower_pos,
+                    &mut tower_cores, &mut barrels, &mut brackets,
+                    &mut range_indicators, &level_rings,
                 );
-
-                for (core, mut core_sprite) in &mut tower_cores {
-                    if core.tower == event.tower {
-                        core_sprite.color = upgraded_color;
-                        let core_size = ShapeSizes::TOWER_CORE + (tower.level - 1) as f32 * 1.5;
-                        core_sprite.custom_size = Some(Vec2::splat(core_size));
-                        break;
-                    }
-                }
-
-                // Tint barrel with spec color (15% blend)
-                let spec_color = event.specialization.color();
-                let barrel_base = GameColors::TOWER_BARREL.to_srgba();
-                let spec_srgba = spec_color.to_srgba();
-                let barrel_tint = Color::srgb(
-                    barrel_base.red * 0.85 + spec_srgba.red * 0.15,
-                    barrel_base.green * 0.85 + spec_srgba.green * 0.15,
-                    barrel_base.blue * 0.85 + spec_srgba.blue * 0.15,
-                );
-                for (barrel, mut barrel_sprite) in &mut barrels {
-                    if barrel.tower == event.tower {
-                        barrel_sprite.color = barrel_tint;
-                        break;
-                    }
-                }
-
-                // Update bracket color to spec color + brightness scaling
-                let bracket_alpha = (0.25 + 0.08 * (tower.level - 1) as f32).min(0.85);
-                let bracket_color = accent_color.with_alpha(bracket_alpha);
-                for (bracket, mut bracket_sprite) in &mut brackets {
-                    if bracket.tower == event.tower {
-                        bracket_sprite.color = bracket_color;
-                    }
-                }
-
-                // Spawn level ring (specialization goes to level 3)
-                if tower.level >= 3 {
-                    let has_ring = level_rings.iter().any(|r| r.tower == event.tower);
-                    if !has_ring {
-                        let pos = tower_transform.translation.truncate();
-                        let ring_color = accent_color.with_alpha(0.12);
-                        commands.spawn((
-                            SpriteBundle {
-                                sprite: Sprite {
-                                    color: ring_color,
-                                    custom_size: Some(Vec2::splat(44.0)),
-                                    ..default()
-                                },
-                                transform: Transform::from_translation(
-                                    pos.extend(ZDepth::TOWER_LEVEL_RING)
-                                ),
-                                ..default()
-                            },
-                            TowerLevelRing { tower: event.tower },
-                            GameEntity,
-                        ));
-                    }
-                }
-
-                // Spawn upgrade flash
-                let pos = tower_transform.translation.truncate();
-                commands.spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
-                            color: Color::srgba(1.0, 1.0, 1.0, 0.6),
-                            custom_size: Some(Vec2::splat(30.0)),
-                            ..default()
-                        },
-                        transform: Transform::from_translation(pos.extend(ZDepth::UPGRADE_FLASH)),
-                        ..default()
-                    },
-                    UpgradeFlash {
-                        lifetime: Timer::from_seconds(0.15, TimerMode::Once),
-                        start_size: 30.0,
-                        end_size: 50.0,
-                    },
-                    GameEntity,
-                ));
-
-                // Update range indicator size
-                for (indicator, mut ind_sprite) in &mut range_indicators {
-                    if indicator.tower == event.tower {
-                        ind_sprite.custom_size = Some(Vec2::splat(tower.range * 2.0));
-                    }
-                }
             }
         }
     }
@@ -1647,45 +1563,13 @@ fn update_tower_synergies(
             }
         }
 
-        // Check for synergies based on tower type and adjacent towers
-        match tower_type {
-            TowerType::Sniper => {
-                // Sniper + Sniper: +15% range
-                if adjacent_types.contains(&TowerType::Sniper) {
-                    synergies.active.push(SynergyType::SniperPair);
-                    synergies.range_bonus = 0.15;
-                }
-            }
-            TowerType::Slow => {
-                // Slow + Poison: +50% poison duration (applied when Poison hits)
-                if adjacent_types.contains(&TowerType::Poison) {
-                    synergies.active.push(SynergyType::SlowPoison);
-                    synergies.poison_duration_bonus = 0.5;
-                }
-            }
-            TowerType::Poison => {
-                // Poison + Slow: +50% poison duration
-                if adjacent_types.contains(&TowerType::Slow) {
-                    synergies.active.push(SynergyType::SlowPoison);
-                    synergies.poison_duration_bonus = 0.5;
-                }
-            }
-            TowerType::Rapid => {
-                // Rapid + Buff: Double the buff effect on this tower
-                if adjacent_types.contains(&TowerType::Buff) {
-                    synergies.active.push(SynergyType::RapidBuff);
-                    synergies.speed_buff_multiplier = 2.0;
-                }
-            }
-            TowerType::Chain => {
-                // Chain + Chain: +1 bounce
-                if adjacent_types.contains(&TowerType::Chain) {
-                    synergies.active.push(SynergyType::ChainPair);
-                    synergies.extra_chain_bounces = 1;
-                }
-            }
-            _ => {}
-        }
+        // Detect synergies via pure rules function
+        let result = rules::detect_synergies(tower_type, &adjacent_types);
+        synergies.active = result.synergies;
+        synergies.range_bonus = result.range_bonus;
+        synergies.poison_duration_bonus = result.poison_duration_bonus;
+        synergies.speed_buff_multiplier = result.speed_buff_multiplier;
+        synergies.extra_chain_bounces = result.extra_chain_bounces;
     }
 }
 

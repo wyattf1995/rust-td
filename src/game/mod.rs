@@ -7,6 +7,7 @@ pub mod effects;
 pub mod enemy;
 pub mod map;
 pub mod projectile;
+pub mod rules;
 pub mod spatial;
 pub mod stats;
 pub mod tower;

@@ -267,6 +267,15 @@ fn ability_state(abilities: &PlayerAbilities, ability: AbilityType) -> (bool, bo
 
 fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<super::GameActive>>) {
     if active.is_some() { return; }
+    setup_top_bar(&mut commands, &assets);
+    setup_bottom_bar(&mut commands, &assets);
+    setup_wave_preview(&mut commands, &assets);
+    setup_tower_detail_panel(&mut commands, &assets);
+    setup_combo_display(&mut commands, &assets);
+    setup_ability_bar(&mut commands, &assets);
+}
+
+fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
     // Top bar - HUD
     commands
         .spawn((
@@ -469,7 +478,9 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     ));
                 });
         });
+}
 
+fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
     // Bottom bar - Tower selection (touch-friendly)
     commands
         .spawn((
@@ -716,7 +727,9 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     ));
                 });
         });
+}
 
+fn setup_wave_preview(commands: &mut Commands, assets: &GameAssets) {
     // Wave preview panel (positioned above START button, shown between waves)
     commands
         .spawn((
@@ -751,7 +764,9 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                 WavePreviewText,
             ));
         });
+}
 
+fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
     // Tower detail panel (fixed right side, initially hidden) - for upgrade/sell with stats
     commands
         .spawn((
@@ -1029,7 +1044,9 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                     ));
                 });
         });
+}
 
+fn setup_combo_display(commands: &mut Commands, assets: &GameAssets) {
     // Combo display (centered, initially hidden)
     commands
         .spawn((
@@ -1067,7 +1084,9 @@ fn setup_ui(mut commands: Commands, assets: Res<GameAssets>, active: Option<Res<
                 ComboText,
             ));
         });
+}
 
+fn setup_ability_bar(commands: &mut Commands, assets: &GameAssets) {
     // Ability bar (left side, vertical)
     commands
         .spawn((
@@ -2213,6 +2232,26 @@ fn cleanup_pause_menu(mut commands: Commands, query: Query<Entity, With<PauseMen
     }
 }
 
+/// Apply standard button hover/unhover colors. Returns true if pressed.
+fn button_interaction(
+    interaction: &Interaction,
+    color: &mut BackgroundColor,
+    normal: Color,
+    hover: Color,
+) -> bool {
+    match *interaction {
+        Interaction::Pressed => true,
+        Interaction::Hovered => {
+            *color = hover.into();
+            false
+        }
+        Interaction::None => {
+            *color = normal.into();
+            false
+        }
+    }
+}
+
 fn pause_menu_buttons(
     mut resume_query: Query<
         (&Interaction, &mut BackgroundColor),
@@ -2225,30 +2264,14 @@ fn pause_menu_buttons(
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     for (interaction, mut color) in &mut resume_query {
-        match *interaction {
-            Interaction::Pressed => {
-                next_state.set(GameState::Playing);
-            }
-            Interaction::Hovered => {
-                *color = GameColors::BUTTON_START_HOVER.into();
-            }
-            Interaction::None => {
-                *color = GameColors::BUTTON_START.into();
-            }
+        if button_interaction(interaction, &mut color, GameColors::BUTTON_START, GameColors::BUTTON_START_HOVER) {
+            next_state.set(GameState::Playing);
         }
     }
 
     for (interaction, mut color) in &mut quit_query {
-        match *interaction {
-            Interaction::Pressed => {
-                next_state.set(GameState::Menu);
-            }
-            Interaction::Hovered => {
-                *color = Color::srgb(0.6, 0.3, 0.3).into();
-            }
-            Interaction::None => {
-                *color = Color::srgb(0.5, 0.2, 0.2).into();
-            }
+        if button_interaction(interaction, &mut color, Color::srgb(0.5, 0.2, 0.2), Color::srgb(0.6, 0.3, 0.3)) {
+            next_state.set(GameState::Menu);
         }
     }
 }
@@ -2258,16 +2281,8 @@ fn pause_settings_button(
     mut settings_open: ResMut<SettingsOpen>,
 ) {
     for (interaction, mut color) in &mut query {
-        match *interaction {
-            Interaction::Pressed => {
-                settings_open.0 = true;
-            }
-            Interaction::Hovered => {
-                *color = Color::srgba(1.0, 1.0, 1.0, 0.2).into();
-            }
-            Interaction::None => {
-                *color = Color::srgba(1.0, 1.0, 1.0, 0.1).into();
-            }
+        if button_interaction(interaction, &mut color, Color::srgba(1.0, 1.0, 1.0, 0.1), Color::srgba(1.0, 1.0, 1.0, 0.2)) {
+            settings_open.0 = true;
         }
     }
 }
@@ -2574,20 +2589,11 @@ fn tower_context_buttons(
 
     // Sell button
     for (interaction, mut color) in &mut sell_query {
-        match *interaction {
-            Interaction::Pressed => {
-                ui_clicked.0 = true;
-                if let Some(tower_entity) = selected_tower.0 {
-                    sell_events.send(SellTowerEvent { tower: tower_entity });
-                    selected_tower.0 = None;
-                }
-            }
-            Interaction::Hovered => {
-                ui_clicked.0 = true;
-                *color = Color::srgb(0.65, 0.3, 0.3).into();
-            }
-            Interaction::None => {
-                *color = Color::srgb(0.5, 0.2, 0.2).into();
+        if *interaction != Interaction::None { ui_clicked.0 = true; }
+        if button_interaction(interaction, &mut color, Color::srgb(0.5, 0.2, 0.2), Color::srgb(0.65, 0.3, 0.3)) {
+            if let Some(tower_entity) = selected_tower.0 {
+                sell_events.send(SellTowerEvent { tower: tower_entity });
+                selected_tower.0 = None;
             }
         }
     }
@@ -2596,18 +2602,9 @@ fn tower_context_buttons(
     let mut should_cycle_targeting = false;
 
     for (interaction, mut color) in &mut targeting_query {
-        match *interaction {
-            Interaction::Pressed => {
-                ui_clicked.0 = true;
-                should_cycle_targeting = true;
-            }
-            Interaction::Hovered => {
-                ui_clicked.0 = true;
-                *color = Color::srgb(0.4, 0.4, 0.65).into();
-            }
-            Interaction::None => {
-                *color = Color::srgb(0.3, 0.3, 0.5).into();
-            }
+        if *interaction != Interaction::None { ui_clicked.0 = true; }
+        if button_interaction(interaction, &mut color, Color::srgb(0.3, 0.3, 0.5), Color::srgb(0.4, 0.4, 0.65)) {
+            should_cycle_targeting = true;
         }
     }
 
@@ -2643,26 +2640,17 @@ fn spec_button_system(
     mut ui_clicked: ResMut<UiClicked>,
 ) {
     for (interaction, mut color, spec_btn) in &mut query {
-        match *interaction {
-            Interaction::Pressed => {
-                ui_clicked.0 = true;
-                if let Some(tower_entity) = selected_tower.0 {
-                    if let Ok(tower) = towers.get(tower_entity) {
-                        if tower.needs_specialization() && economy.gold >= tower.upgrade_cost() {
-                            spec_events.send(SpecializeTowerEvent {
-                                tower: tower_entity,
-                                specialization: spec_btn.0,
-                            });
-                        }
+        if *interaction != Interaction::None { ui_clicked.0 = true; }
+        if button_interaction(interaction, &mut color, Color::srgb(0.2, 0.3, 0.5), Color::srgb(0.3, 0.4, 0.65)) {
+            if let Some(tower_entity) = selected_tower.0 {
+                if let Ok(tower) = towers.get(tower_entity) {
+                    if tower.needs_specialization() && economy.gold >= tower.upgrade_cost() {
+                        spec_events.send(SpecializeTowerEvent {
+                            tower: tower_entity,
+                            specialization: spec_btn.0,
+                        });
                     }
                 }
-            }
-            Interaction::Hovered => {
-                ui_clicked.0 = true;
-                *color = Color::srgb(0.3, 0.4, 0.65).into();
-            }
-            Interaction::None => {
-                *color = Color::srgb(0.2, 0.3, 0.5).into();
             }
         }
     }

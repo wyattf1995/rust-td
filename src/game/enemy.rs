@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::collections::HashMap;
 
 use crate::analytics::{Analytics, track_with_context};
 use crate::GameState;
@@ -13,6 +14,7 @@ use super::{
     economy::{PlayerEconomy, KillStreak},
     map::GameMap,
     rand_simple,
+    rules,
     stats::GameStats,
     GameEntity,
     ScreenShake,
@@ -50,7 +52,7 @@ impl Plugin for EnemyPlugin {
 }
 
 /// Enemy types
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum EnemyType {
     Basic,
     Fast,
@@ -361,18 +363,14 @@ impl WaveManager {
         let (health_mult, modifier) = Self::compute_wave_params(wave_num);
         let enemies = Self::generate_wave_enemies(wave_num, health_mult, modifier);
 
-        // Aggregate counts per enemy type
-        let mut counts_map: Vec<(EnemyType, usize)> = Vec::new();
+        // Aggregate counts per enemy type using HashMap for O(n)
+        let mut counts: HashMap<EnemyType, usize> = HashMap::with_capacity(8);
         for (etype, _) in &enemies {
-            if let Some(entry) = counts_map.iter_mut().find(|(t, _)| t == etype) {
-                entry.1 += 1;
-            } else {
-                counts_map.push((*etype, 1));
-            }
+            *counts.entry(*etype).or_insert(0) += 1;
         }
 
         WavePreview {
-            counts: counts_map,
+            counts: counts.into_iter().collect(),
             modifier,
         }
     }
@@ -381,21 +379,14 @@ impl WaveManager {
     fn generate_wave_enemies(wave_num: usize, health_multiplier: f32, modifier: WaveModifier) -> Vec<(EnemyType, f32)> {
         let multiplier = health_multiplier;
 
-        // Base enemy count scaling: ramps up more in late game
-        // Early waves (1-7) have fewer enemies to give time to build economy
-        let early_wave_factor = if wave_num <= 4 { 0.7 } else if wave_num <= 7 { 0.85 } else { 1.0 };
-
-        // Apply wave modifier to enemy count
+        // Calculate modifier factor for enemy count
         let modifier_factor = match modifier {
             WaveModifier::Swarm => 2.0,     // Double enemies (but half HP applied in start_wave)
             WaveModifier::GoldRush => 1.5,  // 50% more enemies
             _ => 1.0,
         };
 
-        // Wave 1: ~5, Wave 5: ~10, Wave 10: ~25, Wave 20: ~48
-        let base_count = (5.0 + (wave_num as f32 * 1.4) + (wave_num as f32).powf(1.15) * 1.5)
-            * early_wave_factor
-            * modifier_factor;
+        let base_count = rules::wave_base_count(wave_num, modifier_factor);
 
         let mut enemies = Vec::with_capacity((base_count * 1.5) as usize + 5);
 

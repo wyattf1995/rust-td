@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::GameState;
+use super::rules;
 
 pub struct EconomyPlugin;
 
@@ -36,7 +37,7 @@ impl Default for PlayerEconomy {
 impl PlayerEconomy {
     /// Calculate interest earned on current gold (capped at 50)
     pub fn calculate_interest(&self) -> u32 {
-        ((self.gold as f32 * self.interest_rate) as u32).min(50)
+        rules::calculate_interest(self.gold, self.interest_rate)
     }
 }
 
@@ -78,12 +79,7 @@ impl KillStreak {
 
     /// Get the gold multiplier based on current streak
     pub fn multiplier(&self) -> f32 {
-        if self.count <= 1 {
-            1.0
-        } else {
-            // 1x at 1 kill, 1.1x at 2, 1.2x at 3... up to 2x at 11+
-            1.0 + ((self.count - 1) as f32 * 0.1).min(1.0)
-        }
+        rules::kill_streak_multiplier(self.count)
     }
 
 }
