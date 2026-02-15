@@ -191,7 +191,7 @@ fn update_tower_idle_glow(
             let brightness = 1.0 + 0.12 * (tower.level - 1) as f32;
 
             // Phase offset per tower grid position so they don't sync
-            let phase = (tower.grid_x as f32 * 1.7 + tower.grid_y as f32 * 2.3) % 6.28;
+            let phase = (tower.grid_x as f32 * 1.7 + tower.grid_y as f32 * 2.3) % std::f32::consts::TAU;
             let pulse = ((elapsed * 1.5 + phase).sin() * 0.5 + 0.5) * 0.05;
 
             let srgba = base_color.to_srgba();

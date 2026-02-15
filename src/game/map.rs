@@ -1106,7 +1106,7 @@ fn update_path_flow_dots(
         transform.translation.y = world_pos.y;
 
         // Pulse alpha
-        let alpha = 0.2 + 0.15 * (time.elapsed_seconds() * 3.0 + dot.progress * 6.28).sin();
+        let alpha = 0.2 + 0.15 * (time.elapsed_seconds() * 3.0 + dot.progress * std::f32::consts::TAU).sin();
         sprite.color = GameColors::PATH_INDICATOR.with_alpha(alpha);
     }
 }
