@@ -507,7 +507,7 @@ fn map_select_interaction(
             };
 
             // Update the name text color (second child, after preview container)
-            if let Some(&name_child) = children.iter().nth(1) {
+            if let Some(&name_child) = children.get(1) {
                 if let Ok(mut text) = text_query.get_mut(name_child) {
                     if let Some(section) = text.sections.first_mut() {
                         section.style.color = if is_selected {

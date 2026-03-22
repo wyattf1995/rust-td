@@ -91,6 +91,9 @@ struct WaveText;
 struct TowerButton(TowerType);
 
 #[derive(Component)]
+struct TowerCostText;
+
+#[derive(Component)]
 struct StartWaveButton;
 
 #[derive(Component)]
@@ -585,13 +588,16 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
                                 ));
 
                                 // Cost
-                                parent.spawn(TextBundle::from_section(
-                                    format!("{}g", tower_type.cost()),
-                                    TextStyle {
-                                        font: assets.font.clone(),
-                                        font_size: 13.0,
-                                        color: GameColors::GOLD,
-                                    },
+                                parent.spawn((
+                                    TextBundle::from_section(
+                                        format!("{}g", tower_type.cost()),
+                                        TextStyle {
+                                            font: assets.font.clone(),
+                                            font_size: 13.0,
+                                            color: GameColors::GOLD,
+                                        },
+                                    ),
+                                    TowerCostText,
                                 ));
 
                                 // 3-stat rows (or 2 for Buff tower)
@@ -1108,13 +1114,13 @@ fn setup_ability_bar(commands: &mut Commands, assets: &GameAssets) {
             GameEntity,
         ))
         .with_children(|parent| {
-            spawn_ability_button(parent, &assets, AbilityType::Freeze, "Q", "Freeze",
+            spawn_ability_button(parent, assets, AbilityType::Freeze, "Q", "Freeze",
                 "All enemies 3s", "CD: 45s",
                 GameColors::ABILITY_FREEZE);
-            spawn_ability_button(parent, &assets, AbilityType::GoldRush, "W", "Gold Rush",
+            spawn_ability_button(parent, assets, AbilityType::GoldRush, "W", "Gold Rush",
                 "2x gold 10s", "CD: 60s",
                 GameColors::ABILITY_GOLD_RUSH);
-            spawn_ability_button(parent, &assets, AbilityType::Artillery, "E", "Artillery",
+            spawn_ability_button(parent, assets, AbilityType::Artillery, "E", "Artillery",
                 "400 dmg AOE", "CD: 90s",
                 GameColors::ABILITY_NUKE);
         });
@@ -1330,6 +1336,7 @@ fn update_wave_display(
     wave_manager: Res<WaveManager>,
     mut query: Query<&mut Text, With<WaveText>>,
 ) {
+    if !wave_manager.is_changed() { return; }
     for mut text in &mut query {
         let current = wave_manager.current_wave + 1;
         let status = if wave_manager.wave_active { " ⚔" } else { "" };
@@ -1355,6 +1362,7 @@ fn update_combo_display(
     mut display_query: Query<&mut Style, With<ComboDisplay>>,
     mut text_query: Query<&mut Text, With<ComboText>>,
 ) {
+    if !kill_streak.is_changed() { return; }
     for mut style in &mut display_query {
         // Show combo display when streak is 3+
         style.display = if kill_streak.count >= 3 && kill_streak.active {
@@ -1650,37 +1658,22 @@ fn update_tower_selection(
 fn update_tower_affordability(
     economy: Res<PlayerEconomy>,
     button_query: Query<(&TowerButton, &Interaction, &Children)>,
-    mut text_query: Query<&mut Text>,
+    mut cost_text_query: Query<&mut Text, With<TowerCostText>>,
 ) {
     for (tower_button, interaction, children) in &button_query {
         let can_afford = economy.gold >= tower_button.0.cost();
 
-        // Don't dim if button is being interacted with
         if *interaction != Interaction::None {
             continue;
         }
 
-        // Find the cost text child (last text child, which shows "Xg")
-        // Children order: shortcut label, tower icon, tower name, cost text, stats text
-        let mut text_children: Vec<Entity> = Vec::new();
         for &child in children.iter() {
-            if text_query.get(child).is_ok() {
-                text_children.push(child);
-            }
-        }
-
-        // Cost text is typically the 3rd text child (index 2 after shortcut label, name)
-        // But we want to dim the cost text specifically
-        for (i, &child) in text_children.iter().enumerate() {
-            if let Ok(mut text) = text_query.get_mut(child) {
-                if i == 2 {
-                    // Cost text
-                    text.sections[0].style.color = if can_afford {
-                        GameColors::GOLD
-                    } else {
-                        GameColors::HEALTH_LOW
-                    };
-                }
+            if let Ok(mut text) = cost_text_query.get_mut(child) {
+                text.sections[0].style.color = if can_afford {
+                    GameColors::GOLD
+                } else {
+                    GameColors::HEALTH_LOW
+                };
             }
         }
     }
@@ -1850,19 +1843,17 @@ fn update_wave_preview(
 }
 
 /// Display fuzzy counts: ~5, ~10, ~15, ~25, 30+
-fn fuzzy_count(count: usize) -> String {
-    if count <= 3 {
-        format!("{}", count)
-    } else if count <= 7 {
-        "~5".to_string()
-    } else if count <= 12 {
-        "~10".to_string()
-    } else if count <= 18 {
-        "~15".to_string()
-    } else if count <= 27 {
-        "~25".to_string()
-    } else {
-        "30+".to_string()
+fn fuzzy_count(count: usize) -> &'static str {
+    match count {
+        0 => "0",
+        1 => "1",
+        2 => "2",
+        3 => "3",
+        4..=7 => "~5",
+        8..=12 => "~10",
+        13..=18 => "~15",
+        19..=27 => "~25",
+        _ => "30+",
     }
 }
 
@@ -1872,15 +1863,14 @@ fn update_start_button_text(
     mut text_query: Query<&mut Text, With<StartWaveButtonText>>,
 ) {
     for mut text in &mut text_query {
-        if wave_manager.wave_active {
-            text.sections[0].value = "START".to_string();
+        let new_value = if wave_manager.wave_active {
+            "START".to_string()
         } else {
             let bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
-            if bonus > 0 {
-                text.sections[0].value = format!("START +{}g", bonus);
-            } else {
-                text.sections[0].value = "START".to_string();
-            }
+            if bonus > 0 { format!("START +{}g", bonus) } else { "START".into() }
+        };
+        if text.sections[0].value != new_value {
+            text.sections[0].value = new_value;
         }
     }
 }
@@ -2306,11 +2296,10 @@ fn tower_context_shortcuts(
     if let Some(tower_entity) = selected_tower.0 {
         if let Ok(tower) = towers.get(tower_entity) {
             // U to upgrade
-            if keyboard.just_pressed(KeyCode::KeyU) {
-                if tower.can_upgrade() && economy.gold >= tower.upgrade_cost() {
+            if keyboard.just_pressed(KeyCode::KeyU)
+                && tower.can_upgrade() && economy.gold >= tower.upgrade_cost() {
                     upgrade_events.send(UpgradeTowerEvent { tower: tower_entity });
                 }
-            }
             // S to sell
             if keyboard.just_pressed(KeyCode::KeyS) {
                 sell_events.send(SellTowerEvent { tower: tower_entity });

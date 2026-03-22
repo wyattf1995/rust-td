@@ -20,7 +20,7 @@ use crate::graphics::shapes::GameColors;
 
 /// Simple pseudo-random based on position (deterministic)
 pub(crate) fn rand_simple(seed: f32) -> f32 {
-    ((seed * 12.9898).sin() * 43758.5453).fract()
+    ((seed * 12.9898).sin() * 43_758.547).fract()
 }
 
 pub struct GamePlugin;
@@ -48,8 +48,6 @@ impl Plugin for GamePlugin {
         .add_systems(OnEnter(GameState::Menu), cleanup_game)
         .add_systems(OnEnter(GameState::GameOver), setup_game_over)
         .add_systems(OnExit(GameState::GameOver), cleanup_game_over)
-        .add_systems(OnEnter(GameState::Victory), setup_victory)
-        .add_systems(OnExit(GameState::Victory), cleanup_victory)
         .add_systems(
             Update,
             update_screen_shake.run_if(in_state(GameState::Playing)),
@@ -57,7 +55,7 @@ impl Plugin for GamePlugin {
         .add_systems(
             Update,
             (restart_button_system, restart_interaction)
-                .run_if(in_state(GameState::GameOver).or_else(in_state(GameState::Victory))),
+                .run_if(in_state(GameState::GameOver)),
         );
     }
 }
@@ -88,9 +86,6 @@ pub struct PointerState {
 
 #[derive(Component)]
 struct GameOverScreen;
-
-#[derive(Component)]
-struct VictoryScreen;
 
 #[derive(Component)]
 struct RestartButton;
@@ -406,70 +401,6 @@ fn setup_game_over(
 }
 
 fn cleanup_game_over(mut commands: Commands, query: Query<Entity, With<GameOverScreen>>) {
-    for entity in &query {
-        commands.entity(entity).despawn_recursive();
-    }
-}
-
-fn setup_victory(mut commands: Commands, assets: Res<crate::loading::GameAssets>) {
-    commands
-        .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                background_color: GameColors::GAME_OVER_OVERLAY.into(),
-                ..default()
-            },
-            VictoryScreen,
-        ))
-        .with_children(|parent| {
-            parent.spawn(TextBundle::from_section(
-                "VICTORY!",
-                TextStyle {
-                    font: assets.font.clone(),
-                    font_size: 72.0,
-                    color: GameColors::SUCCESS,
-                },
-            ).with_style(Style {
-                margin: UiRect::bottom(Val::Px(40.0)),
-                ..default()
-            }));
-
-            parent
-                .spawn((
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Px(200.0),
-                            height: Val::Px(60.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        background_color: GameColors::SUCCESS.into(),
-                        ..default()
-                    },
-                    RestartButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "PLAY AGAIN",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 28.0,
-                            color: Color::WHITE,
-                        },
-                    ));
-                });
-        });
-}
-
-fn cleanup_victory(mut commands: Commands, query: Query<Entity, With<VictoryScreen>>) {
     for entity in &query {
         commands.entity(entity).despawn_recursive();
     }

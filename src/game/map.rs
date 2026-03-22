@@ -602,7 +602,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>, sel
 
     // Simple deterministic variation based on position
     let variation_seed = |x: usize, y: usize| -> bool {
-        ((x * 7 + y * 13) % 3) == 0
+        (x * 7 + y * 13).is_multiple_of(3)
     };
 
     // Spawn grid tiles with borders
@@ -923,9 +923,9 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>, sel
                 let pos = GameMap::grid_to_world(x, y);
                 // Position-based pseudo-random for subtle color variation
                 let seed = (x * 17 + y * 31) as f32;
-                let r_var = (((seed * 12.9898).sin() * 43758.5453).fract() - 0.5) * 0.04;
-                let g_var = (((seed * 78.233).sin() * 43758.5453).fract() - 0.5) * 0.04;
-                let b_var = (((seed * 39.346).sin() * 43758.5453).fract() - 0.5) * 0.04;
+                let r_var = (((seed * 12.9898).sin() * 43_758.547).fract() - 0.5) * 0.04;
+                let g_var = (((seed * 78.233).sin() * 43_758.547).fract() - 0.5) * 0.04;
+                let b_var = (((seed * 39.346).sin() * 43_758.547).fract() - 0.5) * 0.04;
 
                 // Small accent sprite for extra depth
                 let accent_color = match terrain {
@@ -1162,7 +1162,7 @@ fn update_spawn_exit_markers(
 
         // Pulse glow alpha for outer markers (lower z = glow)
         if transform.translation.z < 1.0 {
-            let base_alpha = if marker.is_spawn { 0.3 } else { 0.3 };
+            let base_alpha = if marker.is_spawn { 0.4 } else { 0.25 };
             let alpha = base_alpha * (0.6 + 0.4 * (t * 2.0).sin());
             let base_color = if marker.is_spawn {
                 GameColors::SECONDARY

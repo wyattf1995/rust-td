@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bevy::prelude::*;
 
 use crate::GameState;
@@ -38,7 +40,7 @@ pub struct Projectile {
     pub tower_type: TowerType,
     pub predicted_pos: Option<Vec2>,  // For leading shots
     pub chain_bounces: u32,           // Remaining bounces for chain lightning
-    pub hit_enemies: Vec<Entity>,     // Enemies already hit (for chain)
+    pub hit_enemies: HashSet<Entity>,  // Enemies already hit (for chain/pierce)
     pub poison_duration_bonus: f32,   // Synergy bonus for poison duration
     pub source_tower: Option<Entity>, // Tower entity that fired this projectile (for stats)
     pub specialization: Option<Specialization>,
@@ -84,6 +86,7 @@ pub struct NapalmZone {
     pub damage_per_sec: f32,
     pub radius: f32,
     pub tick_timer: Timer,
+    pub source_tower: Option<Entity>,
 }
 
 /// Blizzard slow zone
@@ -146,7 +149,7 @@ fn spawn_projectiles(
                 tower_type: event.tower_type,
                 predicted_pos,
                 chain_bounces,
-                hit_enemies: vec![],
+                hit_enemies: HashSet::new(),
                 poison_duration_bonus: event.poison_duration_bonus,
                 source_tower: event.source_tower,
                 specialization: event.specialization,
@@ -207,7 +210,7 @@ fn projectile_movement(
 
         // Spawn trail particle (frequency based on particle density setting)
         let trail_skip = settings.particle_density.trail_skip();
-        if *frame_count % trail_skip == 0 {
+        if (*frame_count).is_multiple_of(trail_skip) {
             let trail_alpha = if matches!(projectile.tower_type, TowerType::Chain) { 0.6 } else { 0.5 };
             let trail_color = projectile.tower_type.projectile_color().with_alpha(trail_alpha);
 
@@ -241,7 +244,7 @@ fn projectile_collision(
 ) {
     // Collect chain bounce data to spawn after iteration
     // (origin_pos, bounce_damage, hit_list, remaining_bounces, source_tower, specialization)
-    let mut chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32, Option<Entity>, Option<Specialization>)> = Vec::with_capacity(8);
+    let mut chain_bounces: Vec<(Vec2, f32, HashSet<Entity>, u32, Option<Entity>, Option<Specialization>)> = Vec::with_capacity(8);
     // Collect piercing projectile updates (entity, new hit list entry)
     let mut pierce_updates: Vec<Entity> = Vec::with_capacity(8);
 
@@ -284,7 +287,7 @@ fn projectile_collision(
                     // Hit sparks (density-aware)
                     let spark_count = settings.particle_density.death_particle_count() / 2;
                     if spark_count > 0 {
-                        spawn_hit_sparks(&mut commands, enemy_pos, spark_count as usize);
+                        spawn_hit_sparks(&mut commands, enemy_pos, spark_count);
                     }
                 }
 
@@ -348,7 +351,7 @@ fn projectile_collision(
                 // Chain lightning bouncing
                 if projectile.tower_type == TowerType::Chain && projectile.chain_bounces > 0 {
                     let mut hit_list = projectile.hit_enemies.clone();
-                    hit_list.push(enemy_entity);
+                    hit_list.insert(enemy_entity);
 
                     let bounce_damage = projectile.damage * CombatConstants::CHAIN_DAMAGE_DECAY;
                     let remaining_bounces = projectile.chain_bounces.saturating_sub(1);
@@ -406,6 +409,7 @@ fn projectile_collision(
                                 damage_per_sec: projectile.damage * 0.25,
                                 radius: splash_radius,
                                 tick_timer: Timer::from_seconds(0.5, TimerMode::Repeating),
+                                source_tower: projectile.source_tower,
                             },
                             GameEntity,
                         ));
@@ -469,7 +473,7 @@ fn handle_pierce_continuation(
         if let Ok((_, projectile, proj_transform)) = projectiles.get(proj_entity) {
             let proj_pos = proj_transform.translation.truncate();
             let mut hit_list = projectile.hit_enemies.clone();
-            hit_list.push(projectile.target);
+            hit_list.insert(projectile.target);
 
             let next_target = find_nearest_unhit_enemy(
                 &hit_list, proj_pos, PIERCE_SEARCH_RANGE, enemies, spatial_grid,
@@ -511,7 +515,7 @@ fn handle_pierce_continuation(
 #[allow(clippy::too_many_arguments)]
 fn handle_chain_bounces(
     commands: &mut Commands,
-    chain_bounces: Vec<(Vec2, f32, Vec<Entity>, u32, Option<Entity>, Option<Specialization>)>,
+    chain_bounces: Vec<(Vec2, f32, HashSet<Entity>, u32, Option<Entity>, Option<Specialization>)>,
     enemies: &mut Query<(Entity, &mut Enemy, &Transform)>,
     spatial_grid: &SpatialGrid,
     assets: &GameAssets,
@@ -607,7 +611,7 @@ fn handle_arc_aoe(
 
 /// Find the nearest living enemy not in the hit list within the given range.
 fn find_nearest_unhit_enemy(
-    hit_list: &[Entity],
+    hit_list: &HashSet<Entity>,
     origin: Vec2,
     range: f32,
     enemies: &Query<(Entity, &mut Enemy, &Transform)>,
@@ -620,7 +624,7 @@ fn find_nearest_unhit_enemy(
         if let Ok((_, enemy, transform)) = enemies.get(entity) {
             if enemy.marked_dead || enemy.health <= 0.0 { continue; }
             let dist = origin.distance(transform.translation.truncate());
-            if dist <= range && best.map_or(true, |(_, bd)| dist < bd) {
+            if dist <= range && best.is_none_or(|(_, bd)| dist < bd) {
                 best = Some((entity, dist));
             }
         }
@@ -741,7 +745,10 @@ fn update_napalm_zones(
                 if let Ok((_, mut enemy, enemy_transform)) = enemies.get_mut(enemy_entity) {
                     let enemy_pos = enemy_transform.translation.truncate();
                     if zone_pos.distance(enemy_pos) < zone.radius {
-                        enemy.apply_armor_damage(tick_damage);
+                        let actual = enemy.apply_armor_damage(tick_damage);
+                        if actual > 0.0 {
+                            enemy.last_hit_by = zone.source_tower;
+                        }
                     }
                 }
             }

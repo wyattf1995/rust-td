@@ -49,6 +49,7 @@ impl ParticleDensity {
     fn from_str(s: &str) -> Self {
         match s {
             "LOW" => ParticleDensity::Low,
+            "MED" => ParticleDensity::Medium,
             "HIGH" => ParticleDensity::High,
             _ => ParticleDensity::Medium,
         }
@@ -205,7 +206,7 @@ impl HighScores {
         let mut chars = trimmed.chars().peekable();
         loop {
             // Skip whitespace and commas
-            while chars.peek().map_or(false, |c| *c == ' ' || *c == ',' || *c == '\n') {
+            while chars.peek().is_some_and(|c| *c == ' ' || *c == ',' || *c == '\n') {
                 chars.next();
             }
             if chars.peek().is_none() {
@@ -219,7 +220,7 @@ impl HighScores {
             let key: String = chars.by_ref().take_while(|c| *c != '"').collect();
 
             // Skip colon
-            while chars.peek().map_or(false, |c| *c == ':' || *c == ' ') {
+            while chars.peek().is_some_and(|c| *c == ':' || *c == ' ') {
                 chars.next();
             }
 

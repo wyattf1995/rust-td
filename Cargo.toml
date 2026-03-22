@@ -18,7 +18,6 @@ bevy = { version = "0.14", default-features = false, features = [
     "png",
     "webgl2",
 ] }
-bevy_prototype_lyon = "0.12"
 rand = "0.8"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -28,6 +27,7 @@ console_error_panic_hook = "0.1"
 # Force getrandom 0.2 and 0.3 to use js features for wasm
 getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 getrandom = { version = "0.3", features = ["wasm_js"] }
+# uuid is a transitive dep of bevy_asset — needs js feature for WASM RNG
 uuid = { version = "1.20", features = ["js"] }
 
 [profile.release]
