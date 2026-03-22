@@ -29,15 +29,16 @@ fn generate_session_id() -> String {
     format!("{:016x}", rng.gen::<u64>())
 }
 
-// JavaScript interop for WASM builds
+// JavaScript interop for WASM builds — `catch` attribute converts JS exceptions
+// to Result instead of panicking, so a missing window.neonAnalytics won't crash the game.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(js_namespace = ["window", "neonAnalytics"], js_name = trackEvent)]
-    fn js_track_event(event_name: &str, properties_json: &str);
+    #[wasm_bindgen(catch, js_namespace = ["window", "neonAnalytics"], js_name = trackEvent)]
+    fn js_track_event(event_name: &str, properties_json: &str) -> Result<(), JsValue>;
 
-    #[wasm_bindgen(js_namespace = ["window", "neonAnalytics"], js_name = isEnabled)]
-    fn js_analytics_enabled() -> bool;
+    #[wasm_bindgen(catch, js_namespace = ["window", "neonAnalytics"], js_name = isEnabled)]
+    fn js_analytics_enabled() -> Result<bool, JsValue>;
 }
 
 /// Track an analytics event
@@ -45,8 +46,8 @@ extern "C" {
 pub fn track_event(event: &str, properties: &[(&str, &str)]) {
     #[cfg(target_arch = "wasm32")]
     {
-        // Check if analytics is available and enabled
-        if js_analytics_enabled() {
+        // Check if analytics is available and enabled (silently skip if JS object missing)
+        if js_analytics_enabled().unwrap_or(false) {
             // Build JSON manually to avoid serde dependency
             let mut json = String::from("{");
             for (i, (key, value)) in properties.iter().enumerate() {
@@ -57,7 +58,7 @@ pub fn track_event(event: &str, properties: &[(&str, &str)]) {
             }
             json.push('}');
 
-            js_track_event(event, &json);
+            let _ = js_track_event(event, &json);
         }
     }
 
