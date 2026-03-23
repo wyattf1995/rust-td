@@ -8,6 +8,7 @@ use bevy::prelude::*;
 /// - Each tower type has a unique neon accent color
 /// - Grid uses subtle borders and lane-marked paths
 /// - Enemies use warm/threat colors (reds, oranges, purples)
+///
 /// Color palette for the game
 pub struct GameColors;
 
