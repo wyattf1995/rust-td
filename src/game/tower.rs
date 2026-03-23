@@ -636,6 +636,22 @@ pub enum SynergyType {
 }
 
 impl SynergyType {
+    pub const ALL: [SynergyType; 4] = [
+        SynergyType::SniperPair,
+        SynergyType::SlowPoison,
+        SynergyType::RapidBuff,
+        SynergyType::ChainPair,
+    ];
+
+    pub fn towers_required(&self) -> (TowerType, TowerType) {
+        match self {
+            SynergyType::SniperPair => (TowerType::Sniper, TowerType::Sniper),
+            SynergyType::SlowPoison => (TowerType::Slow, TowerType::Poison),
+            SynergyType::RapidBuff => (TowerType::Rapid, TowerType::Buff),
+            SynergyType::ChainPair => (TowerType::Chain, TowerType::Chain),
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             SynergyType::SniperPair => "Sniper Duo",

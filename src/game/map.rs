@@ -7,7 +7,7 @@ use crate::graphics::shapes::{GameColors, ShapeSizes, ZDepth};
 
 use super::GameEntity;
 use super::tower::{SelectedTowerType, Tower};
-use super::ui::UiZones;
+use super::ui::{UiZones, PlacementRejectFlash};
 
 /// Map preset variants for strategic variety
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -52,7 +52,7 @@ impl Plugin for MapPlugin {
             .add_systems(OnEnter(GameState::Playing), setup_map)
             .add_systems(
                 Update,
-                (tile_hover_system, update_tile_visuals, update_path_flow_dots, update_spawn_exit_markers)
+                (tile_hover_system, (update_tile_visuals, update_placement_flash).chain(), update_path_flow_dots, update_spawn_exit_markers)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -1068,6 +1068,28 @@ fn update_tile_visuals(
         } else {
             preview_sprite.color = Color::NONE;
         }
+    }
+}
+
+/// Flash a tile briefly red when placement is rejected
+fn update_placement_flash(
+    mut flash: ResMut<PlacementRejectFlash>,
+    mut tiles: Query<(&MapTile, &mut Sprite)>,
+    time: Res<Time>,
+) {
+    let Some(grid_pos) = flash.grid_pos else { return; };
+    let Some(ref mut timer) = flash.timer else { return; };
+    timer.tick(time.delta());
+    let t = timer.fraction();
+    let flash_color = Color::srgb(1.0, 0.15, 0.15);
+    for (tile, mut sprite) in &mut tiles {
+        if tile.x == grid_pos.0 && tile.y == grid_pos.1 {
+            sprite.color = flash_color.mix(&tile.base_color, t);
+        }
+    }
+    if timer.finished() {
+        flash.timer = None;
+        flash.grid_pos = None;
     }
 }
 

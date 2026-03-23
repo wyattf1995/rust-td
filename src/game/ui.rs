@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::{loading::GameAssets, GameState, GameSpeed, ScreenInfo};
 use crate::graphics::shapes::GameColors;
 use crate::persistence::SettingsOpen;
+use crate::synergy_ui::SynergyPanelOpen;
 
 use super::{
     abilities::{PlayerAbilities, FreezeAbilityEvent, GoldRushAbilityEvent},
@@ -25,6 +26,8 @@ impl Plugin for GameUiPlugin {
             .init_resource::<UiZones>()
             .init_resource::<LifeLostFlash>()
             .init_resource::<SellPending>()
+            .init_resource::<PlacementRejectFlash>()
+            .init_resource::<GoldRejectFlash>()
             .add_systems(OnEnter(GameState::Playing), setup_ui)
             .add_systems(OnEnter(GameState::Paused), setup_pause_menu)
             .add_systems(OnExit(GameState::Paused), cleanup_pause_menu)
@@ -50,6 +53,7 @@ impl Plugin for GameUiPlugin {
                     // Phase 4: Display updates (order doesn't matter)
                     (
                         update_gold_display,
+                        update_gold_reject_flash,
                         update_gold_rush_indicator,
                         update_lives_display,
                         update_life_flash,
@@ -73,7 +77,7 @@ impl Plugin for GameUiPlugin {
             )
             .add_systems(
                 Update,
-                (pause_menu_buttons, pause_settings_button, pause_input_resume)
+                (pause_menu_buttons, pause_settings_button, pause_synergy_button, pause_input_resume)
                     .run_if(in_state(GameState::Paused)),
             );
     }
@@ -96,6 +100,12 @@ struct TowerCostText;
 
 #[derive(Component)]
 struct HudPauseButton;
+
+#[derive(Component)]
+struct HudSynergyButton;
+
+#[derive(Component)]
+struct PauseSynergyButton;
 
 #[derive(Component)]
 struct StartWaveButton;
@@ -218,6 +228,19 @@ struct WaveAnnouncement {
 struct LifeLostFlash {
     timer: Option<Timer>,
     previous_lives: u32,
+}
+
+/// Resource to flash a tile red when placement is rejected
+#[derive(Resource, Default)]
+pub struct PlacementRejectFlash {
+    pub timer: Option<Timer>,
+    pub grid_pos: Option<(usize, usize)>,
+}
+
+/// Resource to flash gold text red when can't afford
+#[derive(Resource, Default)]
+struct GoldRejectFlash {
+    timer: Option<Timer>,
 }
 
 /// Resource to track sell confirmation state (double-tap to sell)
@@ -514,6 +537,33 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                                 font: assets.font.clone(),
                                 font_size: 14.0,
                                 color: Color::srgba(1.0, 1.0, 1.0, 0.65),
+                            },
+                        ));
+                    });
+                    // Synergy reference button
+                    parent.spawn((
+                        ButtonBundle {
+                            style: Style {
+                                width: Val::Px(38.0),
+                                height: Val::Px(38.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                margin: UiRect::left(Val::Px(4.0)),
+                                ..default()
+                            },
+                            background_color: GameColors::BUTTON_NORMAL.into(),
+                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            ..default()
+                        },
+                        HudSynergyButton,
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn(TextBundle::from_section(
+                            "?",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 16.0,
+                                color: Color::srgb(0.9, 0.7, 1.0),
                             },
                         ));
                     });
@@ -1290,6 +1340,24 @@ fn update_gold_display(
     }
 }
 
+fn update_gold_reject_flash(
+    mut flash: ResMut<GoldRejectFlash>,
+    mut query: Query<&mut Text, With<GoldText>>,
+    time: Res<Time>,
+) {
+    if let Some(ref mut timer) = flash.timer {
+        timer.tick(time.delta());
+        let t = timer.fraction();
+        let flash_color = GameColors::HEALTH_LOW.mix(&GameColors::GOLD, t);
+        for mut text in &mut query {
+            text.sections[0].style.color = flash_color;
+        }
+        if timer.finished() {
+            flash.timer = None;
+        }
+    }
+}
+
 fn update_gold_rush_indicator(
     abilities: Res<PlayerAbilities>,
     mut indicator_query: Query<(&mut Text, &mut Style), With<GoldRushIndicator>>,
@@ -1979,50 +2047,35 @@ fn handle_tile_click(
     mut place_events: EventWriter<PlaceTowerEvent>,
     ui_clicked: Res<UiClicked>,
     ui_zones: Res<UiZones>,
+    mut tile_flash: ResMut<PlacementRejectFlash>,
+    mut gold_flash: ResMut<GoldRejectFlash>,
 ) {
-    // Don't place tower if UI was clicked
-    if ui_clicked.0 {
+    if ui_clicked.0 || !pointer.just_pressed {
         return;
     }
 
-    if !pointer.just_pressed {
-        return;
-    }
+    let Ok(window) = windows.get_single() else { return; };
+    let Ok((camera, camera_transform)) = camera_q.get_single() else { return; };
+    let Some(cursor_pos) = pointer.position else { return; };
+    let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) else { return; };
+    let Some((grid_x, grid_y)) = GameMap::world_to_grid(world_pos) else { return; };
 
-    let Ok(window) = windows.get_single() else {
-        return;
-    };
-
-    let Ok((camera, camera_transform)) = camera_q.get_single() else {
-        return;
-    };
-
-    let Some(cursor_pos) = pointer.position else {
-        return;
-    };
-
-    // Convert to world coordinates
-    let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) else {
-        return;
-    };
-
-    // Convert to grid coordinates
-    let Some((grid_x, grid_y)) = GameMap::world_to_grid(world_pos) else {
-        return;
-    };
-
-    // Check if buildable and affordable
-    if !map.is_buildable(grid_x, grid_y) {
-        return;
-    }
-
-    if economy.gold < selected.0.cost() {
-        return;
-    }
-
-    // Check if click is in UI area (dynamic zone boundaries)
+    // UI zone check FIRST — clicks in HUD area should not trigger feedback
     let window_height = window.height();
     if cursor_pos.y > window_height - ui_zones.bottom_bar_height - 10.0 || cursor_pos.y < ui_zones.top_bar_height + 10.0 {
+        return;
+    }
+
+    // Buildability check — flash tile red on rejection
+    if !map.is_buildable(grid_x, grid_y) {
+        tile_flash.timer = Some(Timer::from_seconds(0.3, TimerMode::Once));
+        tile_flash.grid_pos = Some((grid_x, grid_y));
+        return;
+    }
+
+    // Affordability check — flash gold text red on rejection
+    if economy.gold < selected.0.cost() {
+        gold_flash.timer = Some(Timer::from_seconds(0.3, TimerMode::Once));
         return;
     }
 
@@ -2111,10 +2164,22 @@ fn pause_input(
     mut next_state: ResMut<NextState<GameState>>,
     selected_tower: Res<SelectedPlacedTower>,
     pause_button: Query<&Interaction, (Changed<Interaction>, With<HudPauseButton>)>,
+    mut synergy_open: ResMut<SynergyPanelOpen>,
+    synergy_button: Query<&Interaction, (Changed<Interaction>, With<HudSynergyButton>)>,
 ) {
-    // Pause via ESC key (only if no tower selected — Escape deselects tower first)
-    if keyboard.just_pressed(KeyCode::Escape) && selected_tower.0.is_none() {
-        next_state.set(GameState::Paused);
+    // "?" button opens synergy panel
+    for interaction in &synergy_button {
+        if *interaction == Interaction::Pressed {
+            synergy_open.0 = !synergy_open.0;
+        }
+    }
+    // ESC: close synergy panel first, then deselect tower, then pause
+    if keyboard.just_pressed(KeyCode::Escape) {
+        if synergy_open.0 {
+            synergy_open.0 = false;
+        } else if selected_tower.0.is_none() {
+            next_state.set(GameState::Paused);
+        }
         return;
     }
     // Pause via HUD button click
@@ -2128,9 +2193,14 @@ fn pause_input(
 fn pause_input_resume(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
+    mut synergy_open: ResMut<SynergyPanelOpen>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
-        next_state.set(GameState::Playing);
+        if synergy_open.0 {
+            synergy_open.0 = false;
+        } else {
+            next_state.set(GameState::Playing);
+        }
     }
 }
 
@@ -2216,6 +2286,34 @@ fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) {
                             font: assets.font.clone(),
                             font_size: 24.0,
                             color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                        },
+                    ));
+                });
+
+            // Synergies button
+            parent
+                .spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(200.0),
+                            height: Val::Px(50.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::bottom(Val::Px(10.0)),
+                            ..default()
+                        },
+                        background_color: Color::srgba(1.0, 1.0, 1.0, 0.1).into(),
+                        ..default()
+                    },
+                    PauseSynergyButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn(TextBundle::from_section(
+                        "SYNERGIES",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 24.0,
+                            color: Color::srgb(0.9, 0.7, 1.0),
                         },
                     ));
                 });
@@ -2319,6 +2417,17 @@ fn pause_settings_button(
     for (interaction, mut color) in &mut query {
         if button_interaction(interaction, &mut color, Color::srgba(1.0, 1.0, 1.0, 0.1), Color::srgba(1.0, 1.0, 1.0, 0.2)) {
             settings_open.0 = true;
+        }
+    }
+}
+
+fn pause_synergy_button(
+    mut query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<PauseSynergyButton>)>,
+    mut synergy_open: ResMut<SynergyPanelOpen>,
+) {
+    for (interaction, mut color) in &mut query {
+        if button_interaction(interaction, &mut color, Color::srgba(1.0, 1.0, 1.0, 0.1), Color::srgba(1.0, 1.0, 1.0, 0.2)) {
+            synergy_open.0 = true;
         }
     }
 }
