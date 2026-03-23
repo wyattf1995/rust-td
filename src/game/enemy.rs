@@ -449,7 +449,7 @@ impl WaveManager {
                             enemies.push((EnemyType::Tank, multiplier));
                         }
                         // Add splitters to tank waves
-                        let splitter_count = ((wave_num - 7) / 4).min(3).max(1);
+                        let splitter_count = ((wave_num - 7) / 4).clamp(1, 3);
                         for _ in 0..splitter_count {
                             enemies.push((EnemyType::Splitter, multiplier));
                         }
@@ -476,7 +476,7 @@ impl WaveManager {
                     }
                     // Add splitters starting wave 7 (forces AOE strategy)
                     if wave_num >= 7 {
-                        let splitter_count = ((wave_num - 6) / 3).min(5).max(1);
+                        let splitter_count = ((wave_num - 6) / 3).clamp(1, 5);
                         for _ in 0..splitter_count {
                             enemies.push((EnemyType::Splitter, multiplier));
                         }

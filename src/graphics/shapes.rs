@@ -8,8 +8,6 @@ use bevy::prelude::*;
 /// - Each tower type has a unique neon accent color
 /// - Grid uses subtle borders and lane-marked paths
 /// - Enemies use warm/threat colors (reds, oranges, purples)
-/// =============================================================================
-
 /// Color palette for the game
 pub struct GameColors;
 
@@ -126,6 +124,8 @@ impl GameColors {
     pub const BUTTON_START: Color = Color::srgb(0.15, 0.4, 0.25);
     pub const BUTTON_START_HOVER: Color = Color::srgb(0.2, 0.5, 0.3);
     pub const BUTTON_START_PRESSED: Color = Color::srgb(0.1, 0.3, 0.18);
+    pub const BUTTON_SELL: Color = Color::srgb(0.5, 0.2, 0.2);
+    pub const BUTTON_SELL_HOVER: Color = Color::srgb(0.65, 0.3, 0.3);
 
     pub const UI_OVERLAY: Color = Color::srgba(0.04, 0.04, 0.06, 0.85);
     pub const GAME_OVER_OVERLAY: Color = Color::srgba(0.02, 0.02, 0.03, 0.9);

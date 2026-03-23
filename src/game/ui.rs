@@ -1118,7 +1118,7 @@ fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
                             align_items: AlignItems::Center,
                             ..default()
                         },
-                        background_color: Color::srgb(0.5, 0.2, 0.2).into(),
+                        background_color: GameColors::BUTTON_SELL.into(),
                         border_radius: BorderRadius::all(Val::Px(4.0)),
                         ..default()
                     },
@@ -2329,7 +2329,7 @@ fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) {
                             align_items: AlignItems::Center,
                             ..default()
                         },
-                        background_color: Color::srgb(0.5, 0.2, 0.2).into(),
+                        background_color: GameColors::BUTTON_SELL.into(),
                         ..default()
                     },
                     QuitButton,
@@ -2404,7 +2404,7 @@ fn pause_menu_buttons(
     }
 
     for (interaction, mut color) in &mut quit_query {
-        if button_interaction(interaction, &mut color, Color::srgb(0.5, 0.2, 0.2), Color::srgb(0.6, 0.3, 0.3)) {
+        if button_interaction(interaction, &mut color, GameColors::BUTTON_SELL, GameColors::BUTTON_SELL_HOVER) {
             next_state.set(GameState::Menu);
         }
     }
@@ -2764,7 +2764,7 @@ fn tower_context_buttons(
     // Sell button — requires double-click to confirm
     for (interaction, mut color) in &mut sell_query {
         if *interaction != Interaction::None { ui_clicked.0 = true; }
-        if button_interaction(interaction, &mut color, Color::srgb(0.5, 0.2, 0.2), Color::srgb(0.65, 0.3, 0.3)) {
+        if button_interaction(interaction, &mut color, GameColors::BUTTON_SELL, GameColors::BUTTON_SELL_HOVER) {
             if let Some(tower_entity) = selected_tower.0 {
                 if sell_pending.tower == Some(tower_entity) && sell_pending.timer.is_some() {
                     sell_events.send(SellTowerEvent { tower: tower_entity });

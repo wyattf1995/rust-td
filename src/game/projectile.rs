@@ -97,6 +97,16 @@ pub struct BlizzardZone {
     pub tick_timer: Timer,
 }
 
+/// Data for a pending chain bounce (collected during collision, spawned after)
+struct ChainBounce {
+    origin: Vec2,
+    damage: f32,
+    hit_entities: HashSet<Entity>,
+    bounces_remaining: u32,
+    source_tower: Option<Entity>,
+    specialization: Option<Specialization>,
+}
+
 fn spawn_projectiles(
     mut commands: Commands,
     mut events: EventReader<SpawnProjectileEvent>,
@@ -242,9 +252,7 @@ fn projectile_collision(
     settings: Res<GameSettings>,
     mut stats: ResMut<GameStats>,
 ) {
-    // Collect chain bounce data to spawn after iteration
-    // (origin_pos, bounce_damage, hit_list, remaining_bounces, source_tower, specialization)
-    let mut chain_bounces: Vec<(Vec2, f32, HashSet<Entity>, u32, Option<Entity>, Option<Specialization>)> = Vec::with_capacity(8);
+    let mut chain_bounces: Vec<ChainBounce> = Vec::with_capacity(8);
     // Collect piercing projectile updates (entity, new hit list entry)
     let mut pierce_updates: Vec<Entity> = Vec::with_capacity(8);
 
@@ -356,7 +364,14 @@ fn projectile_collision(
                     let bounce_damage = projectile.damage * CombatConstants::CHAIN_DAMAGE_DECAY;
                     let remaining_bounces = projectile.chain_bounces.saturating_sub(1);
 
-                    chain_bounces.push((enemy_pos, bounce_damage, hit_list, remaining_bounces, projectile.source_tower, projectile.specialization));
+                    chain_bounces.push(ChainBounce {
+                        origin: enemy_pos,
+                        damage: bounce_damage,
+                        hit_entities: hit_list,
+                        bounces_remaining: remaining_bounces,
+                        source_tower: projectile.source_tower,
+                        specialization: projectile.specialization,
+                    });
                 }
 
                 // Splash damage (spatial grid narrows search to nearby enemies)
@@ -515,27 +530,25 @@ fn handle_pierce_continuation(
 #[allow(clippy::too_many_arguments)]
 fn handle_chain_bounces(
     commands: &mut Commands,
-    chain_bounces: Vec<(Vec2, f32, HashSet<Entity>, u32, Option<Entity>, Option<Specialization>)>,
+    chain_bounces: Vec<ChainBounce>,
     enemies: &mut Query<(Entity, &mut Enemy, &Transform)>,
     spatial_grid: &SpatialGrid,
     assets: &GameAssets,
     settings: &GameSettings,
 ) {
-    for (origin_pos, bounce_damage, hit_list, remaining_bounces, source_tower, spec) in chain_bounces {
-        let range_mult = if spec == Some(Specialization::Tesla) { TESLA_RANGE_MULT } else { 1.0 };
+    for bounce in chain_bounces {
+        let range_mult = if bounce.specialization == Some(Specialization::Tesla) { TESLA_RANGE_MULT } else { 1.0 };
         let bounce_range = ShapeSizes::CHAIN_BOUNCE_RANGE * range_mult;
 
         let next_target = find_nearest_unhit_enemy(
-            &hit_list, origin_pos, bounce_range, enemies, spatial_grid,
+            &bounce.hit_entities, bounce.origin, bounce_range, enemies, spatial_grid,
         );
 
         if let Some((target, _)) = next_target {
-            // Arc specialization: spawn mini AOE at bounce point
-            if spec == Some(Specialization::Arc) {
-                handle_arc_aoe(commands, origin_pos, bounce_damage, enemies, spatial_grid, assets, settings);
+            if bounce.specialization == Some(Specialization::Arc) {
+                handle_arc_aoe(commands, bounce.origin, bounce.damage, enemies, spatial_grid, assets, settings);
             }
 
-            // Spawn chain bounce projectile
             if let Ok((_, _, next_transform)) = enemies.get(target) {
                 let next_pos = next_transform.translation.truncate();
                 commands.spawn((
@@ -545,20 +558,20 @@ fn handle_chain_bounces(
                             custom_size: Some(Vec2::splat(8.0)),
                             ..default()
                         },
-                        transform: Transform::from_translation(origin_pos.extend(ZDepth::PROJECTILE)),
+                        transform: Transform::from_translation(bounce.origin.extend(ZDepth::PROJECTILE)),
                         ..default()
                     },
                     Projectile {
                         target,
-                        damage: bounce_damage,
+                        damage: bounce.damage,
                         speed: CombatConstants::CHAIN_BOUNCE_SPEED,
                         tower_type: TowerType::Chain,
                         predicted_pos: Some(next_pos),
-                        chain_bounces: remaining_bounces,
-                        hit_enemies: hit_list,
+                        chain_bounces: bounce.bounces_remaining,
+                        hit_enemies: bounce.hit_entities,
                         poison_duration_bonus: 0.0,
-                        source_tower,
-                        specialization: spec,
+                        source_tower: bounce.source_tower,
+                        specialization: bounce.specialization,
                         pierce_remaining: 0,
                     },
                     GameEntity,

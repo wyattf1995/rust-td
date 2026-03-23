@@ -107,18 +107,17 @@ fn detect_screen_size(
     let width = window.width();
     let height = window.height();
 
-    // Consider mobile if either dimension is small (catches landscape phones)
-    let is_mobile = width < 800.0 || height < 500.0 || (height > width);
+    const MOBILE_WIDTH: f32 = 800.0;
+    const MOBILE_HEIGHT: f32 = 500.0;
+    const BASE_DESIGN_WIDTH: f32 = 1280.0;
+
+    let is_mobile = width < MOBILE_WIDTH || height < MOBILE_HEIGHT || (height > width);
     let is_landscape = is_mobile && width > height;
 
-    // Calculate scale factor based on screen width
-    // Base design is 1280px wide
-    let base_width = 1280.0;
     let scale = if is_mobile {
-        // On mobile, scale up UI elements for touch
-        ((width / base_width) * 1.3).clamp(0.5, 1.3)
+        ((width / BASE_DESIGN_WIDTH) * 1.3).clamp(0.5, 1.3)
     } else {
-        (width / base_width).clamp(0.6, 1.5)
+        (width / BASE_DESIGN_WIDTH).clamp(0.6, 1.5)
     };
 
     if (screen_info.factor - scale).abs() > 0.01
@@ -146,15 +145,12 @@ fn update_camera_projection(
     let window_h = window.height();
     if window_w <= 0.0 || window_h <= 0.0 { return; }
 
-    // Game grid: 18*50=900 wide, 11*50=550 tall
-    // Plus UI margins: ~50px top HUD, ~122px bottom bar
-    let target_w = 940.0;  // Grid width + small margin
-    let target_h = if screen_info.is_landscape {
-        // Landscape mobile: UI bars are smaller, need less vertical margin
-        650.0
-    } else {
-        750.0  // Default: includes full HUD + bottom bar margins
-    };
+    const CAMERA_TARGET_W: f32 = 940.0;  // Grid (900) + small margin
+    const CAMERA_TARGET_H: f32 = 750.0;  // Grid (550) + HUD + bottom bar
+    const CAMERA_TARGET_H_LANDSCAPE: f32 = 650.0;  // Smaller for landscape mobile
+
+    let target_w = CAMERA_TARGET_W;
+    let target_h = if screen_info.is_landscape { CAMERA_TARGET_H_LANDSCAPE } else { CAMERA_TARGET_H };
 
     // Scale to whichever dimension is tighter
     let scale_x = target_w / window_w;

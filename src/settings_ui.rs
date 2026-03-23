@@ -175,7 +175,7 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                         margin: UiRect::top(Val::Px(10.0)),
                         ..default()
                     },
-                    background_color: Color::srgb(0.5, 0.2, 0.2).into(),
+                    background_color: GameColors::BUTTON_SELL.into(),
                     border_radius: BorderRadius::all(Val::Px(4.0)),
                     ..default()
                 },

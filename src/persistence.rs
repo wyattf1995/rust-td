@@ -129,7 +129,7 @@ pub fn save_settings(settings: &GameSettings) {
         .and_then(|w| w.local_storage().ok())
         .flatten();
     if let Some(storage) = storage {
-        if let Err(_) = storage.set_item(SETTINGS_KEY, &settings.to_json()) {
+        if storage.set_item(SETTINGS_KEY, &settings.to_json()).is_err() {
             web_sys::console::warn_1(&"Failed to save settings (storage full or disabled)".into());
         }
     }
@@ -272,7 +272,7 @@ pub fn save_highscores(high_scores: &HighScores) {
         .flatten();
 
     if let Some(storage) = storage {
-        if let Err(_) = storage.set_item(STORAGE_KEY, &high_scores.to_json()) {
+        if storage.set_item(STORAGE_KEY, &high_scores.to_json()).is_err() {
             web_sys::console::warn_1(&"Failed to save high scores (storage full or disabled)".into());
         }
     }

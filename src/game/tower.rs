@@ -1154,62 +1154,47 @@ fn handle_tower_selling(
             // Clear map tile
             map.remove_tower(tower.grid_x, tower.grid_y);
 
-            // Despawn tower
-            commands.entity(event.tower).despawn_recursive();
-
-            // Despawn range indicator
+            // Despawn tower and all associated visual entities (safe pattern)
+            let tower_id = event.tower;
+            if let Some(ec) = commands.get_entity(tower_id) { ec.despawn_recursive(); }
             for (entity, indicator) in &range_indicators {
-                if indicator.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
+                if indicator.tower == tower_id {
+                    if let Some(ec) = commands.get_entity(entity) { ec.despawn_recursive(); }
                 }
             }
-
-            // Despawn tower core
             for (entity, core) in &tower_cores {
-                if core.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
+                if core.tower == tower_id {
+                    if let Some(ec) = commands.get_entity(entity) { ec.despawn_recursive(); }
                 }
             }
-
-            // Despawn barrel
             for (entity, barrel) in &barrels {
-                if barrel.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
+                if barrel.tower == tower_id {
+                    if let Some(ec) = commands.get_entity(entity) { ec.despawn_recursive(); }
                 }
             }
-
-            // Despawn level badge
             for (entity, badge) in &badges {
-                if badge.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
+                if badge.tower == tower_id {
+                    if let Some(ec) = commands.get_entity(entity) { ec.despawn_recursive(); }
                 }
             }
-
-            // Despawn buff aura indicator
             for (entity, indicator) in &buff_indicators {
-                if indicator.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
+                if indicator.tower == tower_id {
+                    if let Some(ec) = commands.get_entity(entity) { ec.despawn_recursive(); }
                 }
             }
-
-            // Despawn corner brackets
             for (entity, bracket) in &tower_brackets {
-                if bracket.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
+                if bracket.tower == tower_id {
+                    if let Some(ec) = commands.get_entity(entity) { ec.despawn_recursive(); }
                 }
             }
-
-            // Despawn shadow
             for (entity, shadow) in &tower_shadows {
-                if shadow.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
+                if shadow.tower == tower_id {
+                    if let Some(ec) = commands.get_entity(entity) { ec.despawn_recursive(); }
                 }
             }
-
-            // Despawn level ring
             for (entity, ring) in &tower_rings {
-                if ring.tower == event.tower {
-                    commands.entity(entity).despawn_recursive();
+                if ring.tower == tower_id {
+                    if let Some(ec) = commands.get_entity(entity) { ec.despawn_recursive(); }
                 }
             }
         }
