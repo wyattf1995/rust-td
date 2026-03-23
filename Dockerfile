@@ -1,11 +1,12 @@
 # Build stage
 FROM rust:1.85-slim-bookworm AS builder
 
-# Install dependencies for trunk and wasm
+# Install dependencies for trunk, wasm, and wasm-opt (binaryen)
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     curl \
+    binaryen \
     && rm -rf /var/lib/apt/lists/*
 
 # Install wasm target and trunk
@@ -32,7 +33,7 @@ FROM nginx:alpine
 # Copy built files to nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Custom nginx config for SPA and proper MIME types
+# Custom nginx config for SPA, compression, and caching
 RUN echo 'server { \
     listen 80; \
     root /usr/share/nginx/html; \
@@ -45,7 +46,18 @@ RUN echo 'server { \
         try_files $uri $uri/ /index.html; \
     } \
     gzip on; \
-    gzip_types application/javascript application/wasm text/css; \
+    gzip_vary on; \
+    gzip_min_length 1024; \
+    gzip_comp_level 6; \
+    gzip_types application/javascript application/wasm text/css text/html application/json image/svg+xml; \
+    location ~* \.(wasm|js|css|ttf|woff2?)$ { \
+        expires 1y; \
+        add_header Cache-Control "public, immutable"; \
+    } \
+    location = /index.html { \
+        expires -1; \
+        add_header Cache-Control "no-cache"; \
+    } \
 }' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
