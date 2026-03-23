@@ -181,7 +181,22 @@
                 loader.classList.add('hidden');
                 setTimeout(() => loader.remove(), 500);
             }
+            window._wasmLoaded = true;
         };
+
+        // Timeout: show error if WASM hasn't loaded after 30 seconds
+        setTimeout(function() {
+            if (window._wasmLoaded) return;
+            const text = document.querySelector('.loader-text');
+            const bar = document.querySelector('.loader-container');
+            if (text) {
+                text.textContent = 'Loading failed — tap to reload';
+                text.style.color = '#e94560';
+                text.style.cursor = 'pointer';
+                text.onclick = function() { location.reload(); };
+            }
+            if (bar) bar.style.display = 'none';
+        }, 30000);
 
         // Neon Command Analytics - Privacy-first, no cookies, no PII
         window.neonAnalytics = (function() {
