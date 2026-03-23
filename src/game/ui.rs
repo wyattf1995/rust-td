@@ -982,7 +982,7 @@ fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(28.0),
+                            height: Val::Px(44.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             margin: UiRect::bottom(Val::Px(6.0)),
@@ -1081,7 +1081,7 @@ fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(28.0),
+                            height: Val::Px(44.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             margin: UiRect::bottom(Val::Px(6.0)),
@@ -1113,7 +1113,7 @@ fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
                     ButtonBundle {
                         style: Style {
                             width: Val::Percent(100.0),
-                            height: Val::Px(28.0),
+                            height: Val::Px(44.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()

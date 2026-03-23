@@ -110,15 +110,14 @@
         }
 
         @keyframes loading {
-            0% {
-                transform: translateX(-100%);
-            }
-            50% {
-                transform: translateX(200%);
-            }
-            100% {
-                transform: translateX(-100%);
-            }
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(200%); }
+            100% { transform: translateX(-100%); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .loader-bar { animation: none; width: 100%; opacity: 0.5; }
+            #loading-screen { transition: none; }
         }
 
         .loader-text {
@@ -163,7 +162,7 @@
     <link data-trunk rel="copy-dir" href="assets"/>
 </head>
 <body>
-    <canvas id="bevy-canvas"></canvas>
+    <canvas id="bevy-canvas" role="application" aria-label="Neon Command - Tower Defense Game">Your browser does not support this game.</canvas>
     <div id="loading-screen">
         <div class="tower-icon"></div>
         <h1 class="loader-title">Neon Command</h1>
