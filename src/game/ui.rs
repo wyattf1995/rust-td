@@ -24,6 +24,7 @@ impl Plugin for GameUiPlugin {
         app.init_resource::<UiClicked>()
             .init_resource::<UiZones>()
             .init_resource::<LifeLostFlash>()
+            .init_resource::<SellPending>()
             .add_systems(OnEnter(GameState::Playing), setup_ui)
             .add_systems(OnEnter(GameState::Paused), setup_pause_menu)
             .add_systems(OnExit(GameState::Paused), cleanup_pause_menu)
@@ -92,6 +93,9 @@ struct TowerButton(TowerType);
 
 #[derive(Component)]
 struct TowerCostText;
+
+#[derive(Component)]
+struct HudPauseButton;
 
 #[derive(Component)]
 struct StartWaveButton;
@@ -214,6 +218,13 @@ struct WaveAnnouncement {
 struct LifeLostFlash {
     timer: Option<Timer>,
     previous_lives: u32,
+}
+
+/// Resource to track sell confirmation state (double-tap to sell)
+#[derive(Resource, Default)]
+struct SellPending {
+    timer: Option<Timer>,
+    tower: Option<Entity>,
 }
 
 #[derive(Component)]
@@ -479,6 +490,33 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                         ),
                         LivesText,
                     ));
+                    // Pause button
+                    parent.spawn((
+                        ButtonBundle {
+                            style: Style {
+                                width: Val::Px(38.0),
+                                height: Val::Px(38.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                margin: UiRect::left(Val::Px(8.0)),
+                                ..default()
+                            },
+                            background_color: GameColors::BUTTON_NORMAL.into(),
+                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            ..default()
+                        },
+                        HudPauseButton,
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn(TextBundle::from_section(
+                            "| |",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 14.0,
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.65),
+                            },
+                        ));
+                    });
                 });
         });
 }
@@ -1817,16 +1855,16 @@ fn update_wave_preview(
                 text.push_str(&format!("\n{}", preview.modifier.name()));
             }
 
-            // Show fuzzy counts per enemy type
+            // Show fuzzy counts per enemy type with brief descriptions
             for (etype, count) in &preview.counts {
                 let fuzzy = fuzzy_count(*count);
                 let name = match etype {
                     EnemyType::Basic => "Basic",
-                    EnemyType::Fast => "Fast",
-                    EnemyType::Tank => "Tank",
-                    EnemyType::Armored => "Armored",
-                    EnemyType::Flying => "Flying",
-                    EnemyType::Boss => "BOSS",
+                    EnemyType::Fast => "Fast (quick)",
+                    EnemyType::Tank => "Tank (tough)",
+                    EnemyType::Armored => "Armored (resists)",
+                    EnemyType::Flying => "Flying (skips path)",
+                    EnemyType::Boss => "BOSS (high HP)",
                     EnemyType::Splitter => "Splitter",
                     EnemyType::MiniSplitter => "Mini",
                 };
@@ -2072,10 +2110,18 @@ fn pause_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
     selected_tower: Res<SelectedPlacedTower>,
+    pause_button: Query<&Interaction, (Changed<Interaction>, With<HudPauseButton>)>,
 ) {
-    // Only pause if no tower is selected (Escape deselects tower first)
+    // Pause via ESC key (only if no tower selected — Escape deselects tower first)
     if keyboard.just_pressed(KeyCode::Escape) && selected_tower.0.is_none() {
         next_state.set(GameState::Paused);
+        return;
+    }
+    // Pause via HUD button click
+    for interaction in &pause_button {
+        if *interaction == Interaction::Pressed {
+            next_state.set(GameState::Paused);
+        }
     }
 }
 
@@ -2285,10 +2331,23 @@ fn tower_context_shortcuts(
     economy: Res<PlayerEconomy>,
     mut upgrade_events: EventWriter<UpgradeTowerEvent>,
     mut sell_events: EventWriter<SellTowerEvent>,
+    mut sell_pending: ResMut<SellPending>,
+    time: Res<Time>,
 ) {
-    // Escape to deselect
+    // Tick sell confirmation timer
+    if let Some(ref mut timer) = sell_pending.timer {
+        timer.tick(time.delta());
+        if timer.finished() {
+            sell_pending.timer = None;
+            sell_pending.tower = None;
+        }
+    }
+
+    // Escape to deselect (also cancels pending sell)
     if keyboard.just_pressed(KeyCode::Escape) && selected_tower.0.is_some() {
         selected_tower.0 = None;
+        sell_pending.timer = None;
+        sell_pending.tower = None;
         return;
     }
 
@@ -2300,10 +2359,19 @@ fn tower_context_shortcuts(
                 && tower.can_upgrade() && economy.gold >= tower.upgrade_cost() {
                     upgrade_events.send(UpgradeTowerEvent { tower: tower_entity });
                 }
-            // S to sell
+            // S to sell — requires double-tap within 1.5 seconds
             if keyboard.just_pressed(KeyCode::KeyS) {
-                sell_events.send(SellTowerEvent { tower: tower_entity });
-                selected_tower.0 = None;
+                if sell_pending.tower == Some(tower_entity) && sell_pending.timer.is_some() {
+                    // Second press — confirm sell
+                    sell_events.send(SellTowerEvent { tower: tower_entity });
+                    selected_tower.0 = None;
+                    sell_pending.timer = None;
+                    sell_pending.tower = None;
+                } else {
+                    // First press — enter pending state
+                    sell_pending.tower = Some(tower_entity);
+                    sell_pending.timer = Some(Timer::from_seconds(1.5, TimerMode::Once));
+                }
             }
         }
     }
@@ -2323,6 +2391,7 @@ fn update_tower_context_menu(
     mut synergy_text: Query<&mut Text, (With<SynergyText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>)>,
     pointer: Res<super::PointerState>,
     economy: Res<PlayerEconomy>,
+    sell_pending: Res<SellPending>,
 ) {
     // Left-click or touch to select/deselect towers
     if pointer.just_pressed {
@@ -2430,7 +2499,13 @@ fn update_tower_context_menu(
                     }
                 }
                 for mut text in &mut sell_text {
-                    text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
+                    if sell_pending.tower == Some(tower_entity) && sell_pending.timer.is_some() {
+                        text.sections[0].value = "Confirm [S]?".into();
+                        text.sections[0].style.color = Color::srgb(1.0, 0.4, 0.4);
+                    } else {
+                        text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
+                        text.sections[0].style.color = Color::WHITE;
+                    }
                 }
                 // Update targeting text to show current mode
                 for mut text in &mut targeting_text {
@@ -2533,6 +2608,7 @@ fn tower_context_buttons(
     mut sell_events: EventWriter<SellTowerEvent>,
     mut targeting_text: Query<&mut Text, With<TargetingText>>,
     mut ui_clicked: ResMut<UiClicked>,
+    mut sell_pending: ResMut<SellPending>,
 ) {
     // Check if we can afford upgrade and it's allowed
     let can_afford = if let Some(tower_entity) = selected_tower.0 {
@@ -2576,13 +2652,20 @@ fn tower_context_buttons(
         }
     }
 
-    // Sell button
+    // Sell button — requires double-click to confirm
     for (interaction, mut color) in &mut sell_query {
         if *interaction != Interaction::None { ui_clicked.0 = true; }
         if button_interaction(interaction, &mut color, Color::srgb(0.5, 0.2, 0.2), Color::srgb(0.65, 0.3, 0.3)) {
             if let Some(tower_entity) = selected_tower.0 {
-                sell_events.send(SellTowerEvent { tower: tower_entity });
-                selected_tower.0 = None;
+                if sell_pending.tower == Some(tower_entity) && sell_pending.timer.is_some() {
+                    sell_events.send(SellTowerEvent { tower: tower_entity });
+                    selected_tower.0 = None;
+                    sell_pending.timer = None;
+                    sell_pending.tower = None;
+                } else {
+                    sell_pending.tower = Some(tower_entity);
+                    sell_pending.timer = Some(Timer::from_seconds(1.5, TimerMode::Once));
+                }
             }
         }
     }
