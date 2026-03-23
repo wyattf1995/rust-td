@@ -6,7 +6,7 @@ use crate::{
     game::map::{GameMap, MapPreset, SelectedMap, GRID_WIDTH, GRID_HEIGHT},
     loading::GameAssets,
     persistence::{HighScores, SettingsOpen},
-    GameState,
+    GameState, ScreenInfo,
 };
 
 pub struct MenuPlugin;
@@ -470,11 +470,18 @@ fn button_interaction(
     mut next_state: ResMut<NextState<GameState>>,
     analytics: Res<Analytics>,
     selected_map: Res<SelectedMap>,
+    screen_info: Res<ScreenInfo>,
 ) {
     for interaction in &interaction_query {
         if *interaction == Interaction::Pressed {
             let map_name = selected_map.0.name();
-            track_with_context(&analytics, "game_started", &[("map", map_name)]);
+            let mobile = if screen_info.is_mobile { "true" } else { "false" };
+            let landscape = if screen_info.is_landscape { "true" } else { "false" };
+            track_with_context(&analytics, "game_started", &[
+                ("map", map_name),
+                ("mobile", mobile),
+                ("landscape", landscape),
+            ]);
             next_state.set(GameState::Playing);
         }
     }

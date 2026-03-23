@@ -506,16 +506,22 @@ fn restart_interaction(
     interaction_query: Query<&Interaction, (Changed<Interaction>, With<RestartButton>)>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
+    analytics: Res<Analytics>,
 ) {
-    // Button click restart
+    let mut restarting = false;
+
     for interaction in &interaction_query {
         if *interaction == Interaction::Pressed {
-            next_state.set(GameState::Menu);
+            restarting = true;
         }
     }
 
-    // Quick restart with R key
     if keyboard.just_pressed(KeyCode::KeyR) {
+        restarting = true;
+    }
+
+    if restarting {
+        track_with_context(&analytics, "game_restarted", &[]);
         next_state.set(GameState::Menu);
     }
 }
