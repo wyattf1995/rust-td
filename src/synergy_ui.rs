@@ -69,10 +69,11 @@ fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
         // Panel container
         parent.spawn(NodeBundle {
             style: Style {
-                width: Val::Px(380.0),
+                width: Val::Percent(90.0),
+                max_width: Val::Px(380.0),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
-                padding: UiRect::all(Val::Px(20.0)),
+                padding: UiRect::all(Val::Px(16.0)),
                 row_gap: Val::Px(10.0),
                 ..default()
             },
