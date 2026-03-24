@@ -1,13 +1,17 @@
 # Build stage
 FROM rust:1.85-slim-bookworm AS builder
 
-# Install dependencies for trunk, wasm, and wasm-opt (binaryen)
+# Install dependencies for trunk and wasm
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     curl \
-    binaryen \
     && rm -rf /var/lib/apt/lists/*
+
+# Install newer binaryen (wasm-opt) — Debian bookworm's v108 is too old
+# for WASM sign-extension ops emitted by Rust 1.85
+RUN curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_121/binaryen-version_121-x86_64-linux.tar.gz \
+    | tar -xzf - -C /usr/local --strip-components=1
 
 # Install wasm target and trunk
 RUN rustup target add wasm32-unknown-unknown
