@@ -220,7 +220,7 @@ fn projectile_movement(
 
         // Spawn trail particle (frequency based on particle density setting)
         let trail_skip = settings.particle_density.trail_skip();
-        if (*frame_count).is_multiple_of(trail_skip) {
+        if (*frame_count) % trail_skip == 0 {
             let trail_alpha = if matches!(projectile.tower_type, TowerType::Chain) { 0.6 } else { 0.5 };
             let trail_color = projectile.tower_type.projectile_color().with_alpha(trail_alpha);
 

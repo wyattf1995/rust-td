@@ -339,7 +339,7 @@ impl WaveManager {
         };
         let mut health_multiplier = base_mult * late_game_mult;
 
-        let modifier = if wave_num >= 6 && wave_num.is_multiple_of(3) {
+        let modifier = if wave_num >= 6 && wave_num % 3 == 0 {
             match (wave_num / 3) % 5 {
                 0 => WaveModifier::SpeedBoost,
                 1 => WaveModifier::Swarm,
@@ -393,7 +393,7 @@ impl WaveManager {
 
         // Determine wave type based on wave number
         let wave_type = wave_num % 5;
-        let is_boss_wave = wave_num.is_multiple_of(10) && wave_num > 0; // Boss every 10 waves now
+        let is_boss_wave = wave_num % 10 == 0 && wave_num > 0; // Boss every 10 waves now
 
         if is_boss_wave {
             // Boss wave every 10 waves
@@ -1242,7 +1242,7 @@ fn check_wave_complete(
         wave_manager.current_wave += 1;
 
         // Track milestone waves (5, 10, 15, 20...) to measure progression
-        if completed_wave.is_multiple_of(5) || completed_wave == 1 {
+        if completed_wave % 5 == 0 || completed_wave == 1 {
             let wave_str = completed_wave.to_string();
             let score_str = economy.score.to_string();
             let gold_str = economy.gold.to_string();
