@@ -602,7 +602,7 @@ fn setup_map(mut commands: Commands, active: Option<Res<super::GameActive>>, sel
 
     // Simple deterministic variation based on position
     let variation_seed = |x: usize, y: usize| -> bool {
-        (x * 7 + y * 13) % 3 == 0
+        (x * 7 + y * 13).is_multiple_of(3)
     };
 
     // Spawn grid tiles with borders
