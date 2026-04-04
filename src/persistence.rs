@@ -288,9 +288,187 @@ pub fn save_highscores(_high_scores: &HighScores) {
     // No-op on native
 }
 
+// ── Lifetime Stats ──
+
+const LIFETIME_KEY: &str = "neon_command_lifetime";
+
+#[derive(Resource, Clone, Debug)]
+pub struct LifetimeStats {
+    pub total_games: u32,
+    pub total_kills: u32,
+    pub total_waves: u32,
+    pub total_gold_earned: u32,
+    pub best_wave_ever: usize,
+}
+
+impl Default for LifetimeStats {
+    fn default() -> Self {
+        Self {
+            total_games: 0,
+            total_kills: 0,
+            total_waves: 0,
+            total_gold_earned: 0,
+            best_wave_ever: 0,
+        }
+    }
+}
+
+impl LifetimeStats {
+    fn to_json(&self) -> String {
+        format!(
+            r#"{{"games":{},"kills":{},"waves":{},"gold":{},"best_wave":{}}}"#,
+            self.total_games, self.total_kills, self.total_waves,
+            self.total_gold_earned, self.best_wave_ever
+        )
+    }
+
+    fn from_json(json: &str) -> Self {
+        let mut stats = Self::default();
+        let trimmed = json.trim().trim_start_matches('{').trim_end_matches('}');
+        for part in trimmed.split(',') {
+            let part = part.trim();
+            if let Some(val) = part.strip_prefix("\"games\":") {
+                stats.total_games = val.trim().parse().unwrap_or(0);
+            } else if let Some(val) = part.strip_prefix("\"kills\":") {
+                stats.total_kills = val.trim().parse().unwrap_or(0);
+            } else if let Some(val) = part.strip_prefix("\"waves\":") {
+                stats.total_waves = val.trim().parse().unwrap_or(0);
+            } else if let Some(val) = part.strip_prefix("\"gold\":") {
+                stats.total_gold_earned = val.trim().parse().unwrap_or(0);
+            } else if let Some(val) = part.strip_prefix("\"best_wave\":") {
+                stats.best_wave_ever = val.trim().parse().unwrap_or(0);
+            }
+        }
+        stats
+    }
+
+    pub fn record_game(&mut self, kills: u32, waves: usize, gold_earned: u32) {
+        self.total_games += 1;
+        self.total_kills += kills;
+        self.total_waves += waves as u32;
+        self.total_gold_earned += gold_earned;
+        self.best_wave_ever = self.best_wave_ever.max(waves);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn load_lifetime_stats() -> LifetimeStats {
+    let storage = web_sys::window()
+        .and_then(|w| w.local_storage().ok())
+        .flatten();
+    if let Some(storage) = storage {
+        if let Ok(Some(json)) = storage.get_item(LIFETIME_KEY) {
+            return LifetimeStats::from_json(&json);
+        }
+    }
+    LifetimeStats::default()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn save_lifetime_stats(stats: &LifetimeStats) {
+    let storage = web_sys::window()
+        .and_then(|w| w.local_storage().ok())
+        .flatten();
+    if let Some(storage) = storage {
+        let _ = storage.set_item(LIFETIME_KEY, &stats.to_json());
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_lifetime_stats() -> LifetimeStats {
+    LifetimeStats::default()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn save_lifetime_stats(_stats: &LifetimeStats) {}
+
+// ── Tips Tracking ──
+
+const TIPS_KEY: &str = "neon_command_tips";
+
+/// Tracks which contextual tips have been shown (persisted across sessions).
+#[derive(Resource, Clone, Debug)]
+pub struct TipsShown {
+    pub specialization: bool,
+    pub synergy: bool,
+    pub early_send: bool,
+    pub targeting: bool,
+}
+
+impl Default for TipsShown {
+    fn default() -> Self {
+        Self {
+            specialization: false,
+            synergy: false,
+            early_send: false,
+            targeting: false,
+        }
+    }
+}
+
+impl TipsShown {
+    fn to_json(&self) -> String {
+        format!(
+            r#"{{"spec":{},"syn":{},"early":{},"targ":{}}}"#,
+            self.specialization, self.synergy, self.early_send, self.targeting
+        )
+    }
+
+    fn from_json(json: &str) -> Self {
+        let mut tips = Self::default();
+        let trimmed = json.trim().trim_start_matches('{').trim_end_matches('}');
+        for part in trimmed.split(',') {
+            let part = part.trim();
+            if let Some(val) = part.strip_prefix("\"spec\":") {
+                tips.specialization = val.trim() == "true";
+            } else if let Some(val) = part.strip_prefix("\"syn\":") {
+                tips.synergy = val.trim() == "true";
+            } else if let Some(val) = part.strip_prefix("\"early\":") {
+                tips.early_send = val.trim() == "true";
+            } else if let Some(val) = part.strip_prefix("\"targ\":") {
+                tips.targeting = val.trim() == "true";
+            }
+        }
+        tips
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn load_tips() -> TipsShown {
+    let storage = web_sys::window()
+        .and_then(|w| w.local_storage().ok())
+        .flatten();
+    if let Some(storage) = storage {
+        if let Ok(Some(json)) = storage.get_item(TIPS_KEY) {
+            return TipsShown::from_json(&json);
+        }
+    }
+    TipsShown::default()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn save_tips(tips: &TipsShown) {
+    let storage = web_sys::window()
+        .and_then(|w| w.local_storage().ok())
+        .flatten();
+    if let Some(storage) = storage {
+        let _ = storage.set_item(TIPS_KEY, &tips.to_json());
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_tips() -> TipsShown {
+    TipsShown::default()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn save_tips(_tips: &TipsShown) {}
+
 fn init_persistence(mut commands: Commands) {
     commands.insert_resource(load_highscores());
     commands.insert_resource(load_settings());
+    commands.insert_resource(load_lifetime_stats());
+    commands.insert_resource(load_tips());
 }
 
 pub struct PersistencePlugin;
@@ -300,6 +478,8 @@ impl Plugin for PersistencePlugin {
         app.init_resource::<HighScores>()
             .init_resource::<GameSettings>()
             .init_resource::<SettingsOpen>()
+            .init_resource::<LifetimeStats>()
+            .init_resource::<TipsShown>()
             .add_systems(Startup, init_persistence);
     }
 }

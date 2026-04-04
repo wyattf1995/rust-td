@@ -249,6 +249,15 @@
             if (bar) bar.style.display = 'none';
         }, 30000);
 
+        // Copy text to clipboard (called from WASM)
+        window.copyToClipboard = function(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).catch(function() {});
+                return true;
+            }
+            return false;
+        };
+
         // Neon Command Analytics - Privacy-first, no cookies, no PII
         window.neonAnalytics = (function() {
             const ANALYTICS_ENDPOINT = null; // Set to your endpoint, e.g., '/api/events' or Plausible URL

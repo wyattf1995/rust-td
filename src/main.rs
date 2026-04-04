@@ -10,6 +10,7 @@ mod menu;
 mod persistence;
 mod settings_ui;
 mod synergy_ui;
+mod tips;
 
 /// Game states
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
@@ -85,6 +86,7 @@ fn main() {
             graphics::GraphicsPlugin,
             settings_ui::SettingsPlugin,
             synergy_ui::SynergyUiPlugin,
+            tips::TipsPlugin,
         ))
         .add_systems(Update, (detect_screen_size, update_camera_projection));
 

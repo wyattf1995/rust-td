@@ -14,9 +14,19 @@ pub mod tower;
 pub mod ui;
 
 use crate::analytics::{Analytics, track_with_context};
-use crate::persistence::{GameSettings, HighScores, save_highscores};
+use crate::persistence::{GameSettings, HighScores, LifetimeStats, save_highscores, save_lifetime_stats};
 use crate::GameState;
 use crate::graphics::shapes::GameColors;
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(catch, js_namespace = window)]
+    fn copyToClipboard(text: &str) -> Result<bool, JsValue>;
+}
 
 /// Simple pseudo-random based on position (deterministic)
 pub(crate) fn rand_simple(seed: f32) -> f32 {
@@ -52,9 +62,10 @@ impl Plugin for GamePlugin {
             Update,
             update_screen_shake.run_if(in_state(GameState::Playing)),
         )
+        .init_resource::<CopyFeedback>()
         .add_systems(
             Update,
-            (restart_button_system, restart_interaction)
+            (restart_button_system, restart_interaction, share_button_system)
                 .run_if(in_state(GameState::GameOver)),
         );
     }
@@ -62,6 +73,22 @@ impl Plugin for GamePlugin {
 
 #[derive(Component)]
 pub struct GameEntity;
+
+#[derive(Component)]
+struct ShareButton;
+
+#[derive(Component)]
+struct ShareButtonText;
+
+/// Resource to store the share text so the system can access it.
+#[derive(Resource)]
+struct ShareText(String);
+
+/// Timer for "Copied!" feedback on share button.
+#[derive(Resource, Default)]
+struct CopyFeedback {
+    timer: Option<Timer>,
+}
 
 /// Screen shake resource for camera trauma
 #[derive(Resource, Default)]
@@ -110,6 +137,7 @@ fn setup_game_over(
     selected_map: Res<map::SelectedMap>,
     mut high_scores: ResMut<HighScores>,
     mut game_stats: ResMut<stats::GameStats>,
+    mut lifetime: ResMut<LifetimeStats>,
 ) {
     let map_name = selected_map.0.name();
     let wave = wave_manager.current_wave;
@@ -123,6 +151,14 @@ fn setup_game_over(
     if is_new_best {
         save_highscores(&high_scores);
     }
+
+    // Update and save lifetime stats
+    lifetime.record_game(
+        game_stats.total_enemies_killed,
+        wave,
+        game_stats.total_gold_earned,
+    );
+    save_lifetime_stats(&lifetime);
 
     // Track game over event with stats
     let wave_reached = wave.to_string();
@@ -178,6 +214,13 @@ fn setup_game_over(
     } else {
         "No towers placed".to_string()
     };
+
+    // Build shareable text for clipboard
+    let share_text = format!(
+        "Neon Command | {} | Wave {} | Score {} | {} kills | MVP: {}\ntd.wyatt-fleming.com",
+        map_name, wave, score, game_stats.total_enemies_killed, best_tower_text
+    );
+    commands.insert_resource(ShareText(share_text));
 
     commands
         .spawn((
@@ -359,8 +402,16 @@ fn setup_game_over(
                 });
             });
 
-            parent
-                .spawn((
+            // Button row: Restart + Copy Run
+            parent.spawn(NodeBundle {
+                style: Style {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(12.0),
+                    ..default()
+                },
+                ..default()
+            }).with_children(|row| {
+                row.spawn((
                     ButtonBundle {
                         style: Style {
                             width: Val::Px(200.0),
@@ -385,6 +436,36 @@ fn setup_game_over(
                     ));
                 });
 
+                row.spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(140.0),
+                            height: Val::Px(60.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        background_color: Color::srgba(1.0, 1.0, 1.0, 0.12).into(),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
+                        ..default()
+                    },
+                    ShareButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "COPY RUN",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 18.0,
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.8),
+                            },
+                        ),
+                        ShareButtonText,
+                    ));
+                });
+            });
+
             // Hint
             parent.spawn(TextBundle::from_section(
                 "Press R to restart",
@@ -397,6 +478,22 @@ fn setup_game_over(
                 margin: UiRect::top(Val::Px(8.0)),
                 ..default()
             }));
+
+            // Post-game suggestion
+            {
+                let suggestion = build_suggestion(map_name, wave, &high_scores);
+                parent.spawn(TextBundle::from_section(
+                    suggestion,
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 12.0,
+                        color: Color::srgba(0.4, 0.85, 1.0, 0.6),
+                    },
+                ).with_style(Style {
+                    margin: UiRect::top(Val::Px(6.0)),
+                    ..default()
+                }));
+            }
         });
 }
 
@@ -425,6 +522,91 @@ fn restart_button_system(
             }
         }
     }
+}
+
+fn share_button_system(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<ShareButton>),
+    >,
+    share_text: Option<Res<ShareText>>,
+    mut text_query: Query<&mut Text, With<ShareButtonText>>,
+    mut feedback: ResMut<CopyFeedback>,
+    time: Res<Time>,
+) {
+    // Tick feedback timer and restore label
+    if let Some(ref mut timer) = feedback.timer {
+        timer.tick(time.delta());
+        if timer.finished() {
+            feedback.timer = None;
+            for mut text in &mut text_query {
+                text.sections[0].value = "COPY RUN".into();
+                text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.8);
+            }
+        }
+    }
+
+    for (interaction, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                if let Some(ref share) = share_text {
+                    #[cfg(target_arch = "wasm32")]
+                    { let _ = copyToClipboard(&share.0); }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    { let _ = &share.0; }
+                }
+                // Show "Copied!" feedback
+                for mut text in &mut text_query {
+                    text.sections[0].value = "COPIED!".into();
+                    text.sections[0].style.color = Color::srgb(0.4, 1.0, 0.5);
+                }
+                feedback.timer = Some(Timer::from_seconds(1.5, TimerMode::Once));
+                *color = Color::srgba(0.4, 1.0, 0.5, 0.2).into();
+            }
+            Interaction::Hovered => {
+                if feedback.timer.is_none() {
+                    *color = Color::srgba(1.0, 1.0, 1.0, 0.2).into();
+                }
+            }
+            Interaction::None => {
+                if feedback.timer.is_none() {
+                    *color = Color::srgba(1.0, 1.0, 1.0, 0.12).into();
+                }
+            }
+        }
+    }
+}
+
+/// Build a contextual post-game suggestion based on play history.
+fn build_suggestion(current_map: &str, wave: usize, high_scores: &HighScores) -> String {
+    let all_maps = ["Random", "Serpentine", "Sprint", "Spiral"];
+
+    // Suggest an unplayed map
+    for &map_name in &all_maps {
+        if map_name != current_map && high_scores.get(map_name).is_none() {
+            return format!("Try {} — you haven't played it yet!", map_name);
+        }
+    }
+
+    // Suggest beating a record on a different map
+    let mut weakest: Option<(&str, usize)> = None;
+    for &map_name in &all_maps {
+        if map_name != current_map {
+            if let Some(entry) = high_scores.get(map_name) {
+                if weakest.is_none() || entry.wave < weakest.unwrap().1 {
+                    weakest = Some((map_name, entry.wave));
+                }
+            }
+        }
+    }
+    if let Some((map_name, best)) = weakest {
+        if wave > best + 3 {
+            return format!("Your {} best is only Wave {} — can you beat it?", map_name, best);
+        }
+    }
+
+    // Default challenge
+    format!("Can you survive to Wave {}?", wave + 5)
 }
 
 fn update_pointer_state(

@@ -5,7 +5,7 @@ use crate::{
     analytics::{Analytics, track_with_context},
     game::map::{GameMap, MapPreset, SelectedMap, GRID_WIDTH, GRID_HEIGHT},
     loading::GameAssets,
-    persistence::{HighScores, SettingsOpen},
+    persistence::{HighScores, LifetimeStats, SettingsOpen},
     GameState, ScreenInfo,
 };
 
@@ -70,7 +70,7 @@ const NEON_COLORS: [(f32, f32, f32); 8] = [
     (1.0, 0.85, 0.4),   // Gold (Buff)
 ];
 
-fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res<SelectedMap>, high_scores: Res<HighScores>) {
+fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res<SelectedMap>, high_scores: Res<HighScores>, lifetime: Res<LifetimeStats>) {
     // Spawn menu camera
     commands.spawn((Camera2dBundle::default(), MenuCamera, MenuScreen));
 
@@ -334,6 +334,27 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                         },
                     ));
                 });
+
+            // Lifetime stats (only shown after at least 1 game)
+            if lifetime.total_games > 0 {
+                parent.spawn(TextBundle::from_section(
+                    format!(
+                        "{} games • {} kills • best wave {} • {}g earned",
+                        lifetime.total_games,
+                        lifetime.total_kills,
+                        lifetime.best_wave_ever,
+                        lifetime.total_gold_earned
+                    ),
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 11.0,
+                        color: Color::srgba(1.0, 0.85, 0.2, 0.35),
+                    },
+                ).with_style(Style {
+                    margin: UiRect::top(Val::Px(15.0)),
+                    ..default()
+                }));
+            }
         });
 }
 
