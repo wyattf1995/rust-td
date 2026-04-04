@@ -1,4 +1,5 @@
 # Build stage
+# Base images pinned 2026-04-01 — update intentionally
 FROM rust:1.85-slim-bookworm AS builder
 
 # Install dependencies for trunk and wasm
@@ -32,38 +33,48 @@ COPY index.html ./
 RUN trunk build --release
 
 # Production stage - serve static files with nginx
-FROM nginx:alpine
+FROM nginx:1.29-alpine
 
 # Copy built files to nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Custom nginx config for SPA, compression, and caching
+# Custom nginx config — no SPA catch-all (prevents duplicate content indexing)
 RUN echo 'server { \
     listen 80; \
     root /usr/share/nginx/html; \
-    index index.html; \
     include mime.types; \
     types { \
         application/wasm wasm; \
-    } \
-    location / { \
-        try_files $uri $uri/ /index.html; \
     } \
     gzip on; \
     gzip_vary on; \
     gzip_min_length 1024; \
     gzip_comp_level 6; \
-    gzip_types application/javascript application/wasm text/css text/html application/json image/svg+xml; \
-    location ~* \.(wasm|js|css|ttf|woff2?)$ { \
+    gzip_types application/javascript application/wasm text/css text/html application/json image/svg+xml text/xml; \
+    location = / { \
+        add_header Cache-Control "no-cache"; \
+        try_files /index.html =404; \
+    } \
+    location = /robots.txt { try_files /robots.txt =404; } \
+    location = /sitemap.xml { try_files /sitemap.xml =404; } \
+    location /assets/ { \
         expires 1y; \
         add_header Cache-Control "public, immutable"; \
+        try_files $uri =404; \
     } \
-    location = /index.html { \
-        expires -1; \
-        add_header Cache-Control "no-cache"; \
+    location ~* \.(wasm|js|css)$ { \
+        expires 1y; \
+        add_header Cache-Control "public, immutable"; \
+        try_files $uri =404; \
+    } \
+    location / { \
+        return 404; \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -q --spider http://127.0.0.1:80/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
