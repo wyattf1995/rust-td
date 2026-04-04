@@ -293,7 +293,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
             // Controls hint
             parent.spawn(
                 TextBundle::from_section(
-                    "Keys 1-8 to select towers • Click to place",
+                    "Keys 1-8 to select towers • Click to place • Space to send wave",
                     TextStyle {
                         font: assets.font.clone(),
                         font_size: 14.0,

@@ -1791,6 +1791,7 @@ fn start_wave_button(
         (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<StartWaveButton>),
     >,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut wave_manager: ResMut<WaveManager>,
     mut economy: ResMut<PlayerEconomy>,
     assets: Res<GameAssets>,
@@ -1799,91 +1800,14 @@ fn start_wave_button(
     mut ui_clicked: ResMut<UiClicked>,
     mut stats: ResMut<super::stats::GameStats>,
 ) {
+    let mut should_start = false;
+
     for (interaction, mut color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
                 *color = GameColors::BUTTON_START_PRESSED.into();
                 ui_clicked.0 = true;
-                if !wave_manager.wave_active {
-                    // Calculate early-send bonus before starting wave
-                    let early_bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
-
-                    wave_manager.start_wave();
-
-                    // Award early-send bonus
-                    if early_bonus > 0 {
-                        economy.gold += early_bonus;
-                        economy.score += early_bonus;
-                        stats.record_early_send(early_bonus);
-                    }
-
-                    // Despawn any existing announcement
-                    for entity in &existing_announcements {
-                        commands.entity(entity).despawn_recursive();
-                    }
-
-                    // Spawn wave announcement
-                    let wave_num = wave_manager.current_wave + 1;
-                    let modifier_name = wave_manager.current_modifier.name();
-
-                    commands.spawn((
-                        NodeBundle {
-                            style: Style {
-                                position_type: PositionType::Absolute,
-                                top: Val::Percent(35.0),
-                                left: Val::Percent(50.0),
-                                margin: UiRect::left(Val::Px(-120.0)),
-                                width: Val::Px(240.0),
-                                flex_direction: FlexDirection::Column,
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                padding: UiRect::all(Val::Px(12.0)),
-                                ..default()
-                            },
-                            background_color: Color::srgba(0.0, 0.0, 0.0, 0.0).into(),
-                            ..default()
-                        },
-                        WaveAnnouncement {
-                            lifetime: Timer::from_seconds(1.5, TimerMode::Once),
-                        },
-                        GameEntity,
-                    )).with_children(|parent| {
-                        parent.spawn(TextBundle::from_section(
-                            format!("WAVE {}", wave_num),
-                            TextStyle {
-                                font: assets.font.clone(),
-                                font_size: 40.0,
-                                color: GameColors::PRIMARY,
-                            },
-                        ));
-                        if early_bonus > 0 {
-                            parent.spawn(TextBundle::from_section(
-                                format!("+{}g EARLY BONUS", early_bonus),
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 16.0,
-                                    color: GameColors::GOLD,
-                                },
-                            ).with_style(Style {
-                                margin: UiRect::top(Val::Px(4.0)),
-                                ..default()
-                            }));
-                        }
-                        if !modifier_name.is_empty() {
-                            parent.spawn(TextBundle::from_section(
-                                modifier_name,
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 18.0,
-                                    color: GameColors::GOLD,
-                                },
-                            ).with_style(Style {
-                                margin: UiRect::top(Val::Px(4.0)),
-                                ..default()
-                            }));
-                        }
-                    });
-                }
+                should_start = true;
             }
             Interaction::Hovered => {
                 *color = GameColors::BUTTON_START_HOVER.into();
@@ -1893,6 +1817,92 @@ fn start_wave_button(
                 *color = GameColors::BUTTON_START.into();
             }
         }
+    }
+
+    // Space to send wave
+    if keyboard.just_pressed(KeyCode::Space) {
+        should_start = true;
+    }
+
+    if should_start && !wave_manager.wave_active {
+        // Calculate early-send bonus before starting wave
+        let early_bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
+
+        wave_manager.start_wave();
+
+        // Award early-send bonus
+        if early_bonus > 0 {
+            economy.gold += early_bonus;
+            economy.score += early_bonus;
+            stats.record_early_send(early_bonus);
+        }
+
+        // Despawn any existing announcement
+        for entity in &existing_announcements {
+            commands.entity(entity).despawn_recursive();
+        }
+
+        // Spawn wave announcement
+        let wave_num = wave_manager.current_wave + 1;
+        let modifier_name = wave_manager.current_modifier.name();
+
+        commands.spawn((
+            NodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    top: Val::Percent(35.0),
+                    left: Val::Percent(50.0),
+                    margin: UiRect::left(Val::Px(-120.0)),
+                    width: Val::Px(240.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::all(Val::Px(12.0)),
+                    ..default()
+                },
+                background_color: Color::srgba(0.0, 0.0, 0.0, 0.0).into(),
+                ..default()
+            },
+            WaveAnnouncement {
+                lifetime: Timer::from_seconds(1.5, TimerMode::Once),
+            },
+            GameEntity,
+        )).with_children(|parent| {
+            parent.spawn(TextBundle::from_section(
+                format!("WAVE {}", wave_num),
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 40.0,
+                    color: GameColors::PRIMARY,
+                },
+            ));
+            if early_bonus > 0 {
+                parent.spawn(TextBundle::from_section(
+                    format!("+{}g EARLY BONUS", early_bonus),
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 16.0,
+                        color: GameColors::GOLD,
+                    },
+                ).with_style(Style {
+                    margin: UiRect::top(Val::Px(4.0)),
+                    ..default()
+                }));
+            }
+            if !modifier_name.is_empty() {
+                parent.spawn(TextBundle::from_section(
+                    modifier_name,
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 18.0,
+                        color: GameColors::GOLD,
+                    },
+                ).with_style(Style {
+                    margin: UiRect::top(Val::Px(4.0)),
+                    ..default()
+                }));
+            }
+        });
     }
 }
 
