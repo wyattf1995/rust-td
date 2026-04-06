@@ -26,7 +26,7 @@ struct SynergyOverlay;
 #[derive(Component)]
 struct SynergyCloseButton;
 
-const PANEL_BG: Color = Color::srgba(0.06, 0.06, 0.1, 0.95);
+const PANEL_BG: Color = GameColors::SETTINGS_PANEL_BG;
 fn toggle_synergy_panel(
     mut commands: Commands,
     synergy_open: Res<SynergyPanelOpen>,
@@ -58,7 +58,7 @@ fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
                 align_items: AlignItems::Center,
                 ..default()
             },
-            background_color: Color::srgba(0.0, 0.0, 0.0, 0.5).into(),
+            background_color: GameColors::OVERLAY_DIM.into(),
             z_index: ZIndex::Global(21),
             ..default()
         },

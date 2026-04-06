@@ -4,6 +4,7 @@ use rand::Rng;
 use crate::{
     analytics::{Analytics, track_with_context},
     game::map::{GameMap, MapPreset, SelectedMap, GRID_WIDTH, GRID_HEIGHT},
+    game::ui::button_interaction as ui_button_interaction,
     graphics::shapes::GameColors,
     loading::{ChallengeParams, GameAssets},
     persistence::{HighScores, LifetimeStats, SettingsOpen},
@@ -248,7 +249,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                     for preset in presets {
                         let is_selected = preset == selected_map.0;
                         let border_color = if is_selected {
-                            Color::srgb(0.0, 0.85, 0.95)
+                            GameColors::PRIMARY
                         } else {
                             Color::srgba(1.0, 1.0, 1.0, 0.15)
                         };
@@ -265,7 +266,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                                     padding: UiRect::all(Val::Px(4.0)),
                                     ..default()
                                 },
-                                background_color: Color::srgb(0.14, 0.15, 0.18).into(),
+                                background_color: GameColors::BUTTON_NORMAL.into(),
                                 border_color: border_color.into(),
                                 ..default()
                             },
@@ -311,7 +312,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                                     font: assets.font.clone(),
                                     font_size: 12.0,
                                     color: if is_selected {
-                                        Color::srgb(0.0, 0.85, 0.95)
+                                        GameColors::PRIMARY
                                     } else {
                                         Color::WHITE
                                     },
@@ -633,17 +634,7 @@ fn map_button_hover(
     >,
 ) {
     for (interaction, _btn, mut color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                *color = Color::srgb(0.18, 0.2, 0.24).into();
-            }
-            Interaction::Hovered => {
-                *color = Color::srgb(0.2, 0.22, 0.26).into();
-            }
-            Interaction::None => {
-                *color = Color::srgb(0.14, 0.15, 0.18).into();
-            }
-        }
+        ui_button_interaction(interaction, &mut color, GameColors::BUTTON_NORMAL, GameColors::BUTTON_HOVER);
     }
 }
 
@@ -654,17 +645,7 @@ fn wave_button_hover(
     >,
 ) {
     for (interaction, mut color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                *color = Color::srgb(0.18, 0.2, 0.24).into();
-            }
-            Interaction::Hovered => {
-                *color = Color::srgb(0.2, 0.22, 0.26).into();
-            }
-            Interaction::None => {
-                *color = GameColors::BUTTON_NORMAL.into();
-            }
-        }
+        ui_button_interaction(interaction, &mut color, GameColors::BUTTON_NORMAL, GameColors::BUTTON_HOVER);
     }
 }
 
@@ -714,7 +695,7 @@ fn map_select_interaction(
         for (btn, mut border, children) in &mut all_buttons {
             let is_selected = btn.0 == preset;
             *border = if is_selected {
-                Color::srgb(0.0, 0.85, 0.95).into()
+                GameColors::PRIMARY.into()
             } else {
                 Color::srgba(1.0, 1.0, 1.0, 0.15).into()
             };
@@ -724,7 +705,7 @@ fn map_select_interaction(
                 if let Ok(mut text) = text_query.get_mut(name_child) {
                     if let Some(section) = text.sections.first_mut() {
                         section.style.color = if is_selected {
-                            Color::srgb(0.0, 0.85, 0.95)
+                            GameColors::PRIMARY
                         } else {
                             Color::WHITE
                         };
@@ -798,16 +779,8 @@ fn menu_settings_button(
     mut settings_open: ResMut<SettingsOpen>,
 ) {
     for (interaction, mut color) in &mut query {
-        match *interaction {
-            Interaction::Pressed => {
-                settings_open.0 = true;
-            }
-            Interaction::Hovered => {
-                *color = GameColors::BUTTON_GHOST_HOVER.into();
-            }
-            Interaction::None => {
-                *color = GameColors::BUTTON_GHOST.into();
-            }
+        if ui_button_interaction(interaction, &mut color, GameColors::BUTTON_GHOST, GameColors::BUTTON_GHOST_HOVER) {
+            settings_open.0 = true;
         }
     }
 }

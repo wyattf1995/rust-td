@@ -584,79 +584,8 @@ fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
             GameEntity,
         ))
         .with_children(|parent| {
-            // Tower stats section with background
-            parent
-                .spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Percent(100.0),
-                        padding: UiRect::all(Val::Px(6.0)),
-                        margin: UiRect::bottom(Val::Px(6.0)),
-                        ..default()
-                    },
-                    background_color: Color::srgba(0.15, 0.15, 0.2, 0.8).into(),
-                    border_radius: BorderRadius::all(Val::Px(4.0)),
-                    ..default()
-                })
-                .with_children(|parent| {
-                    parent.spawn((
-                        TextBundle::from_sections([
-                            TextSection::new(
-                                "Basic Tower Lv1\n",
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 12.0,
-                                    color: Color::WHITE,
-                                },
-                            ),
-                            TextSection::new(
-                                "DMG: 25  RNG: 150  SPD: 1.0/s",
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 10.0,
-                                    color: Color::srgba(0.7, 0.8, 0.9, 1.0),
-                                },
-                            ),
-                        ]),
-                        TowerStatsText,
-                    ));
-                });
-
-            // Upgrade preview section
-            parent
-                .spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Percent(100.0),
-                        padding: UiRect::all(Val::Px(6.0)),
-                        margin: UiRect::bottom(Val::Px(6.0)),
-                        ..default()
-                    },
-                    background_color: Color::srgba(0.1, 0.2, 0.15, 0.8).into(),
-                    border_radius: BorderRadius::all(Val::Px(4.0)),
-                    ..default()
-                })
-                .with_children(|parent| {
-                    parent.spawn((
-                        TextBundle::from_sections([
-                            TextSection::new(
-                                "Next Level\n",
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 10.0,
-                                    color: GameColors::SUCCESS,
-                                },
-                            ),
-                            TextSection::new(
-                                "DMG: 30 (+5)\nRNG: 165 (+15)\nSPD: 1.2/s (+0.2)",
-                                TextStyle {
-                                    font: assets.font.clone(),
-                                    font_size: 10.0,
-                                    color: Color::srgba(0.6, 0.95, 0.6, 1.0),
-                                },
-                            ),
-                        ]),
-                        TowerUpgradePreview,
-                    ));
-                });
+            spawn_stats_section(parent, assets);
+            spawn_upgrade_preview(parent, assets);
 
             // Synergy display (hidden when no synergies active)
             parent.spawn((
@@ -674,167 +603,252 @@ fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
                 SynergyText,
             ));
 
-            // Targeting mode button
-            parent
-                .spawn((
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Percent(100.0),
-                            height: Val::Px(44.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            margin: UiRect::bottom(Val::Px(6.0)),
-                            ..default()
-                        },
-                        background_color: GameColors::BUTTON_TARGETING.into(),
-                        border_radius: BorderRadius::all(Val::Px(4.0)),
-                        ..default()
-                    },
-                    TargetingButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        TextBundle::from_section(
-                            "Target: First [T]",
-                            TextStyle {
-                                font: assets.font.clone(),
-                                font_size: 11.0,
-                                color: Color::WHITE,
-                            },
-                        ),
-                        TargetingText,
-                    ));
-                });
+            spawn_spec_choice_panel(parent, assets);
+            spawn_action_buttons(parent, assets);
+        });
+}
 
-            // Specialization choice panel (hidden by default, shown when needs_specialization)
-            parent
-                .spawn((
-                    NodeBundle {
-                        style: Style {
-                            width: Val::Percent(100.0),
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::Stretch,
-                            display: Display::None,
-                            margin: UiRect::bottom(Val::Px(6.0)),
-                            ..default()
-                        },
-                        ..default()
-                    },
-                    SpecChoicePanel,
-                ))
-                .with_children(|parent| {
-                    // Header
-                    parent.spawn(TextBundle::from_section(
-                        "Choose Specialization:",
+fn spawn_stats_section(parent: &mut ChildBuilder, assets: &GameAssets) {
+    // Tower stats section with background
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                padding: UiRect::all(Val::Px(6.0)),
+                margin: UiRect::bottom(Val::Px(6.0)),
+                ..default()
+            },
+            background_color: Color::srgba(0.15, 0.15, 0.2, 0.8).into(),
+            border_radius: BorderRadius::all(Val::Px(4.0)),
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_sections([
+                    TextSection::new(
+                        "Basic Tower Lv1\n",
                         TextStyle {
                             font: assets.font.clone(),
-                            font_size: 11.0,
-                            color: GameColors::PRIMARY,
+                            font_size: 12.0,
+                            color: Color::WHITE,
                         },
-                    ).with_style(Style {
-                        margin: UiRect::bottom(Val::Px(6.0)),
-                        ..default()
-                    }));
+                    ),
+                    TextSection::new(
+                        "DMG: 25  RNG: 150  SPD: 1.0/s",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 10.0,
+                            color: Color::srgba(0.7, 0.8, 0.9, 1.0),
+                        },
+                    ),
+                ]),
+                TowerStatsText,
+            ));
+        });
+}
 
-                    // Two spec buttons (text updated dynamically)
-                    for i in 0..2 {
-                        parent
-                            .spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        width: Val::Percent(100.0),
-                                        min_height: Val::Px(36.0),
-                                        padding: UiRect::all(Val::Px(6.0)),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        margin: UiRect::bottom(Val::Px(4.0)),
-                                        ..default()
-                                    },
-                                    background_color: Color::srgb(0.2, 0.3, 0.5).into(),
-                                    border_radius: BorderRadius::all(Val::Px(4.0)),
-                                    ..default()
+fn spawn_upgrade_preview(parent: &mut ChildBuilder, assets: &GameAssets) {
+    // Upgrade preview section
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                padding: UiRect::all(Val::Px(6.0)),
+                margin: UiRect::bottom(Val::Px(6.0)),
+                ..default()
+            },
+            background_color: Color::srgba(0.1, 0.2, 0.15, 0.8).into(),
+            border_radius: BorderRadius::all(Val::Px(4.0)),
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_sections([
+                    TextSection::new(
+                        "Next Level\n",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 10.0,
+                            color: GameColors::SUCCESS,
+                        },
+                    ),
+                    TextSection::new(
+                        "DMG: 30 (+5)\nRNG: 165 (+15)\nSPD: 1.2/s (+0.2)",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 10.0,
+                            color: Color::srgba(0.6, 0.95, 0.6, 1.0),
+                        },
+                    ),
+                ]),
+                TowerUpgradePreview,
+            ));
+        });
+}
+
+fn spawn_spec_choice_panel(parent: &mut ChildBuilder, assets: &GameAssets) {
+    // Specialization choice panel (hidden by default, shown when needs_specialization)
+    parent
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Stretch,
+                    display: Display::None,
+                    margin: UiRect::bottom(Val::Px(6.0)),
+                    ..default()
+                },
+                ..default()
+            },
+            SpecChoicePanel,
+        ))
+        .with_children(|parent| {
+            // Header
+            parent.spawn(TextBundle::from_section(
+                "Choose Specialization:",
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 11.0,
+                    color: GameColors::PRIMARY,
+                },
+            ).with_style(Style {
+                margin: UiRect::bottom(Val::Px(6.0)),
+                ..default()
+            }));
+
+            // Two spec buttons (text updated dynamically)
+            for i in 0..2 {
+                parent
+                    .spawn((
+                        ButtonBundle {
+                            style: Style {
+                                width: Val::Percent(100.0),
+                                min_height: Val::Px(36.0),
+                                padding: UiRect::all(Val::Px(6.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                margin: UiRect::bottom(Val::Px(4.0)),
+                                ..default()
+                            },
+                            background_color: Color::srgb(0.2, 0.3, 0.5).into(),
+                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            ..default()
+                        },
+                        // Default to Marksman, will be updated dynamically
+                        SpecButton(if i == 0 { Specialization::Marksman } else { Specialization::Gunner }),
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn((
+                            TextBundle::from_section(
+                                "",
+                                TextStyle {
+                                    font: assets.font.clone(),
+                                    font_size: 10.0,
+                                    color: Color::WHITE,
                                 },
-                                // Default to Marksman, will be updated dynamically
-                                SpecButton(if i == 0 { Specialization::Marksman } else { Specialization::Gunner }),
-                            ))
-                            .with_children(|parent| {
-                                parent.spawn((
-                                    TextBundle::from_section(
-                                        "",
-                                        TextStyle {
-                                            font: assets.font.clone(),
-                                            font_size: 10.0,
-                                            color: Color::WHITE,
-                                        },
-                                    ),
-                                    SpecButtonText,
-                                ));
-                            });
-                    }
-                });
+                            ),
+                            SpecButtonText,
+                        ));
+                    });
+            }
+        });
+}
 
-            // Upgrade button
-            parent
-                .spawn((
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Percent(100.0),
-                            height: Val::Px(44.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            margin: UiRect::bottom(Val::Px(6.0)),
-                            ..default()
-                        },
-                        background_color: Color::srgb(0.2, 0.5, 0.3).into(),
-                        border_radius: BorderRadius::all(Val::Px(4.0)),
-                        ..default()
+fn spawn_action_buttons(parent: &mut ChildBuilder, assets: &GameAssets) {
+    // Targeting mode button
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(44.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    margin: UiRect::bottom(Val::Px(6.0)),
+                    ..default()
+                },
+                background_color: GameColors::BUTTON_TARGETING.into(),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            TargetingButton,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_section(
+                    "Target: First [T]",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 11.0,
+                        color: Color::WHITE,
                     },
-                    UpgradeButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        TextBundle::from_section(
-                            "Upgrade [U] - 30g",
-                            TextStyle {
-                                font: assets.font.clone(),
-                                font_size: 11.0,
-                                color: Color::WHITE,
-                            },
-                        ),
-                        UpgradeCostText,
-                    ));
-                });
+                ),
+                TargetingText,
+            ));
+        });
 
-            // Sell button
-            parent
-                .spawn((
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Percent(100.0),
-                            height: Val::Px(44.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        background_color: GameColors::BUTTON_SELL.into(),
-                        border_radius: BorderRadius::all(Val::Px(4.0)),
-                        ..default()
+    // Upgrade button
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(44.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    margin: UiRect::bottom(Val::Px(6.0)),
+                    ..default()
+                },
+                background_color: Color::srgb(0.2, 0.5, 0.3).into(),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            UpgradeButton,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_section(
+                    "Upgrade [U] - 30g",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 11.0,
+                        color: Color::WHITE,
                     },
-                    SellButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        TextBundle::from_section(
-                            "Sell [S] +37g",
-                            TextStyle {
-                                font: assets.font.clone(),
-                                font_size: 11.0,
-                                color: Color::WHITE,
-                            },
-                        ),
-                        SellValueText,
-                    ));
-                });
+                ),
+                UpgradeCostText,
+            ));
+        });
+
+    // Sell button
+    parent
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(44.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                background_color: GameColors::BUTTON_SELL.into(),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            SellButton,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_section(
+                    "Sell [S] +37g",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 11.0,
+                        color: Color::WHITE,
+                    },
+                ),
+                SellValueText,
+            ));
         });
 }
 

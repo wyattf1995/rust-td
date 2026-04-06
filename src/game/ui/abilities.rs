@@ -121,7 +121,7 @@ pub(super) fn update_ability_tooltips(
                     max_width: Val::Px(200.0),
                     ..default()
                 },
-                background_color: Color::srgba(0.0, 0.0, 0.0, 0.85).into(),
+                background_color: GameColors::OVERLAY_TOOLTIP.into(),
                 border_radius: BorderRadius::all(Val::Px(6.0)),
                 ..default()
             },

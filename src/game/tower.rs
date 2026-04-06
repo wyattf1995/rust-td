@@ -226,24 +226,18 @@ impl Specialization {
     /// Unique accent color for each specialization (for visual distinction)
     pub fn color(&self) -> Color {
         match self {
-            // Basic pair (blue base)
-            Specialization::Marksman => Color::srgb(0.5, 0.85, 1.0),   // Bright ice-blue (precision)
-            Specialization::Gunner => Color::srgb(0.85, 0.75, 0.3),    // Warm amber (aggressive)
-            // Splash pair (orange base)
-            Specialization::Napalm => Color::srgb(1.0, 0.3, 0.15),     // Deep red-orange (fire)
-            Specialization::Shockwave => Color::srgb(1.0, 0.9, 0.5),   // White-yellow (blast)
-            // Slow pair (cyan base)
-            Specialization::Cryogenic => Color::srgb(0.2, 0.6, 0.9),   // Deep ice blue (frozen)
-            Specialization::Blizzard => Color::srgb(0.7, 0.95, 1.0),   // White-cyan (snow)
-            // Sniper pair (magenta base)
-            Specialization::Railgun => Color::srgb(0.4, 0.5, 1.0),     // Blue-violet (energy beam)
-            Specialization::Assassin => Color::srgb(0.95, 0.2, 0.4),   // Crimson-red (lethal)
-            // Rapid pair (gold base)
-            Specialization::Minigun => Color::srgb(0.75, 0.8, 0.85),   // Silver (mechanical)
-            Specialization::Shotgun => Color::srgb(1.0, 0.55, 0.25),   // Red-orange (scattered fire)
-            // Chain pair (blue base)
-            Specialization::Tesla => Color::srgb(0.6, 0.9, 1.0),       // Bright white-blue (electric)
-            Specialization::Arc => Color::srgb(0.6, 0.4, 1.0),         // Purple-blue (plasma)
+            Specialization::Marksman => GameColors::SPEC_MARKSMAN,
+            Specialization::Gunner => GameColors::SPEC_GUNNER,
+            Specialization::Napalm => GameColors::SPEC_NAPALM,
+            Specialization::Shockwave => GameColors::SPEC_SHOCKWAVE,
+            Specialization::Cryogenic => GameColors::SPEC_CRYOGENIC,
+            Specialization::Blizzard => GameColors::SPEC_BLIZZARD,
+            Specialization::Railgun => GameColors::SPEC_RAILGUN,
+            Specialization::Assassin => GameColors::SPEC_ASSASSIN,
+            Specialization::Minigun => GameColors::SPEC_MINIGUN,
+            Specialization::Shotgun => GameColors::SPEC_SHOTGUN,
+            Specialization::Tesla => GameColors::SPEC_TESLA,
+            Specialization::Arc => GameColors::SPEC_ARC,
         }
     }
 

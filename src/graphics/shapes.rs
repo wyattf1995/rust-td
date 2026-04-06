@@ -40,6 +40,20 @@ impl GameColors {
     pub const TOWER_POISON: Color = Color::srgb(0.5, 1.0, 0.3);   // Toxic green
     pub const TOWER_BUFF: Color = Color::srgb(1.0, 0.9, 0.5);     // Warm gold
 
+    // Specialization accent colors
+    pub const SPEC_MARKSMAN: Color = Color::srgb(0.5, 0.85, 1.0);
+    pub const SPEC_GUNNER: Color = Color::srgb(0.85, 0.75, 0.3);
+    pub const SPEC_NAPALM: Color = Color::srgb(1.0, 0.3, 0.15);
+    pub const SPEC_SHOCKWAVE: Color = Color::srgb(1.0, 0.9, 0.5);
+    pub const SPEC_CRYOGENIC: Color = Color::srgb(0.2, 0.6, 0.9);
+    pub const SPEC_BLIZZARD: Color = Color::srgb(0.7, 0.95, 1.0);
+    pub const SPEC_RAILGUN: Color = Color::srgb(0.4, 0.5, 1.0);
+    pub const SPEC_ASSASSIN: Color = Color::srgb(0.95, 0.2, 0.4);
+    pub const SPEC_MINIGUN: Color = Color::srgb(0.75, 0.8, 0.85);
+    pub const SPEC_SHOTGUN: Color = Color::srgb(1.0, 0.55, 0.25);
+    pub const SPEC_TESLA: Color = Color::srgb(0.6, 0.9, 1.0);
+    pub const SPEC_ARC: Color = Color::srgb(0.6, 0.4, 1.0);
+
     /// Tower barrel (darker than base for depth)
     pub const TOWER_BARREL: Color = Color::srgb(0.1, 0.1, 0.12);
 
@@ -133,10 +147,25 @@ impl GameColors {
     pub const BUTTON_TARGETING: Color = Color::srgb(0.3, 0.3, 0.5);
     pub const BUTTON_TARGETING_HOVER: Color = Color::srgb(0.4, 0.4, 0.65);
 
+    pub const BUTTON_AFFORD: Color = Color::srgb(0.25, 0.65, 0.4);
+    pub const BUTTON_AFFORD_HOVER: Color = Color::srgb(0.2, 0.5, 0.3);
+    pub const BUTTON_UNAFFORD: Color = Color::srgb(0.35, 0.35, 0.4);
+    pub const BUTTON_UNAFFORD_HOVER: Color = Color::srgb(0.25, 0.25, 0.3);
+    pub const BUTTON_DESTRUCTIVE: Color = Color::srgb(0.7, 0.2, 0.2);
+    pub const BUTTON_DESTRUCTIVE_HOVER: Color = Color::srgb(0.85, 0.3, 0.3);
+    pub const BUTTON_CANCEL: Color = Color::srgb(0.3, 0.3, 0.35);
+    pub const BUTTON_CANCEL_HOVER: Color = Color::srgb(0.4, 0.4, 0.45);
+
     pub const UI_OVERLAY: Color = Color::srgba(0.04, 0.04, 0.06, 0.85);
     pub const GAME_OVER_OVERLAY: Color = Color::srgba(0.02, 0.02, 0.03, 0.9);
     pub const PANEL_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.6);
     pub const ROW_BG: Color = Color::srgba(0.1, 0.1, 0.15, 0.8);
+
+    pub const OVERLAY_DIM: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);
+    pub const OVERLAY_DARK: Color = Color::srgba(0.0, 0.0, 0.0, 0.7);
+    pub const OVERLAY_TOOLTIP: Color = Color::srgba(0.0, 0.0, 0.0, 0.85);
+    pub const SETTINGS_PANEL_BG: Color = Color::srgba(0.06, 0.06, 0.1, 0.95);
+
     // ==========================================================================
     // EFFECT COLORS
     // ==========================================================================

@@ -92,7 +92,7 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                background_color: Color::srgba(0.0, 0.0, 0.0, 0.7).into(),
+                background_color: GameColors::OVERLAY_DARK.into(),
                 ..default()
             },
             PauseMenu,

@@ -434,16 +434,16 @@ pub(super) fn tower_context_buttons(
             Interaction::Hovered => {
                 ui_clicked.0 = true;
                 if can_afford {
-                    *color = Color::srgb(0.25, 0.65, 0.4).into();
+                    *color = GameColors::BUTTON_AFFORD.into();
                 } else {
-                    *color = Color::srgb(0.35, 0.35, 0.4).into();
+                    *color = GameColors::BUTTON_UNAFFORD.into();
                 }
             }
             Interaction::None => {
                 if can_afford {
-                    *color = Color::srgb(0.2, 0.5, 0.3).into();
+                    *color = GameColors::BUTTON_AFFORD_HOVER.into();
                 } else {
-                    *color = Color::srgb(0.25, 0.25, 0.3).into();
+                    *color = GameColors::BUTTON_UNAFFORD_HOVER.into();
                 }
             }
         }

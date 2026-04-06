@@ -55,7 +55,7 @@ struct ResetConfirmYes;
 #[derive(Component)]
 struct ResetConfirmNo;
 
-const PANEL_BG: Color = Color::srgba(0.06, 0.06, 0.1, 0.95);
+const PANEL_BG: Color = GameColors::SETTINGS_PANEL_BG;
 const TOGGLE_ON: Color = Color::srgb(0.0, 0.75, 0.85);
 const TOGGLE_OFF: Color = Color::srgb(0.35, 0.35, 0.4);
 
@@ -92,7 +92,7 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                 align_items: AlignItems::Center,
                 ..default()
             },
-            background_color: Color::srgba(0.0, 0.0, 0.0, 0.5).into(),
+            background_color: GameColors::OVERLAY_DIM.into(),
             z_index: ZIndex::Global(20),
             ..default()
         },
@@ -472,7 +472,7 @@ fn reset_highscores_button(
                                     align_items: AlignItems::Center,
                                     ..default()
                                 },
-                                background_color: Color::srgb(0.7, 0.2, 0.2).into(),
+                                background_color: GameColors::BUTTON_DESTRUCTIVE.into(),
                                 border_radius: BorderRadius::all(Val::Px(4.0)),
                                 ..default()
                             },
@@ -494,7 +494,7 @@ fn reset_highscores_button(
                                     align_items: AlignItems::Center,
                                     ..default()
                                 },
-                                background_color: Color::srgb(0.3, 0.3, 0.35).into(),
+                                background_color: GameColors::BUTTON_CANCEL.into(),
                                 border_radius: BorderRadius::all(Val::Px(4.0)),
                                 ..default()
                             },
@@ -522,7 +522,7 @@ fn reset_confirm_buttons(
     let mut dismiss = false;
 
     for (interaction, mut color) in &mut yes_query {
-        if button_interaction(interaction, &mut color, Color::srgb(0.7, 0.2, 0.2), Color::srgb(0.85, 0.3, 0.3)) {
+        if button_interaction(interaction, &mut color, GameColors::BUTTON_DESTRUCTIVE, GameColors::BUTTON_DESTRUCTIVE_HOVER) {
             high_scores.scores.clear();
             save_highscores(&high_scores);
             dismiss = true;
@@ -530,7 +530,7 @@ fn reset_confirm_buttons(
     }
 
     for (interaction, mut color) in &mut no_query {
-        if button_interaction(interaction, &mut color, Color::srgb(0.3, 0.3, 0.35), Color::srgb(0.4, 0.4, 0.45)) {
+        if button_interaction(interaction, &mut color, GameColors::BUTTON_CANCEL, GameColors::BUTTON_CANCEL_HOVER) {
             dismiss = true;
         }
     }
