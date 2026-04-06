@@ -138,8 +138,8 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                             .spawn((
                                 ButtonBundle {
                                     style: Style {
-                                        width: Val::Px(38.0),
-                                        height: Val::Px(38.0),
+                                        width: Val::Px(44.0),
+                                        height: Val::Px(44.0),
                                         justify_content: JustifyContent::Center,
                                         align_items: AlignItems::Center,
                                         border: UiRect::all(Val::Px(1.5)),
@@ -215,8 +215,8 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                     parent.spawn((
                         ButtonBundle {
                             style: Style {
-                                width: Val::Px(38.0),
-                                height: Val::Px(38.0),
+                                width: Val::Px(44.0),
+                                height: Val::Px(44.0),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 margin: UiRect::left(Val::Px(8.0)),
@@ -242,8 +242,8 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                     parent.spawn((
                         ButtonBundle {
                             style: Style {
-                                width: Val::Px(38.0),
-                                height: Val::Px(38.0),
+                                width: Val::Px(44.0),
+                                height: Val::Px(44.0),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 margin: UiRect::left(Val::Px(4.0)),

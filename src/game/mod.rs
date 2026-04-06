@@ -26,6 +26,16 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(catch, js_namespace = window)]
     fn copyToClipboard(text: &str) -> Result<bool, JsValue>;
+
+    #[wasm_bindgen(js_namespace = window)]
+    fn announceToScreenReader(message: &str);
+}
+
+/// Announce a message to screen readers via aria-live region.
+#[allow(unused_variables)]
+pub(crate) fn announce(message: &str) {
+    #[cfg(target_arch = "wasm32")]
+    announceToScreenReader(message);
 }
 
 /// Simple pseudo-random based on position (deterministic)
@@ -178,6 +188,11 @@ fn setup_game_over(
         save_warning.trigger();
     }
 
+    announce(&format!(
+        "Game over. Reached wave {}, score {}, {} enemies defeated.",
+        wave + 1, score, game_stats.total_enemies_killed
+    ));
+
     // Track game over event with stats
     let wave_reached = wave.to_string();
     let score_str = score.to_string();
@@ -193,7 +208,7 @@ fn setup_game_over(
 
     // Build stats summary text
     let summary = format!(
-        "Waves: {}   Score: {}\nKills: {}   Escaped: {}   Max Combo: {}\nGold Earned: {}   Gold Spent: {}",
+        "Waves: {}   Score: {}\nKills: {}   Escaped: {}   Best Streak: {}x\nGold Earned: {}g   Gold Spent: {}g",
         game_stats.waves_survived,
         game_stats.total_score,
         game_stats.total_enemies_killed,
@@ -487,7 +502,7 @@ fn setup_game_over(
                 ))
                 .with_children(|parent| {
                     parent.spawn(TextBundle::from_section(
-                        "MENU",
+                        "MAIN MENU",
                         TextStyle {
                             font: assets.font.clone(),
                             font_size: 28.0,
@@ -515,7 +530,7 @@ fn setup_game_over(
                 .with_children(|parent| {
                     parent.spawn((
                         TextBundle::from_section(
-                            "COPY RUN",
+                            "SHARE",
                             TextStyle {
                                 font: assets.font.clone(),
                                 font_size: 18.0,
@@ -648,7 +663,7 @@ fn share_button_system(
         if timer.finished() {
             feedback.timer = None;
             for mut text in &mut text_query {
-                text.sections[0].value = "COPY RUN".into();
+                text.sections[0].value = "SHARE".into();
                 text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.8);
             }
         }
@@ -879,7 +894,7 @@ fn update_save_warning_toast(
                 },
             )).with_children(|parent| {
                 parent.spawn(TextBundle::from_section(
-                    "Save failed \u{2014} scores may not persist",
+                    "Scores not saved \u{2014} browser storage full or disabled",
                     TextStyle {
                         font: assets.font.clone(),
                         font_size: 14.0,

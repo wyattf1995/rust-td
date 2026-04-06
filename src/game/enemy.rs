@@ -1242,6 +1242,7 @@ fn handle_enemy_escaped(
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
         wave_manager.perfect_wave = false;
         stats.record_escape();
+        super::announce(&format!("Enemy escaped! {} lives remaining", economy.lives));
 
         // Despawn enemy
         if let Some(entity_commands) = commands.get_entity(event.enemy) {
@@ -1283,6 +1284,12 @@ fn check_wave_complete(
         stats.record_wave_complete(bonus, interest);
 
         let completed_wave = wave_manager.current_wave;
+
+        // Announce wave completion with income breakdown
+        let mut income_msg = format!("Wave {} complete.", completed_wave + 1);
+        if bonus > 0 { income_msg.push_str(&format!(" +{}g bonus.", bonus)); }
+        if interest > 0 { income_msg.push_str(&format!(" +{}g interest.", interest)); }
+        super::announce(&income_msg);
 
         wave_manager.wave_active = false;
         wave_manager.wave_ended_at = Some(time.elapsed_seconds_f64());

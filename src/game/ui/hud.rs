@@ -212,6 +212,7 @@ pub(super) fn speed_button_system(
     if let Some(speed) = new_speed {
         game_speed.0 = speed;
         time.set_relative_speed(speed);
+        super::super::announce(&format!("Game speed set to {}x", speed as u32));
     }
 
     // Second pass: update all button visuals based on current game speed

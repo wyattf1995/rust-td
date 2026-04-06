@@ -44,6 +44,7 @@ pub(super) fn start_wave_button(
         let early_bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
 
         wave_manager.start_wave();
+        super::super::announce(&format!("Wave {} started", wave_manager.current_wave + 1));
 
         // Award early-send bonus
         if early_bonus > 0 {
@@ -194,17 +195,17 @@ pub(super) fn update_wave_preview(
     }
 }
 
-/// Display fuzzy counts: ~5, ~10, ~15, ~25, 30+
+/// Display fuzzy counts: 5+, 10+, 15+, 25+, 30+
 fn fuzzy_count(count: usize) -> &'static str {
     match count {
         0 => "0",
         1 => "1",
         2 => "2",
         3 => "3",
-        4..=7 => "~5",
-        8..=12 => "~10",
-        13..=18 => "~15",
-        19..=27 => "~25",
+        4..=7 => "5+",
+        8..=12 => "10+",
+        13..=18 => "15+",
+        19..=27 => "25+",
         _ => "30+",
     }
 }
@@ -219,7 +220,7 @@ pub(super) fn update_start_button_text(
 
     for mut text in &mut text_query {
         let new_value = if active {
-            "WAVE...".to_string()
+            "IN PROGRESS".to_string()
         } else {
             let bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
             if bonus > 0 { format!("START +{}g", bonus) } else { "START".into() }

@@ -286,9 +286,15 @@ pub(super) fn update_tower_context_menu(
                     }
                 }
                 for mut text in &mut sell_text {
-                    if sell_pending.tower == Some(tower_entity) && sell_pending.timer.is_some() {
-                        text.sections[0].value = "Confirm [S]?".into();
-                        text.sections[0].style.color = GameColors::WARNING_TEXT;
+                    if sell_pending.tower == Some(tower_entity) {
+                        if let Some(ref timer) = sell_pending.timer {
+                            let remaining = timer.duration().as_secs_f32() - timer.elapsed_secs();
+                            text.sections[0].value = format!("Sell +{}g? [S] ({:.1}s)", tower.sell_value(), remaining.max(0.0));
+                            text.sections[0].style.color = GameColors::WARNING_TEXT;
+                        } else {
+                            text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
+                            text.sections[0].style.color = Color::WHITE;
+                        }
                     } else {
                         text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
                         text.sections[0].style.color = Color::WHITE;
@@ -310,10 +316,12 @@ pub(super) fn update_tower_context_menu(
                             }
                             text.sections[0].value = result;
                         } else {
-                            text.sections[0].value = String::new();
+                            text.sections[0].value = "No synergies \u{2014} place matching towers adjacent".to_string();
+                            text.sections[0].style.color = GameColors::TEXT_MEDIUM;
                         }
                     } else {
-                        text.sections[0].value = String::new();
+                        text.sections[0].value = "No synergies \u{2014} place matching towers adjacent".to_string();
+                        text.sections[0].style.color = GameColors::TEXT_MEDIUM;
                     }
                 }
             } else {

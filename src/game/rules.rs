@@ -29,6 +29,7 @@ use super::tower::{SynergyType, TowerType};
 /// Upgrade cost for a tower at its current level.
 /// Level 2: 50% of base, Level 3: 75%, Level 4: 112%, Level 5: 168%...
 pub fn upgrade_cost(base_cost: u32, level: u32) -> u32 {
+    if level == 0 { return 0; }
     (base_cost as f32 * 0.5 * 1.5_f32.powf((level - 1) as f32)) as u32
 }
 

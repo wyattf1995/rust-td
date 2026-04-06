@@ -500,7 +500,7 @@ pub struct SaveWarning {
 
 impl SaveWarning {
     pub fn trigger(&mut self) {
-        self.timer = Some(Timer::from_seconds(4.0, TimerMode::Once));
+        self.timer = Some(Timer::from_seconds(8.0, TimerMode::Once));
     }
 }
 

@@ -136,8 +136,8 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                 row.spawn((
                     ButtonBundle {
                         style: Style {
-                            width: Val::Px(30.0),
-                            height: Val::Px(30.0),
+                            width: Val::Px(40.0),
+                            height: Val::Px(40.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()
@@ -449,7 +449,7 @@ fn reset_highscores_button(
                     border_radius: BorderRadius::all(Val::Px(8.0)),
                     ..default()
                 }).with_children(|panel| {
-                    panel.spawn(TextBundle::from_section("Reset all high scores?", TextStyle {
+                    panel.spawn(TextBundle::from_section("Reset all high scores? This cannot be undone.", TextStyle {
                         font: assets.font.clone(),
                         font_size: 16.0,
                         color: Color::WHITE,
@@ -478,7 +478,7 @@ fn reset_highscores_button(
                             },
                             ResetConfirmYes,
                         )).with_children(|btn| {
-                            btn.spawn(TextBundle::from_section("YES", TextStyle {
+                            btn.spawn(TextBundle::from_section("Reset Scores", TextStyle {
                                 font: assets.font.clone(),
                                 font_size: 14.0,
                                 color: Color::WHITE,
@@ -500,7 +500,7 @@ fn reset_highscores_button(
                             },
                             ResetConfirmNo,
                         )).with_children(|btn| {
-                            btn.spawn(TextBundle::from_section("NO", TextStyle {
+                            btn.spawn(TextBundle::from_section("Keep Scores", TextStyle {
                                 font: assets.font.clone(),
                                 font_size: 14.0,
                                 color: Color::WHITE,

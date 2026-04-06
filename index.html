@@ -162,6 +162,15 @@
             #loading-screen { transition: none; }
         }
 
+        #bevy-canvas:focus { outline: 3px solid #00d5ff; outline-offset: 2px; }
+        .skip-link {
+            position: absolute; top: -40px; left: 0; z-index: 100;
+            background: #e94560; color: #fff; padding: 8px 16px;
+            font-family: sans-serif; text-decoration: none;
+        }
+        .skip-link:focus { top: 0; }
+        .sr-only { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
         .loader-text {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             font-size: 0.9rem;
@@ -206,7 +215,13 @@
     <link data-trunk rel="copy-file" href="sitemap.xml"/>
 </head>
 <body>
-    <canvas id="bevy-canvas" role="application" aria-label="Neon Command - Tower Defense Game">Your browser does not support this game.</canvas>
+    <a href="#bevy-canvas" class="skip-link">Skip to game</a>
+    <canvas id="bevy-canvas" role="application" aria-label="Neon Command - Tower Defense Game" aria-describedby="game-controls" tabindex="0">Your browser does not support this game.</canvas>
+    <div id="game-controls" class="sr-only">Controls: Keys 1-8 select towers, click to place. Space starts wave. Q freeze, W gold rush, E artillery. U upgrade, S sell, T targeting, Z undo. Escape to pause.</div>
+    <div id="game-announcements" aria-live="polite" aria-atomic="true" role="status" class="sr-only"></div>
+    <section class="sr-only" aria-label="Accessibility Notice">
+        <p>Neon Command is a visual tower defense game rendered to a canvas element. Screen readers cannot access the game interface. Keyboard shortcuts are available for most actions, but tower placement requires a pointer device.</p>
+    </section>
     <div id="loading-screen">
         <div class="tower-icon"></div>
         <h1 class="loader-title">Neon Command</h1>
@@ -225,6 +240,12 @@
     </noscript>
     <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z"/>
     <script>
+        // Screen reader announcements bridge (called from Rust via wasm_bindgen)
+        window.announceToScreenReader = function(message) {
+            var el = document.getElementById('game-announcements');
+            if (el) el.textContent = message;
+        };
+
         // Hide loading screen once Bevy takes over
         window.hideLoadingScreen = function() {
             const loader = document.getElementById('loading-screen');

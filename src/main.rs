@@ -23,7 +23,6 @@ pub enum GameState {
     Playing,
     Paused,
     GameOver,
-    Victory,
 }
 
 /// Game speed multiplier

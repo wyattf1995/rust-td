@@ -34,10 +34,13 @@ fn read_challenge_params(mut params: ResMut<ChallengeParams>) {
                 // Parse ?c=mapname,wave,score
                 if let Some(c_param) = location.strip_prefix("?c=") {
                     let parts: Vec<&str> = c_param.split(',').collect();
-                    if parts.len() >= 2 {
-                        params.map_name = Some(parts[0].to_string());
-                        params.wave = parts.get(1).and_then(|s| s.parse().ok());
-                        params.score = parts.get(2).and_then(|s| s.parse().ok());
+                    if !parts.is_empty() {
+                        let map_name = parts[0].trim();
+                        if !map_name.is_empty() {
+                            params.map_name = Some(map_name.to_string());
+                            params.wave = parts.get(1).and_then(|s| s.parse().ok());
+                            params.score = parts.get(2).and_then(|s| s.parse().ok());
+                        }
                     }
                 }
             }
@@ -87,7 +90,7 @@ fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut ass
         .with_children(|parent| {
             // Title
             parent.spawn(TextBundle::from_section(
-                "TOWER DEFENSE",
+                "TACTICAL TOWER DEFENSE",
                 TextStyle {
                     font_size: 48.0,
                     color: GameColors::BRAND,

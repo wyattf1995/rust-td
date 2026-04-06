@@ -121,8 +121,8 @@ impl TargetingPriority {
         match self {
             TargetingPriority::First => "First",
             TargetingPriority::Closest => "Closest",
-            TargetingPriority::LowestHP => "Low HP",
-            TargetingPriority::HighestHP => "High HP",
+            TargetingPriority::LowestHP => "Lowest HP",
+            TargetingPriority::HighestHP => "Highest HP",
             TargetingPriority::Fastest => "Fastest",
         }
     }
