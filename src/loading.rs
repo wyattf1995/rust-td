@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::GameState;
+use crate::graphics::shapes::GameColors;
 
 pub struct LoadingPlugin;
 
@@ -56,7 +57,7 @@ fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut ass
                 "TOWER DEFENSE",
                 TextStyle {
                     font_size: 48.0,
-                    color: Color::srgb(0.91, 0.27, 0.38),
+                    color: GameColors::BRAND,
                     ..default()
                 },
             ).with_style(Style {
@@ -72,7 +73,7 @@ fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut ass
                         height: Val::Px(8.0),
                         ..default()
                     },
-                    background_color: Color::srgba(1.0, 1.0, 1.0, 0.1).into(),
+                    background_color: GameColors::BUTTON_GHOST.into(),
                     ..default()
                 })
                 .with_children(|parent| {
@@ -84,7 +85,7 @@ fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut ass
                                 height: Val::Percent(100.0),
                                 ..default()
                             },
-                            background_color: Color::srgb(0.91, 0.27, 0.38).into(),
+                            background_color: GameColors::BRAND.into(),
                             ..default()
                         },
                         LoadingBar,

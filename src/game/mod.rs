@@ -33,6 +33,11 @@ pub(crate) fn rand_simple(seed: f32) -> f32 {
     ((seed * 12.9898).sin() * 43_758.547).fract()
 }
 
+/// Quadratic ease-out: fast start, slow finish. Use for fade-outs and decelerations.
+pub(crate) fn ease_out(t: f32) -> f32 {
+    1.0 - (1.0 - t) * (1.0 - t)
+}
+
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
@@ -565,7 +570,7 @@ fn share_button_system(
             }
             Interaction::Hovered => {
                 if feedback.timer.is_none() {
-                    *color = Color::srgba(1.0, 1.0, 1.0, 0.2).into();
+                    *color = GameColors::BUTTON_GHOST_HOVER.into();
                 }
             }
             Interaction::None => {
@@ -593,7 +598,7 @@ fn build_suggestion(current_map: &str, wave: usize, high_scores: &HighScores) ->
     for &map_name in &all_maps {
         if map_name != current_map {
             if let Some(entry) = high_scores.get(map_name) {
-                if weakest.is_none() || entry.wave < weakest.unwrap().1 {
+                if weakest.map_or(true, |w| entry.wave < w.1) {
                     weakest = Some((map_name, entry.wave));
                 }
             }

@@ -4,6 +4,7 @@ use rand::Rng;
 use crate::{
     analytics::{Analytics, track_with_context},
     game::map::{GameMap, MapPreset, SelectedMap, GRID_WIDTH, GRID_HEIGHT},
+    graphics::shapes::GameColors,
     loading::GameAssets,
     persistence::{HighScores, LifetimeStats, SettingsOpen},
     GameState, ScreenInfo,
@@ -54,7 +55,7 @@ struct TitleText;
 #[derive(Component)]
 struct MenuSettingsButton;
 
-const BUTTON_NORMAL: Color = Color::srgb(0.91, 0.27, 0.38);
+const MENU_ACCENT: Color = GameColors::BRAND;
 const BUTTON_HOVER: Color = Color::srgb(1.0, 0.37, 0.48);
 const BUTTON_PRESSED: Color = Color::srgb(0.71, 0.17, 0.28);
 
@@ -106,7 +107,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                     TextStyle {
                         font: assets.font.clone(),
                         font_size: 82.0,
-                        color: Color::srgb(0.91, 0.27, 0.38),
+                        color: GameColors::BRAND,
                     },
                 )
                 .with_style(Style {
@@ -144,7 +145,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                             border: UiRect::all(Val::Px(2.0)),
                             ..default()
                         },
-                        background_color: BUTTON_NORMAL.into(),
+                        background_color: MENU_ACCENT.into(),
                         border_color: Color::srgba(1.0, 1.0, 1.0, 0.3).into(),
                         ..default()
                     },
@@ -254,7 +255,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                                 preset.description(),
                                 TextStyle {
                                     font: assets.font.clone(),
-                                    font_size: 9.0,
+                                    font_size: 10.0,
                                     color: Color::srgba(1.0, 1.0, 1.0, 0.4),
                                 },
                             ));
@@ -265,7 +266,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                                     format!("Best: Wave {}", entry.wave),
                                     TextStyle {
                                         font: assets.font.clone(),
-                                        font_size: 9.0,
+                                        font_size: 10.0,
                                         color: Color::srgba(1.0, 0.85, 0.2, 0.5),
                                     },
                                 ));
@@ -318,7 +319,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                             margin: UiRect::top(Val::Px(20.0)),
                             ..default()
                         },
-                        background_color: Color::srgba(1.0, 1.0, 1.0, 0.1).into(),
+                        background_color: GameColors::BUTTON_GHOST.into(),
                         border_radius: BorderRadius::all(Val::Px(4.0)),
                         ..default()
                     },
@@ -429,11 +430,18 @@ fn animate_projectiles(
     }
 }
 
-fn animate_title_glow(mut query: Query<&mut Text, With<TitleText>>, time: Res<Time>) {
+fn animate_title_glow(
+    mut query: Query<&mut Text, With<TitleText>>,
+    time: Res<Time>,
+    settings: Res<crate::persistence::GameSettings>,
+) {
     for mut text in &mut query {
-        // Pulsing glow effect
-        let t = time.elapsed_seconds();
-        let pulse = (t * 2.0).sin() * 0.15 + 0.85;
+        let pulse = if settings.reduce_motion {
+            1.0
+        } else {
+            let t = time.elapsed_seconds();
+            (t * 2.0).sin() * 0.15 + 0.85
+        };
 
         if let Some(section) = text.sections.first_mut() {
             section.style.color = Color::srgb(0.91 * pulse, 0.27 * pulse, 0.38 * pulse);
@@ -458,7 +466,7 @@ fn button_system(
                 *border = Color::srgba(1.0, 1.0, 1.0, 0.6).into();
             }
             Interaction::None => {
-                *color = BUTTON_NORMAL.into();
+                *color = MENU_ACCENT.into();
                 *border = Color::srgba(1.0, 1.0, 1.0, 0.3).into();
             }
         }
@@ -560,10 +568,10 @@ fn menu_settings_button(
                 settings_open.0 = true;
             }
             Interaction::Hovered => {
-                *color = Color::srgba(1.0, 1.0, 1.0, 0.2).into();
+                *color = GameColors::BUTTON_GHOST_HOVER.into();
             }
             Interaction::None => {
-                *color = Color::srgba(1.0, 1.0, 1.0, 0.1).into();
+                *color = GameColors::BUTTON_GHOST.into();
             }
         }
     }

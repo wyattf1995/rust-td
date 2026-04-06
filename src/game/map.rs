@@ -1098,6 +1098,7 @@ fn update_path_flow_dots(
     map: Res<GameMap>,
     mut dots: Query<(&mut PathFlowDot, &mut Transform, &mut Sprite)>,
     time: Res<Time>,
+    settings: Res<crate::persistence::GameSettings>,
 ) {
     if map.path.len() < 2 {
         return;
@@ -1127,8 +1128,12 @@ fn update_path_flow_dots(
         transform.translation.x = world_pos.x;
         transform.translation.y = world_pos.y;
 
-        // Pulse alpha
-        let alpha = 0.2 + 0.15 * (time.elapsed_seconds() * 3.0 + dot.progress * std::f32::consts::TAU).sin();
+        // Pulse alpha (static when reduce_motion is on)
+        let alpha = if settings.reduce_motion {
+            0.25
+        } else {
+            0.2 + 0.15 * (time.elapsed_seconds() * 3.0 + dot.progress * std::f32::consts::TAU).sin()
+        };
         sprite.color = GameColors::PATH_INDICATOR.with_alpha(alpha);
     }
 }
@@ -1174,24 +1179,29 @@ fn spawn_point_marker(
 fn update_spawn_exit_markers(
     mut markers: Query<(&SpawnExitMarker, &mut Transform, &mut Sprite)>,
     time: Res<Time>,
+    settings: Res<crate::persistence::GameSettings>,
 ) {
     for (marker, mut transform, mut sprite) in &mut markers {
-        let t = time.elapsed_seconds();
+        if settings.reduce_motion {
+            transform.scale = Vec3::splat(1.0);
+        } else {
+            let t = time.elapsed_seconds();
 
-        // Gentle scale pulse
-        let scale_pulse = 1.0 + 0.15 * (t * 2.5).sin();
-        transform.scale = Vec3::splat(scale_pulse);
+            // Gentle scale pulse
+            let scale_pulse = 1.0 + 0.15 * (t * 2.5).sin();
+            transform.scale = Vec3::splat(scale_pulse);
 
-        // Pulse glow alpha for outer markers (lower z = glow)
-        if transform.translation.z < 1.0 {
-            let base_alpha = if marker.is_spawn { 0.4 } else { 0.25 };
-            let alpha = base_alpha * (0.6 + 0.4 * (t * 2.0).sin());
-            let base_color = if marker.is_spawn {
-                GameColors::SECONDARY
-            } else {
-                GameColors::ACCENT
-            };
-            sprite.color = base_color.with_alpha(alpha);
+            // Pulse glow alpha for outer markers (lower z = glow)
+            if transform.translation.z < 1.0 {
+                let base_alpha = if marker.is_spawn { 0.4 } else { 0.25 };
+                let alpha = base_alpha * (0.6 + 0.4 * (t * 2.0).sin());
+                let base_color = if marker.is_spawn {
+                    GameColors::SECONDARY
+                } else {
+                    GameColors::ACCENT
+                };
+                sprite.color = base_color.with_alpha(alpha);
+            }
         }
     }
 }

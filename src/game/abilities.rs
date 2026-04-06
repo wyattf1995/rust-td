@@ -4,6 +4,7 @@ use crate::GameState;
 use crate::graphics::shapes::{GameColors, ZDepth};
 
 use super::{
+    ease_out,
     enemy::{Enemy, WaveManager},
     ui::UiZones,
     GameEntity,
@@ -291,7 +292,7 @@ fn update_freeze_effects(
     // Update freeze visual effects
     for (entity, mut effect, mut sprite) in &mut effects {
         effect.lifetime.tick(time.delta());
-        let alpha = (1.0 - effect.lifetime.fraction()) * 0.4;
+        let alpha = (1.0 - ease_out(effect.lifetime.fraction())) * 0.4;
         sprite.color = GameColors::ABILITY_FREEZE.with_alpha(alpha);
 
         if effect.lifetime.finished() {
@@ -339,7 +340,7 @@ fn update_artillery_target(
     // Update artillery strike visual effects
     for (entity, mut strike, mut sprite, mut transform) in &mut artillery_effects {
         strike.lifetime.tick(time.delta());
-        let progress = strike.lifetime.fraction();
+        let progress = ease_out(strike.lifetime.fraction());
 
         // Expand and fade
         let scale = 1.0 + progress * 0.3;

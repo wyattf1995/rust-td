@@ -6,6 +6,7 @@ use crate::persistence::{
     save_settings, save_highscores,
 };
 use crate::graphics::shapes::GameColors;
+use crate::game::ui::button_interaction;
 
 pub struct SettingsPlugin;
 
@@ -33,6 +34,7 @@ enum SettingField {
     ParticleDensity,
     DamageNumbers,
     RangeOnHover,
+    ReduceMotion,
 }
 
 #[derive(Component)]
@@ -54,7 +56,6 @@ struct ResetConfirmYes;
 struct ResetConfirmNo;
 
 const PANEL_BG: Color = Color::srgba(0.06, 0.06, 0.1, 0.95);
-const ROW_BG: Color = Color::srgba(0.1, 0.1, 0.15, 0.8);
 const TOGGLE_ON: Color = Color::srgb(0.0, 0.75, 0.85);
 const TOGGLE_OFF: Color = Color::srgb(0.35, 0.35, 0.4);
 
@@ -141,7 +142,7 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                             align_items: AlignItems::Center,
                             ..default()
                         },
-                        background_color: Color::srgba(1.0, 1.0, 1.0, 0.1).into(),
+                        background_color: GameColors::BUTTON_GHOST.into(),
                         border_radius: BorderRadius::all(Val::Px(4.0)),
                         ..default()
                     },
@@ -164,6 +165,8 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                 if settings.show_damage_numbers { "ON" } else { "OFF" });
             spawn_toggle_row(panel, assets, "Range on Hover", SettingField::RangeOnHover,
                 if settings.show_range_on_hover { "ON" } else { "OFF" });
+            spawn_toggle_row(panel, assets, "Reduce Motion", SettingField::ReduceMotion,
+                if settings.reduce_motion { "ON" } else { "OFF" });
 
             // Reset high scores button
             panel.spawn((
@@ -202,7 +205,7 @@ fn spawn_toggle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str,
             padding: UiRect::horizontal(Val::Px(8.0)),
             ..default()
         },
-        background_color: ROW_BG.into(),
+        background_color: GameColors::ROW_BG.into(),
         border_radius: BorderRadius::all(Val::Px(4.0)),
         ..default()
     }).with_children(|row| {
@@ -249,7 +252,7 @@ fn spawn_cycle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str, 
             padding: UiRect::horizontal(Val::Px(8.0)),
             ..default()
         },
-        background_color: ROW_BG.into(),
+        background_color: GameColors::ROW_BG.into(),
         border_radius: BorderRadius::all(Val::Px(4.0)),
         ..default()
     }).with_children(|row| {
@@ -312,6 +315,9 @@ fn settings_button_system(
                     SettingField::RangeOnHover => {
                         settings.show_range_on_hover = !settings.show_range_on_hover;
                     }
+                    SettingField::ReduceMotion => {
+                        settings.reduce_motion = !settings.reduce_motion;
+                    }
                 }
             }
             Interaction::Hovered => {
@@ -321,6 +327,7 @@ fn settings_button_system(
                     SettingField::ParticleDensity => true,
                     SettingField::DamageNumbers => settings.show_damage_numbers,
                     SettingField::RangeOnHover => settings.show_range_on_hover,
+                    SettingField::ReduceMotion => settings.reduce_motion,
                 };
                 let base = if is_on { TOGGLE_ON } else { TOGGLE_OFF };
                 let srgba = base.to_srgba();
@@ -337,6 +344,7 @@ fn settings_button_system(
                     SettingField::ParticleDensity => true,
                     SettingField::DamageNumbers => settings.show_damage_numbers,
                     SettingField::RangeOnHover => settings.show_range_on_hover,
+                    SettingField::ReduceMotion => settings.reduce_motion,
                 };
                 *color = if is_on { TOGGLE_ON } else { TOGGLE_OFF }.into();
             }
@@ -365,6 +373,10 @@ fn settings_button_system(
                     if settings.show_range_on_hover { "ON" } else { "OFF" },
                     settings.show_range_on_hover,
                 ),
+                SettingField::ReduceMotion => (
+                    if settings.reduce_motion { "ON" } else { "OFF" },
+                    settings.reduce_motion,
+                ),
             };
             text.sections[0].value = label.to_string();
         }
@@ -376,6 +388,7 @@ fn settings_button_system(
                 SettingField::ParticleDensity => true,
                 SettingField::DamageNumbers => settings.show_damage_numbers,
                 SettingField::RangeOnHover => settings.show_range_on_hover,
+                SettingField::ReduceMotion => settings.reduce_motion,
             };
             *color = if is_on { TOGGLE_ON } else { TOGGLE_OFF }.into();
         }
@@ -383,11 +396,11 @@ fn settings_button_system(
 }
 
 fn settings_close_button(
-    query: Query<&Interaction, (Changed<Interaction>, With<SettingsCloseButton>)>,
+    mut query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<SettingsCloseButton>)>,
     mut settings_open: ResMut<SettingsOpen>,
 ) {
-    for interaction in &query {
-        if *interaction == Interaction::Pressed {
+    for (interaction, mut color) in &mut query {
+        if button_interaction(interaction, &mut color, GameColors::BUTTON_GHOST, GameColors::BUTTON_GHOST_HOVER) {
             settings_open.0 = false;
         }
     }
@@ -395,12 +408,14 @@ fn settings_close_button(
 
 fn reset_highscores_button(
     mut commands: Commands,
-    query: Query<&Interaction, (Changed<Interaction>, With<ResetHighScoresButton>)>,
+    mut query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ResetHighScoresButton>)>,
     existing_confirm: Query<Entity, With<ResetConfirmPanel>>,
     assets: Res<GameAssets>,
 ) {
-    for interaction in &query {
-        if *interaction == Interaction::Pressed {
+    for (interaction, mut color) in &mut query {
+        if !button_interaction(interaction, &mut color, GameColors::BUTTON_SELL, GameColors::BUTTON_SELL_HOVER) {
+            continue;
+        }
             // Don't double-spawn
             if !existing_confirm.is_empty() { return; }
 
@@ -415,7 +430,7 @@ fn reset_highscores_button(
                         align_items: AlignItems::Center,
                         ..default()
                     },
-                    background_color: Color::srgba(0.0, 0.0, 0.0, 0.6).into(),
+                    background_color: GameColors::PANEL_BG.into(),
                     z_index: ZIndex::Global(30),
                     ..default()
                 },
@@ -494,29 +509,28 @@ fn reset_highscores_button(
                     });
                 });
             });
-        }
     }
 }
 
 fn reset_confirm_buttons(
     mut commands: Commands,
-    yes_query: Query<&Interaction, (Changed<Interaction>, With<ResetConfirmYes>)>,
-    no_query: Query<&Interaction, (Changed<Interaction>, With<ResetConfirmNo>)>,
+    mut yes_query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ResetConfirmYes>)>,
+    mut no_query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ResetConfirmNo>, Without<ResetConfirmYes>)>,
     confirm_panel: Query<Entity, With<ResetConfirmPanel>>,
     mut high_scores: ResMut<HighScores>,
 ) {
     let mut dismiss = false;
 
-    for interaction in &yes_query {
-        if *interaction == Interaction::Pressed {
+    for (interaction, mut color) in &mut yes_query {
+        if button_interaction(interaction, &mut color, Color::srgb(0.7, 0.2, 0.2), Color::srgb(0.85, 0.3, 0.3)) {
             high_scores.scores.clear();
             save_highscores(&high_scores);
             dismiss = true;
         }
     }
 
-    for interaction in &no_query {
-        if *interaction == Interaction::Pressed {
+    for (interaction, mut color) in &mut no_query {
+        if button_interaction(interaction, &mut color, Color::srgb(0.3, 0.3, 0.35), Color::srgb(0.4, 0.4, 0.45)) {
             dismiss = true;
         }
     }

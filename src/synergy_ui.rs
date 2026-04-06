@@ -27,8 +27,6 @@ struct SynergyOverlay;
 struct SynergyCloseButton;
 
 const PANEL_BG: Color = Color::srgba(0.06, 0.06, 0.1, 0.95);
-const ROW_BG: Color = Color::srgba(0.1, 0.1, 0.15, 0.8);
-
 fn toggle_synergy_panel(
     mut commands: Commands,
     synergy_open: Res<SynergyPanelOpen>,
@@ -110,7 +108,7 @@ fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
                             align_items: AlignItems::Center,
                             ..default()
                         },
-                        background_color: Color::srgba(1.0, 1.0, 1.0, 0.1).into(),
+                        background_color: GameColors::BUTTON_GHOST.into(),
                         border_radius: BorderRadius::all(Val::Px(4.0)),
                         ..default()
                     },
@@ -164,7 +162,7 @@ fn spawn_synergy_row(
             row_gap: Val::Px(4.0),
             ..default()
         },
-        background_color: ROW_BG.into(),
+        background_color: GameColors::ROW_BG.into(),
         border_radius: BorderRadius::all(Val::Px(4.0)),
         ..default()
     }).with_children(|row| {
@@ -174,7 +172,7 @@ fn spawn_synergy_row(
             TextStyle {
                 font: assets.font.clone(),
                 font_size: 14.0,
-                color: Color::srgb(0.9, 0.7, 1.0),
+                color: GameColors::SYNERGY,
             },
         ));
         // Bottom line: tower requirement with colored indicators
@@ -247,10 +245,10 @@ fn synergy_close_button(
                 synergy_open.0 = false;
             }
             Interaction::Hovered => {
-                *color = Color::srgba(1.0, 1.0, 1.0, 0.2).into();
+                *color = GameColors::BUTTON_GHOST_HOVER.into();
             }
             Interaction::None => {
-                *color = Color::srgba(1.0, 1.0, 1.0, 0.1).into();
+                *color = GameColors::BUTTON_GHOST.into();
             }
         }
     }

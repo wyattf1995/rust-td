@@ -127,9 +127,16 @@ impl GameColors {
     pub const BUTTON_START_PRESSED: Color = Color::srgb(0.1, 0.3, 0.18);
     pub const BUTTON_SELL: Color = Color::srgb(0.5, 0.2, 0.2);
     pub const BUTTON_SELL_HOVER: Color = Color::srgb(0.65, 0.3, 0.3);
+    pub const BUTTON_GHOST: Color = Color::srgba(1.0, 1.0, 1.0, 0.1);
+    pub const BUTTON_GHOST_HOVER: Color = Color::srgba(1.0, 1.0, 1.0, 0.2);
+    pub const BUTTON_ACTIVE: Color = Color::srgb(0.15, 0.35, 0.45);
+    pub const BUTTON_TARGETING: Color = Color::srgb(0.3, 0.3, 0.5);
+    pub const BUTTON_TARGETING_HOVER: Color = Color::srgb(0.4, 0.4, 0.65);
 
     pub const UI_OVERLAY: Color = Color::srgba(0.04, 0.04, 0.06, 0.85);
     pub const GAME_OVER_OVERLAY: Color = Color::srgba(0.02, 0.02, 0.03, 0.9);
+    pub const PANEL_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.6);
+    pub const ROW_BG: Color = Color::srgba(0.1, 0.1, 0.15, 0.8);
     // ==========================================================================
     // EFFECT COLORS
     // ==========================================================================
@@ -142,12 +149,27 @@ impl GameColors {
     pub const ABILITY_GOLD_RUSH: Color = Color::srgb(1.0, 0.9, 0.3);
     pub const ABILITY_NUKE: Color = Color::srgb(1.0, 0.45, 0.25);
 
+    // Semantic accent colors
+    pub const BRAND: Color = Color::srgb(0.91, 0.27, 0.38);
+    pub const SYNERGY: Color = Color::srgb(0.9, 0.7, 1.0);
+    pub const WARNING_TEXT: Color = Color::srgb(1.0, 0.4, 0.4);
+
+    // Text alpha variants (white at common opacity levels)
+    pub const TEXT_MEDIUM: Color = Color::srgba(1.0, 1.0, 1.0, 0.65);
+    pub const TEXT_SECONDARY: Color = Color::srgba(1.0, 1.0, 1.0, 0.75);
+    pub const TEXT_BRIGHT: Color = Color::srgba(1.0, 1.0, 1.0, 0.85);
 }
 
 /// Shape sizes - refined for visual polish
 pub struct ShapeSizes;
 
 impl ShapeSizes {
+    // ==========================================================================
+    // TEXT — minimum for readability on canvas without subpixel rendering
+    // ==========================================================================
+    #[allow(dead_code)]
+    pub const MIN_FONT_SIZE: f32 = 10.0;
+
     // ==========================================================================
     // GRID
     // ==========================================================================

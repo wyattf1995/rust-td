@@ -5,6 +5,7 @@ use crate::graphics::shapes::{GameColors, ZDepth};
 use crate::persistence::GameSettings;
 
 use super::{
+    ease_out,
     enemy::Enemy,
     rand_simple,
     tower::{Tower, TowerCore},
@@ -84,10 +85,10 @@ fn update_hit_sparks(
         // Move with deceleration
         transform.translation.x += spark.velocity.x * time.delta_seconds();
         transform.translation.y += spark.velocity.y * time.delta_seconds();
-        spark.velocity *= 0.85;
+        spark.velocity *= 0.85_f32.powf(time.delta_seconds() * 60.0);
 
         // Fade out
-        let alpha = (1.0 - spark.lifetime.fraction()) * 0.9;
+        let alpha = (1.0 - ease_out(spark.lifetime.fraction())) * 0.9;
         sprite.color = Color::srgba(1.0, 0.95, 0.8, alpha);
 
         if spark.lifetime.finished() {
@@ -136,7 +137,7 @@ fn update_speed_streaks(
     // Update and despawn streaks
     for (entity, mut streak, mut sprite) in &mut streaks {
         streak.lifetime.tick(time.delta());
-        let alpha = (1.0 - streak.lifetime.fraction()) * 0.3;
+        let alpha = (1.0 - ease_out(streak.lifetime.fraction())) * 0.3;
         sprite.color = sprite.color.with_alpha(alpha);
 
         if streak.lifetime.finished() {
@@ -154,6 +155,7 @@ fn update_armor_shimmer(
     if settings.particle_density == crate::persistence::ParticleDensity::Low {
         return;
     }
+    if settings.reduce_motion { return; }
 
     let elapsed = time.elapsed_seconds();
 
@@ -182,6 +184,7 @@ fn update_tower_idle_glow(
     if settings.particle_density == crate::persistence::ParticleDensity::Low {
         return;
     }
+    if settings.reduce_motion { return; }
 
     let elapsed = time.elapsed_seconds();
 
@@ -213,6 +216,7 @@ fn update_path_energy_pulse(
     if settings.particle_density == crate::persistence::ParticleDensity::Low {
         return;
     }
+    if settings.reduce_motion { return; }
 
     let elapsed = time.elapsed_seconds();
 

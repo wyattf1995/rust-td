@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used)]
+
 use bevy::prelude::*;
 #[cfg(debug_assertions)]
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};

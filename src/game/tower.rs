@@ -8,6 +8,7 @@ use crate::persistence::GameSettings;
 use crate::loading::GameAssets;
 
 use super::{
+    ease_out,
     economy::PlayerEconomy,
     enemy::Enemy,
     map::GameMap,
@@ -22,6 +23,10 @@ use super::{
 #[derive(Resource, Default)]
 pub struct SynergyDirty(pub bool);
 
+/// Dirty flag for buff aura recalculation (set on tower place/sell/upgrade)
+#[derive(Resource, Default)]
+pub struct BuffDirty(pub bool);
+
 pub struct TowerPlugin;
 
 impl Plugin for TowerPlugin {
@@ -30,6 +35,7 @@ impl Plugin for TowerPlugin {
             .init_resource::<HoveredTower>()
             .init_resource::<SelectedPlacedTower>()
             .init_resource::<SynergyDirty>()
+            .init_resource::<BuffDirty>()
             .add_event::<PlaceTowerEvent>()
             .add_event::<SellTowerEvent>()
             .add_event::<UpgradeTowerEvent>()
@@ -695,6 +701,7 @@ fn handle_tower_placement(
     mut map: ResMut<GameMap>,
     mut economy: ResMut<PlayerEconomy>,
     mut synergy_dirty: ResMut<SynergyDirty>,
+    mut buff_dirty: ResMut<BuffDirty>,
     mut stats: ResMut<GameStats>,
     assets: Res<GameAssets>,
 ) {
@@ -709,6 +716,7 @@ fn handle_tower_placement(
         // Deduct cost
         economy.gold -= cost;
         synergy_dirty.0 = true;
+        buff_dirty.0 = true;
 
         // Mark tile as occupied
         map.place_tower(event.grid_x, event.grid_y);
@@ -719,7 +727,7 @@ fn handle_tower_placement(
         let accent_color = event.tower_type.color();
         let range = tower.range;
 
-        // Layer 1: Base (dark gunmetal foundation)
+        // Spawn base entity with tower component
         let tower_entity = commands
             .spawn((
                 SpriteBundle {
@@ -738,159 +746,160 @@ fn handle_tower_placement(
             .id();
 
         stats.register_tower(tower_entity, event.tower_type, cost);
+        spawn_tower_visuals(&mut commands, tower_entity, pos, accent_color, range, event.tower_type, &assets);
+    }
+}
 
-        // Layer 2: Accent core (colored center showing tower type)
+/// Spawn all visual child entities for a tower (core, barrel, badge, shadow, brackets, etc.)
+fn spawn_tower_visuals(
+    commands: &mut Commands,
+    tower_entity: Entity,
+    pos: Vec2,
+    accent_color: Color,
+    range: f32,
+    tower_type: TowerType,
+    assets: &GameAssets,
+) {
+    // Accent core (colored center showing tower type)
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: accent_color,
+                custom_size: Some(Vec2::splat(ShapeSizes::TOWER_CORE)),
+                ..default()
+            },
+            transform: Transform::from_translation(pos.extend(ZDepth::TOWER_CORE)),
+            ..default()
+        },
+        TowerCore { tower: tower_entity },
+        GameEntity,
+    ));
+
+    // Range indicator (initially hidden)
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::NONE,
+                custom_size: Some(Vec2::splat(range * 2.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(pos.extend(ZDepth::RANGE_INDICATOR)),
+            ..default()
+        },
+        RangeIndicator { tower: tower_entity },
+        GameEntity,
+    ));
+
+    // Barrel/turret (dark, on top)
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: GameColors::TOWER_BARREL,
+                custom_size: Some(Vec2::new(ShapeSizes::TOWER_BARREL_WIDTH, ShapeSizes::TOWER_BARREL_HEIGHT)),
+                ..default()
+            },
+            transform: Transform::from_translation(pos.extend(ZDepth::TOWER_BARREL)),
+            ..default()
+        },
+        TowerBarrel { tower: tower_entity },
+        GameEntity,
+    ));
+
+    // Level badge with background (bottom-right corner)
+    let badge_offset = Vec2::new(14.0, -14.0);
+
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::srgba(0.0, 0.0, 0.0, 0.85),
+                custom_size: Some(Vec2::splat(16.0)),
+                ..default()
+            },
+            transform: Transform::from_translation((pos + badge_offset).extend(ZDepth::BADGE_BG)),
+            ..default()
+        },
+        TowerLevelBadge { tower: tower_entity },
+        GameEntity,
+    ));
+
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section(
+                "1",
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: 12.0,
+                    color: Color::WHITE,
+                },
+            ).with_justify(JustifyText::Center),
+            transform: Transform::from_translation(
+                (pos + badge_offset).extend(ZDepth::BADGE_TEXT)
+            ),
+            ..default()
+        },
+        TowerLevelBadge { tower: tower_entity },
+        GameEntity,
+    ));
+
+    // Buff aura indicator (buff towers only)
+    if tower_type == TowerType::Buff {
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
-                    color: accent_color,
-                    custom_size: Some(Vec2::splat(ShapeSizes::TOWER_CORE)),
+                    color: Color::srgba(1.0, 0.85, 0.3, 0.15),
+                    custom_size: Some(Vec2::splat(ShapeSizes::BUFF_AURA_RANGE * 2.0)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(ZDepth::TOWER_CORE)),
+                transform: Transform::from_translation(pos.extend(ZDepth::BUFF_AURA)),
                 ..default()
             },
-            TowerCore { tower: tower_entity },
+            BuffAuraIndicator { tower: tower_entity },
             GameEntity,
         ));
+    }
 
-        // Spawn range indicator (initially hidden)
+    // Shadow (slightly offset for directional light feel)
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::srgba(0.02, 0.02, 0.04, 0.35),
+                custom_size: Some(Vec2::splat(42.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(
+                Vec3::new(pos.x + 1.5, pos.y - 1.5, ZDepth::TOWER_SHADOW)
+            ),
+            ..default()
+        },
+        TowerShadow { tower: tower_entity },
+        GameEntity,
+    ));
+
+    // Corner brackets (4 corners x 2 bars each)
+    let bracket_color = accent_color.with_alpha(0.25);
+    let bracket_positions: [(f32, f32, f32, f32); 8] = [
+        (-15.0, 20.0, 8.0, 1.5),  (-20.0, 15.0, 1.5, 8.0),   // Top-left
+        (15.0, 20.0, 8.0, 1.5),   (20.0, 15.0, 1.5, 8.0),    // Top-right
+        (-15.0, -20.0, 8.0, 1.5), (-20.0, -15.0, 1.5, 8.0),  // Bottom-left
+        (15.0, -20.0, 8.0, 1.5),  (20.0, -15.0, 1.5, 8.0),   // Bottom-right
+    ];
+
+    for (ox, oy, w, h) in bracket_positions {
         commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
-                    color: Color::NONE,
-                    custom_size: Some(Vec2::splat(range * 2.0)),
+                    color: bracket_color,
+                    custom_size: Some(Vec2::new(w, h)),
                     ..default()
                 },
-                transform: Transform::from_translation(pos.extend(ZDepth::RANGE_INDICATOR)),
-                ..default()
-            },
-            RangeIndicator { tower: tower_entity },
-            GameEntity,
-        ));
-
-        // Layer 3: Barrel/turret (dark, on top)
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: GameColors::TOWER_BARREL,
-                    custom_size: Some(Vec2::new(ShapeSizes::TOWER_BARREL_WIDTH, ShapeSizes::TOWER_BARREL_HEIGHT)),
-                    ..default()
-                },
-                transform: Transform::from_translation(pos.extend(ZDepth::TOWER_BARREL)),
-                ..default()
-            },
-            TowerBarrel { tower: tower_entity },
-            GameEntity,
-        ));
-
-        // Spawn level badge with background (bottom-right corner of tower)
-        let badge_offset = Vec2::new(14.0, -14.0);
-
-        // Badge background (dark circle for contrast)
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::srgba(0.0, 0.0, 0.0, 0.85),
-                    custom_size: Some(Vec2::splat(16.0)),
-                    ..default()
-                },
-                transform: Transform::from_translation((pos + badge_offset).extend(ZDepth::BADGE_BG)),
-                ..default()
-            },
-            TowerLevelBadge { tower: tower_entity },
-            GameEntity,
-        ));
-
-        // Badge text
-        commands.spawn((
-            Text2dBundle {
-                text: Text::from_section(
-                    "1",
-                    TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 12.0,
-                        color: Color::WHITE,
-                    },
-                ).with_justify(JustifyText::Center),
                 transform: Transform::from_translation(
-                    (pos + badge_offset).extend(ZDepth::BADGE_TEXT)
+                    Vec3::new(pos.x + ox, pos.y + oy, ZDepth::TOWER_BRACKET)
                 ),
                 ..default()
             },
-            TowerLevelBadge { tower: tower_entity },
+            TowerBracket { tower: tower_entity },
             GameEntity,
         ));
-
-        // Spawn buff aura indicator for buff towers
-        if event.tower_type == TowerType::Buff {
-            commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::srgba(1.0, 0.85, 0.3, 0.15),
-                        custom_size: Some(Vec2::splat(ShapeSizes::BUFF_AURA_RANGE * 2.0)),
-                        ..default()
-                    },
-                    transform: Transform::from_translation(pos.extend(ZDepth::BUFF_AURA)),
-                    ..default()
-                },
-                BuffAuraIndicator { tower: tower_entity },
-                GameEntity,
-            ));
-        }
-
-        // Tower shadow (slightly offset for directional light feel)
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::srgba(0.02, 0.02, 0.04, 0.35),
-                    custom_size: Some(Vec2::splat(42.0)),
-                    ..default()
-                },
-                transform: Transform::from_translation(
-                    Vec3::new(pos.x + 1.5, pos.y - 1.5, ZDepth::TOWER_SHADOW)
-                ),
-                ..default()
-            },
-            TowerShadow { tower: tower_entity },
-            GameEntity,
-        ));
-
-        // Corner brackets (4 corners × 2 bars each = 8 sprites)
-        let bracket_color = accent_color.with_alpha(0.25);
-        let bracket_positions: [(f32, f32, f32, f32); 8] = [
-            // (x_offset, y_offset, width, height)
-            // Top-left
-            (-15.0, 20.0, 8.0, 1.5),   // horizontal
-            (-20.0, 15.0, 1.5, 8.0),   // vertical
-            // Top-right
-            (15.0, 20.0, 8.0, 1.5),
-            (20.0, 15.0, 1.5, 8.0),
-            // Bottom-left
-            (-15.0, -20.0, 8.0, 1.5),
-            (-20.0, -15.0, 1.5, 8.0),
-            // Bottom-right
-            (15.0, -20.0, 8.0, 1.5),
-            (20.0, -15.0, 1.5, 8.0),
-        ];
-
-        for (ox, oy, w, h) in bracket_positions {
-            commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: bracket_color,
-                        custom_size: Some(Vec2::new(w, h)),
-                        ..default()
-                    },
-                    transform: Transform::from_translation(
-                        Vec3::new(pos.x + ox, pos.y + oy, ZDepth::TOWER_BRACKET)
-                    ),
-                    ..default()
-                },
-                TowerBracket { tower: tower_entity },
-                GameEntity,
-            ));
-        }
     }
 }
 
@@ -1132,6 +1141,7 @@ fn handle_tower_selling(
     mut economy: ResMut<PlayerEconomy>,
     mut map: ResMut<GameMap>,
     mut synergy_dirty: ResMut<SynergyDirty>,
+    mut buff_dirty: ResMut<BuffDirty>,
     mut stats: ResMut<GameStats>,
     towers: Query<&Tower>,
     range_indicators: Query<(Entity, &RangeIndicator)>,
@@ -1147,8 +1157,9 @@ fn handle_tower_selling(
         if let Ok(tower) = towers.get(event.tower) {
             // Refund gold
             let sell_value = tower.sell_value();
-            economy.gold += sell_value;
+            economy.gold = economy.gold.saturating_add(sell_value);
             synergy_dirty.0 = true;
+            buff_dirty.0 = true;
             stats.record_sell(event.tower, sell_value);
 
             // Clear map tile
@@ -1316,6 +1327,7 @@ fn handle_tower_upgrade(
     mut commands: Commands,
     mut events: EventReader<UpgradeTowerEvent>,
     mut economy: ResMut<PlayerEconomy>,
+    mut buff_dirty: ResMut<BuffDirty>,
     mut stats: ResMut<GameStats>,
     mut towers: Query<(&mut Tower, &Transform, &mut Sprite)>,
     mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
@@ -1330,6 +1342,7 @@ fn handle_tower_upgrade(
             if cost > 0 && economy.gold >= cost {
                 economy.gold -= cost;
                 tower.upgrade();
+                buff_dirty.0 = true;
                 stats.record_upgrade(event.tower, cost, tower.level);
 
                 let tower_pos = tower_transform.translation.truncate();
@@ -1347,6 +1360,7 @@ fn handle_tower_specialization(
     mut commands: Commands,
     mut events: EventReader<SpecializeTowerEvent>,
     mut economy: ResMut<PlayerEconomy>,
+    mut buff_dirty: ResMut<BuffDirty>,
     mut stats: ResMut<GameStats>,
     mut towers: Query<(&mut Tower, &Transform, &mut Sprite)>,
     mut tower_cores: Query<(&TowerCore, &mut Sprite), Without<Tower>>,
@@ -1361,6 +1375,7 @@ fn handle_tower_specialization(
             if economy.gold >= cost {
                 economy.gold -= cost;
                 tower.specialize(event.specialization);
+                buff_dirty.0 = true;
                 stats.record_upgrade(event.tower, cost, tower.level);
 
                 let tower_pos = tower_transform.translation.truncate();
@@ -1383,7 +1398,7 @@ fn update_muzzle_flashes(
         flash.lifetime.tick(time.delta());
 
         // Fade out
-        let alpha = 1.0 - flash.lifetime.fraction();
+        let alpha = 1.0 - ease_out(flash.lifetime.fraction());
         sprite.color = GameColors::MUZZLE_FLASH.with_alpha(alpha);
 
         if flash.lifetime.finished() {
@@ -1400,7 +1415,7 @@ fn update_upgrade_flashes(
     for (entity, mut flash, mut sprite) in &mut flashes {
         flash.lifetime.tick(time.delta());
 
-        let frac = flash.lifetime.fraction();
+        let frac = ease_out(flash.lifetime.fraction());
         // Interpolate size from start to end
         let size = flash.start_size + (flash.end_size - flash.start_size) * frac;
         sprite.custom_size = Some(Vec2::splat(size));
@@ -1463,9 +1478,15 @@ fn update_level_badges(
 /// Update buff status for all towers based on nearby buff towers
 fn update_buff_auras(
     mut commands: Commands,
+    mut buff_dirty: ResMut<BuffDirty>,
     buff_towers: Query<(&Tower, &Transform)>,
     mut other_towers: Query<(Entity, &Tower, &Transform, Option<&TowerSynergies>, Option<&mut BuffedStatus>)>,
 ) {
+    if !buff_dirty.0 {
+        return;
+    }
+    buff_dirty.0 = false;
+
     // Collect buff tower positions, ranges, and pre-computed buff percentages
     let buff_sources: Vec<(Vec2, f32, f32)> = buff_towers
         .iter()

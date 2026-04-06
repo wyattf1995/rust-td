@@ -11,6 +11,7 @@ use crate::persistence::GameSettings;
 
 use super::{
     abilities::PlayerAbilities,
+    ease_out,
     economy::{PlayerEconomy, KillStreak},
     map::GameMap,
     rand_simple,
@@ -869,6 +870,109 @@ fn update_health_bars(
     }
 }
 
+/// Spawn floating "+Xg" gold text at the enemy's death position.
+fn spawn_gold_toast(
+    commands: &mut Commands,
+    assets: &GameAssets,
+    pos: Vec2,
+    reward: u32,
+    is_boosted: bool,
+) {
+    let offset_x = (rand_simple(pos.x) - 0.5) * 16.0;
+    let velocity = Vec2::new(offset_x, 35.0);
+    let toast_size = if is_boosted { 18.0 } else { 14.0 };
+    let toast_color = if is_boosted { GameColors::ABILITY_GOLD_RUSH } else { GameColors::GOLD_TEXT };
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section(
+                format!("+{}g", reward),
+                TextStyle {
+                    font: assets.font.clone(),
+                    font_size: toast_size,
+                    color: toast_color,
+                },
+            ),
+            transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 20.0, ZDepth::FLOATING_TEXT)),
+            ..default()
+        },
+        GoldNumber {
+            lifetime: Timer::from_seconds(0.7, TimerMode::Once),
+            velocity,
+        },
+        GameEntity,
+    ));
+}
+
+/// Spawn death particle burst: scatter particles around the death position,
+/// plus brighter core particles at medium/high particle density.
+fn spawn_death_particles(
+    commands: &mut Commands,
+    settings: &GameSettings,
+    death_pos: Vec2,
+    particle_color: Color,
+) {
+    let particle_count = settings.particle_density.death_particle_count();
+
+    // Regular scatter particles
+    for i in 0..particle_count {
+        let seed = death_pos.x + i as f32;
+        let angle = rand_simple(seed) * std::f32::consts::TAU;
+        let speed = 80.0 + rand_simple(seed + 100.0) * 40.0;
+        let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
+
+        commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: particle_color,
+                    custom_size: Some(Vec2::splat(ShapeSizes::DEATH_PARTICLE_SIZE)),
+                    ..default()
+                },
+                transform: Transform::from_translation(death_pos.extend(ZDepth::DEATH_EFFECT)),
+                ..default()
+            },
+            DeathEffect {
+                lifetime: Timer::from_seconds(0.4, TimerMode::Once),
+                velocity,
+            },
+            GameEntity,
+        ));
+    }
+
+    // Core particles: larger, brighter, slower (Medium/High density only)
+    if particle_count >= 8 {
+        let core_count = if particle_count >= 12 { 3 } else { 2 };
+        let srgba = particle_color.to_srgba();
+        let bright_color = Color::srgb(
+            (srgba.red * 1.4).min(1.0),
+            (srgba.green * 1.4).min(1.0),
+            (srgba.blue * 1.4).min(1.0),
+        );
+        for i in 0..core_count {
+            let seed = death_pos.y + i as f32 * 3.7;
+            let angle = rand_simple(seed) * std::f32::consts::TAU;
+            let speed = 40.0 + rand_simple(seed + 200.0) * 30.0;
+            let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
+
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: bright_color,
+                        custom_size: Some(Vec2::splat(9.0)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(death_pos.extend(ZDepth::DEATH_EFFECT + 0.05)),
+                    ..default()
+                },
+                DeathEffect {
+                    lifetime: Timer::from_seconds(0.5, TimerMode::Once),
+                    velocity,
+                },
+                GameEntity,
+            ));
+        }
+    }
+}
+
 /// Despawn health bars, health fills, and flying shadows associated with an enemy.
 fn despawn_enemy_visuals(
     commands: &mut Commands,
@@ -937,8 +1041,8 @@ fn handle_enemy_killed(
 
         // Apply combo multiplier and gold rush to gold reward
         let multiplied_reward = (event.reward as f32 * kill_streak.multiplier() * gold_rush_multiplier) as u32;
-        economy.gold += multiplied_reward;
-        economy.score += multiplied_reward;
+        economy.gold = economy.gold.saturating_add(multiplied_reward);
+        economy.score = economy.score.saturating_add(multiplied_reward);
         wave_manager.enemies_alive = wave_manager.enemies_alive.saturating_sub(1);
 
         // Track stats
@@ -949,33 +1053,13 @@ fn handle_enemy_killed(
         }
 
         // Spawn gold earned toast (bigger and brighter during Gold Rush)
-        {
-            let is_boosted = gold_rush_multiplier > 1.0;
-            let pos = event.position.truncate();
-            let offset_x = (rand_simple(pos.x) - 0.5) * 16.0;
-            let velocity = Vec2::new(offset_x, 35.0);
-            let toast_size = if is_boosted { 18.0 } else { 14.0 };
-            let toast_color = if is_boosted { GameColors::ABILITY_GOLD_RUSH } else { GameColors::GOLD_TEXT };
-            commands.spawn((
-                Text2dBundle {
-                    text: Text::from_section(
-                        format!("+{}g", multiplied_reward),
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: toast_size,
-                            color: toast_color,
-                        },
-                    ),
-                    transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 20.0, ZDepth::FLOATING_TEXT)),
-                    ..default()
-                },
-                GoldNumber {
-                    lifetime: Timer::from_seconds(0.7, TimerMode::Once),
-                    velocity,
-                },
-                GameEntity,
-            ));
-        }
+        spawn_gold_toast(
+            &mut commands,
+            &assets,
+            event.position.truncate(),
+            multiplied_reward,
+            gold_rush_multiplier > 1.0,
+        );
 
         // If this was a Splitter, spawn mini-splitters
         if event.enemy_type.is_splitter() {
@@ -986,69 +1070,13 @@ fn handle_enemy_killed(
             });
         }
 
-        // Spawn death particle burst (type-colored scatter)
-        let death_pos = event.position.truncate();
-        let particle_color = event.enemy_type.color();
-        let particle_count = settings.particle_density.death_particle_count();
-
-        // Regular scatter particles
-        for i in 0..particle_count {
-            let seed = death_pos.x + i as f32;
-            let angle = rand_simple(seed) * std::f32::consts::TAU;
-            let speed = 80.0 + rand_simple(seed + 100.0) * 40.0;
-            let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
-
-            commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: particle_color,
-                        custom_size: Some(Vec2::splat(ShapeSizes::DEATH_PARTICLE_SIZE)),
-                        ..default()
-                    },
-                    transform: Transform::from_translation(death_pos.extend(ZDepth::DEATH_EFFECT)),
-                    ..default()
-                },
-                DeathEffect {
-                    lifetime: Timer::from_seconds(0.4, TimerMode::Once),
-                    velocity,
-                },
-                GameEntity,
-            ));
-        }
-
-        // Core particles: larger, brighter, slower (Medium/High density only)
-        if particle_count >= 8 {
-            let core_count = if particle_count >= 12 { 3 } else { 2 };
-            let srgba = particle_color.to_srgba();
-            let bright_color = Color::srgb(
-                (srgba.red * 1.4).min(1.0),
-                (srgba.green * 1.4).min(1.0),
-                (srgba.blue * 1.4).min(1.0),
-            );
-            for i in 0..core_count {
-                let seed = death_pos.y + i as f32 * 3.7;
-                let angle = rand_simple(seed) * std::f32::consts::TAU;
-                let speed = 40.0 + rand_simple(seed + 200.0) * 30.0;
-                let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
-
-                commands.spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
-                            color: bright_color,
-                            custom_size: Some(Vec2::splat(9.0)),
-                            ..default()
-                        },
-                        transform: Transform::from_translation(death_pos.extend(ZDepth::DEATH_EFFECT + 0.05)),
-                        ..default()
-                    },
-                    DeathEffect {
-                        lifetime: Timer::from_seconds(0.5, TimerMode::Once),
-                        velocity,
-                    },
-                    GameEntity,
-                ));
-            }
-        }
+        // Spawn death particle burst (type-colored scatter + core)
+        spawn_death_particles(
+            &mut commands,
+            &settings,
+            event.position.truncate(),
+            event.enemy_type.color(),
+        );
 
         // Boss kills get extra screen shake
         if event.enemy_type == EnemyType::Boss {
@@ -1160,7 +1188,7 @@ fn update_death_effects(
     for (entity, mut effect, mut sprite, mut transform) in &mut effects {
         effect.lifetime.tick(time.delta());
 
-        let progress = effect.lifetime.fraction();
+        let progress = ease_out(effect.lifetime.fraction());
         let alpha = 1.0 - progress;
 
         // Move particle and decelerate
@@ -1222,12 +1250,12 @@ fn check_wave_complete(
     {
         // Award interest on current gold (before bonus)
         let interest = economy.calculate_interest();
-        economy.gold += interest;
+        economy.gold = economy.gold.saturating_add(interest);
 
         // Award wave completion bonus
         let bonus = wave_manager.wave_bonus();
-        economy.gold += bonus;
-        economy.score += bonus;
+        economy.gold = economy.gold.saturating_add(bonus);
+        economy.score = economy.score.saturating_add(bonus);
 
         // Store interest and bonus for UI display
         wave_manager.last_interest = interest;

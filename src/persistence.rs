@@ -62,6 +62,7 @@ pub struct GameSettings {
     pub particle_density: ParticleDensity,
     pub show_damage_numbers: bool,
     pub show_range_on_hover: bool,
+    pub reduce_motion: bool,
 }
 
 impl Default for GameSettings {
@@ -71,6 +72,7 @@ impl Default for GameSettings {
             particle_density: ParticleDensity::Medium,
             show_damage_numbers: true,
             show_range_on_hover: true,
+            reduce_motion: false,
         }
     }
 }
@@ -78,11 +80,12 @@ impl Default for GameSettings {
 impl GameSettings {
     fn to_json(&self) -> String {
         format!(
-            r#"{{"shake":{},"particles":"{}","damage_numbers":{},"range_hover":{}}}"#,
+            r#"{{"shake":{},"particles":"{}","damage_numbers":{},"range_hover":{},"reduce_motion":{}}}"#,
             self.screen_shake,
             self.particle_density.name(),
             self.show_damage_numbers,
-            self.show_range_on_hover
+            self.show_range_on_hover,
+            self.reduce_motion
         )
     }
 
@@ -100,6 +103,8 @@ impl GameSettings {
                 settings.show_damage_numbers = val.trim() == "true";
             } else if let Some(val) = part.strip_prefix("\"range_hover\":") {
                 settings.show_range_on_hover = val.trim() == "true";
+            } else if let Some(val) = part.strip_prefix("\"reduce_motion\":") {
+                settings.reduce_motion = val.trim() == "true";
             }
         }
         settings

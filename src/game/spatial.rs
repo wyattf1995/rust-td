@@ -37,7 +37,10 @@ impl SpatialGrid {
         )
     }
 
-    /// Get all entities within a given range of a position
+    /// Get all entities whose *cell* overlaps the query range.
+    ///
+    /// Returns candidates, not exact matches — callers must re-check
+    /// actual distance if precision matters (cells are `CELL_SIZE` wide).
     pub fn query_range(&self, center: Vec2, range: f32) -> Vec<Entity> {
         // Calculate cell range to check
         let cells_to_check = (range / CELL_SIZE).ceil() as i32 + 1;
