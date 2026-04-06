@@ -545,9 +545,16 @@ impl WaveManager {
     }
 }
 
-fn reset_wave_manager(mut wave_manager: ResMut<WaveManager>, active: Option<Res<super::GameActive>>) {
+fn reset_wave_manager(
+    mut wave_manager: ResMut<WaveManager>,
+    active: Option<Res<super::GameActive>>,
+    start_wave: Res<crate::menu::SelectedStartWave>,
+) {
     if active.is_some() { return; }
     *wave_manager = WaveManager::default();
+    if start_wave.0 > 1 {
+        wave_manager.current_wave = start_wave.0 - 1;
+    }
 }
 
 /// Events

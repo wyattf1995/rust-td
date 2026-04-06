@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use crate::game::enemy::WaveManager;
 use crate::game::tower::Tower;
 use crate::graphics::shapes::GameColors;
-use crate::persistence::{TipsShown, save_tips};
+use crate::persistence::{LifetimeStats, TipsShown, save_tips};
 use crate::GameState;
 
 pub struct TipsPlugin;
@@ -32,6 +32,8 @@ struct ActiveTip {
 
 #[derive(Clone, Copy, PartialEq)]
 enum TipKind {
+    Welcome,
+    Economy,
     Specialization,
     Synergy,
     EarlySend,
@@ -41,6 +43,8 @@ enum TipKind {
 impl TipKind {
     fn text(self) -> &'static str {
         match self {
+            TipKind::Welcome => "Survive as many waves as you can!\nPlace towers (1-8) to stop enemies from reaching the exit.\nSpend gold wisely — you earn interest on savings between waves.",
+            TipKind::Economy => "You earned interest on your saved gold!\nHold gold between waves for 10% interest (max 50g).\nSend waves early for a bonus — but don't fall behind!",
             TipKind::Specialization => "Towers branch into specializations at Level 3 — choose wisely!",
             TipKind::Synergy => "Place matching towers adjacent to each other for synergy bonuses. Press ? to see all synergies.",
             TipKind::EarlySend => "Send the next wave early for a gold bonus! Press Space between waves.",
@@ -57,10 +61,31 @@ fn check_tip_triggers(
     mut active: ResMut<ActiveTip>,
     towers: Query<&Tower>,
     wave_manager: Res<WaveManager>,
+    lifetime_stats: Res<LifetimeStats>,
 ) {
     // Don't trigger a new tip if one is already showing
     if active.current.is_some() {
         return;
+    }
+
+    // Tip: Welcome — first frame of first-ever game
+    if !tips_shown.welcome {
+        if lifetime_stats.total_games == 0 {
+            active.current = Some(TipKind::Welcome);
+            tips_shown.welcome = true;
+            save_tips(&tips_shown);
+            return;
+        }
+    }
+
+    // Tip: Economy — after wave 1 completes (between waves)
+    if !tips_shown.economy {
+        if wave_manager.current_wave >= 1 && !wave_manager.wave_active {
+            active.current = Some(TipKind::Economy);
+            tips_shown.economy = true;
+            save_tips(&tips_shown);
+            return;
+        }
     }
 
     // Tip: Specialization — when any tower reaches Level 2

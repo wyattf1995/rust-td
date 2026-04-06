@@ -29,6 +29,17 @@ impl MapPreset {
         }
     }
 
+    /// Parse a map preset from a lowercase name (used for challenge URL params).
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "random" => Some(MapPreset::Random),
+            "serpentine" => Some(MapPreset::Serpentine),
+            "sprint" => Some(MapPreset::Sprint),
+            "spiral" => Some(MapPreset::Spiral),
+            _ => None,
+        }
+    }
+
     pub fn description(&self) -> &'static str {
         match self {
             MapPreset::Random => "Procedural path",

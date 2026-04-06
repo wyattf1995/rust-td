@@ -3,15 +3,48 @@ use bevy::prelude::*;
 use crate::GameState;
 use crate::graphics::shapes::GameColors;
 
+/// Challenge parameters parsed from URL query string (?c=mapname,wave,score).
+/// Populated once at startup; empty if no challenge URL was provided.
+#[derive(Resource, Default)]
+pub struct ChallengeParams {
+    pub map_name: Option<String>,
+    pub wave: Option<usize>,
+    pub score: Option<u32>,
+}
+
 pub struct LoadingPlugin;
 
 impl Plugin for LoadingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GameAssets>()
+            .init_resource::<ChallengeParams>()
+            .add_systems(Startup, read_challenge_params)
             .add_systems(OnEnter(GameState::Loading), setup_loading)
             .add_systems(Update, check_loading.run_if(in_state(GameState::Loading)))
             .add_systems(OnExit(GameState::Loading), cleanup_loading);
     }
+}
+
+/// Read challenge parameters from the URL query string once at startup.
+fn read_challenge_params(mut params: ResMut<ChallengeParams>) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(window) = web_sys::window() {
+            if let Ok(location) = window.location().search() {
+                // Parse ?c=mapname,wave,score
+                if let Some(c_param) = location.strip_prefix("?c=") {
+                    let parts: Vec<&str> = c_param.split(',').collect();
+                    if parts.len() >= 2 {
+                        params.map_name = Some(parts[0].to_string());
+                        params.wave = parts.get(1).and_then(|s| s.parse().ok());
+                        params.score = parts.get(2).and_then(|s| s.parse().ok());
+                    }
+                }
+            }
+        }
+    }
+    // Suppress unused variable warning on non-WASM targets
+    let _ = &mut *params;
 }
 
 /// Holds all loaded game assets

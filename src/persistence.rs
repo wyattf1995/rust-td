@@ -412,6 +412,8 @@ pub struct TipsShown {
     pub synergy: bool,
     pub early_send: bool,
     pub targeting: bool,
+    pub welcome: bool,
+    pub economy: bool,
 }
 
 impl Default for TipsShown {
@@ -421,6 +423,8 @@ impl Default for TipsShown {
             synergy: false,
             early_send: false,
             targeting: false,
+            welcome: false,
+            economy: false,
         }
     }
 }
@@ -428,8 +432,9 @@ impl Default for TipsShown {
 impl TipsShown {
     fn to_json(&self) -> String {
         format!(
-            r#"{{"spec":{},"syn":{},"early":{},"targ":{}}}"#,
-            self.specialization, self.synergy, self.early_send, self.targeting
+            r#"{{"spec":{},"syn":{},"early":{},"targ":{},"welcome":{},"economy":{}}}"#,
+            self.specialization, self.synergy, self.early_send, self.targeting,
+            self.welcome, self.economy
         )
     }
 
@@ -446,6 +451,10 @@ impl TipsShown {
                 tips.early_send = val.trim() == "true";
             } else if let Some(val) = part.strip_prefix("\"targ\":") {
                 tips.targeting = val.trim() == "true";
+            } else if let Some(val) = part.strip_prefix("\"welcome\":") {
+                tips.welcome = val.trim() == "true";
+            } else if let Some(val) = part.strip_prefix("\"economy\":") {
+                tips.economy = val.trim() == "true";
             }
         }
         tips

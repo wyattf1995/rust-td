@@ -147,19 +147,26 @@ fn setup_game_over(
     mut game_stats: ResMut<stats::GameStats>,
     mut lifetime: ResMut<LifetimeStats>,
     mut save_warning: ResMut<SaveWarning>,
+    start_wave: Res<crate::menu::SelectedStartWave>,
 ) {
     let map_name = selected_map.0.name();
     let wave = wave_manager.current_wave;
     let score = economy.score;
+    let is_practice = start_wave.0 > 1;
 
     // Finalize stats
     game_stats.finalize(score, wave);
 
-    // Check and save high score
-    let is_new_best = high_scores.update_if_better(map_name, wave, score);
-    if is_new_best && !save_highscores(&high_scores) {
-        save_warning.trigger();
-    }
+    // Check and save high score (skip in practice mode)
+    let is_new_best = if is_practice {
+        false
+    } else {
+        let result = high_scores.update_if_better(map_name, wave, score);
+        if result && !save_highscores(&high_scores) {
+            save_warning.trigger();
+        }
+        result
+    };
 
     // Update and save lifetime stats
     lifetime.record_game(
@@ -226,10 +233,12 @@ fn setup_game_over(
         "No towers placed".to_string()
     };
 
-    // Build shareable text for clipboard
+    // Build shareable text for clipboard (includes challenge URL)
+    let map_lower = map_name.to_lowercase();
     let share_text = format!(
-        "Neon Command | {} | Wave {} | Score {} | {} kills | MVP: {}\ntd.wyatt-fleming.com",
-        map_name, wave, score, game_stats.total_enemies_killed, best_tower_text
+        "Neon Command | {} | Wave {} | Score {} | {} kills | MVP: {}\ntd.wyatt-fleming.com/?c={},{},{}",
+        map_name, wave, score, game_stats.total_enemies_killed, best_tower_text,
+        map_lower, wave, score
     );
     commands.insert_resource(ShareText(share_text));
 
@@ -250,8 +259,20 @@ fn setup_game_over(
             GameOverScreen,
         ))
         .with_children(|parent| {
-            // "NEW BEST!" text above game over (only if new record)
-            if is_new_best {
+            // Practice mode notice or "NEW BEST!" text above game over
+            if is_practice {
+                parent.spawn(TextBundle::from_section(
+                    format!("PRACTICE MODE (started wave {}) — scores not recorded", start_wave.0),
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 16.0,
+                        color: Color::srgba(1.0, 0.85, 0.2, 0.7),
+                    },
+                ).with_style(Style {
+                    margin: UiRect::bottom(Val::Px(10.0)),
+                    ..default()
+                }));
+            } else if is_new_best {
                 parent.spawn(TextBundle::from_section(
                     "NEW BEST!",
                     TextStyle {
@@ -519,6 +540,22 @@ fn setup_game_over(
                 ..default()
             }));
 
+            // Death diagnostic
+            {
+                let diagnostic = build_diagnostic(&game_stats, &economy, wave);
+                parent.spawn(TextBundle::from_section(
+                    diagnostic,
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 14.0,
+                        color: GameColors::WARNING_TEXT,
+                    },
+                ).with_style(Style {
+                    margin: UiRect::top(Val::Px(8.0)),
+                    ..default()
+                }));
+            }
+
             // Post-game suggestion
             {
                 let suggestion = build_suggestion(map_name, wave, &high_scores);
@@ -646,6 +683,53 @@ fn share_button_system(
             }
         }
     }
+}
+
+/// Build a "why you lost" diagnostic for the game over screen.
+fn build_diagnostic(
+    stats: &stats::GameStats,
+    economy: &economy::PlayerEconomy,
+    wave: usize,
+) -> String {
+    // 1. Massive leak
+    if stats.total_enemies_escaped >= 5 {
+        return format!(
+            "{} enemies leaked! Try Slow towers at path bends to reduce leaks.",
+            stats.total_enemies_escaped
+        );
+    }
+
+    // 2. Sitting on too much gold
+    if economy.gold > 200 {
+        return format!(
+            "You had {}g unspent at game over. Consider upgrading towers or placing more.",
+            economy.gold
+        );
+    }
+
+    // 3. Not enough towers
+    let tower_count = stats.tower_stats.len() as u32;
+    if tower_count <= 3 && wave >= 5 {
+        return format!(
+            "Only {} towers by wave {}. Try placing more towers earlier.",
+            tower_count, wave
+        );
+    }
+
+    // 4. Low tower levels
+    let max_level = stats.tower_stats.values()
+        .map(|t| t.max_level)
+        .max()
+        .unwrap_or(1);
+    if max_level <= 2 && wave >= 8 {
+        return format!(
+            "Highest tower was only Lv{}. Focus on upgrading key towers for more damage.",
+            max_level
+        );
+    }
+
+    // 5. Default
+    format!("Wave {} was tough. Try different tower specializations next time!", wave + 1)
 }
 
 /// Build a contextual post-game suggestion based on play history.

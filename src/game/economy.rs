@@ -41,9 +41,14 @@ impl PlayerEconomy {
     }
 }
 
-fn reset_economy(mut economy: ResMut<PlayerEconomy>, active: Option<Res<super::GameActive>>) {
+fn reset_economy(
+    mut economy: ResMut<PlayerEconomy>,
+    active: Option<Res<super::GameActive>>,
+    start_wave: Res<crate::menu::SelectedStartWave>,
+) {
     if active.is_some() { return; }
     *economy = PlayerEconomy::default();
+    economy.gold = start_wave.starting_gold();
 }
 
 /// Kill streak tracking for combo system

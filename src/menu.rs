@@ -5,23 +5,48 @@ use crate::{
     analytics::{Analytics, track_with_context},
     game::map::{GameMap, MapPreset, SelectedMap, GRID_WIDTH, GRID_HEIGHT},
     graphics::shapes::GameColors,
-    loading::GameAssets,
+    loading::{ChallengeParams, GameAssets},
     persistence::{HighScores, LifetimeStats, SettingsOpen},
     GameState, ScreenInfo,
 };
+
+/// Selected starting wave (1, 5, 10, or 15). Higher waves grant more starting gold.
+#[derive(Resource)]
+pub struct SelectedStartWave(pub usize);
+
+impl Default for SelectedStartWave {
+    fn default() -> Self {
+        Self(1)
+    }
+}
+
+impl SelectedStartWave {
+    /// Starting gold for each wave tier (hand-tuned: what a decent player would have).
+    pub fn starting_gold(&self) -> u32 {
+        match self.0 {
+            5 => 350,
+            10 => 700,
+            15 => 1200,
+            _ => 160,
+        }
+    }
+}
 
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Menu), setup_menu)
+        app.init_resource::<SelectedStartWave>()
+            .add_systems(OnEnter(GameState::Menu), setup_menu)
             .add_systems(
                 Update,
                 (
                     button_system,
                     map_button_hover,
+                    wave_button_hover,
                     button_interaction,
                     map_select_interaction,
+                    wave_start_interaction,
                     menu_settings_button,
                     animate_projectiles,
                     animate_title_glow,
@@ -55,6 +80,12 @@ struct TitleText;
 #[derive(Component)]
 struct MenuSettingsButton;
 
+#[derive(Component)]
+struct WaveStartButton(usize);
+
+#[derive(Component)]
+struct WaveStartInfoText;
+
 const MENU_ACCENT: Color = GameColors::BRAND;
 const BUTTON_HOVER: Color = Color::srgb(1.0, 0.37, 0.48);
 const BUTTON_PRESSED: Color = Color::srgb(0.71, 0.17, 0.28);
@@ -71,7 +102,13 @@ const NEON_COLORS: [(f32, f32, f32); 8] = [
     (1.0, 0.85, 0.4),   // Gold (Buff)
 ];
 
-fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res<SelectedMap>, high_scores: Res<HighScores>, lifetime: Res<LifetimeStats>) {
+fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map: ResMut<SelectedMap>, high_scores: Res<HighScores>, lifetime: Res<LifetimeStats>, challenge: Res<ChallengeParams>) {
+    // Auto-select challenged map if present
+    if let Some(ref map_name) = challenge.map_name {
+        if let Some(preset) = MapPreset::from_name(map_name) {
+            selected_map.0 = preset;
+        }
+    }
     // Spawn menu camera
     commands.spawn((Camera2dBundle::default(), MenuCamera, MenuScreen));
 
@@ -132,6 +169,37 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                     ..default()
                 }),
             );
+
+            // Challenge banner (only shown when opened via challenge URL)
+            if let Some(ref map_name) = challenge.map_name {
+                let wave = challenge.wave.unwrap_or(0);
+                let score_text = challenge
+                    .score
+                    .map(|s| format!(" (Score: {})", s))
+                    .unwrap_or_default();
+
+                let display_name = MapPreset::from_name(map_name)
+                    .map(|p| p.name().to_string())
+                    .unwrap_or_else(|| map_name.clone());
+
+                parent.spawn(
+                    TextBundle::from_section(
+                        format!(
+                            "Challenge: Beat Wave {} on {}{}!",
+                            wave, display_name, score_text
+                        ),
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 18.0,
+                            color: GameColors::GOLD,
+                        },
+                    )
+                    .with_style(Style {
+                        margin: UiRect::bottom(Val::Px(16.0)),
+                        ..default()
+                    }),
+                );
+            }
 
             // Play button
             parent
@@ -275,6 +343,91 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                     }
                 });
 
+            // Wave start selector row
+            {
+                let start_wave = 1usize; // default
+                parent
+                    .spawn(NodeBundle {
+                        style: Style {
+                            flex_direction: FlexDirection::Row,
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            column_gap: Val::Px(6.0),
+                            margin: UiRect::top(Val::Px(10.0)),
+                            ..default()
+                        },
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        // Label
+                        row.spawn(TextBundle::from_section(
+                            "START WAVE:",
+                            TextStyle {
+                                font: assets.font.clone(),
+                                font_size: 11.0,
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.5),
+                            },
+                        ));
+
+                        for wave in [1, 5, 10, 15] {
+                            let is_selected = wave == start_wave;
+                            let border_color = if is_selected {
+                                GameColors::PRIMARY
+                            } else {
+                                Color::srgba(1.0, 1.0, 1.0, 0.15)
+                            };
+
+                            row.spawn((
+                                ButtonBundle {
+                                    style: Style {
+                                        width: Val::Px(50.0),
+                                        height: Val::Px(30.0),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        border: UiRect::all(Val::Px(2.0)),
+                                        ..default()
+                                    },
+                                    background_color: GameColors::BUTTON_NORMAL.into(),
+                                    border_color: border_color.into(),
+                                    ..default()
+                                },
+                                WaveStartButton(wave),
+                            ))
+                            .with_children(|btn| {
+                                btn.spawn(TextBundle::from_section(
+                                    format!("{}", wave),
+                                    TextStyle {
+                                        font: assets.font.clone(),
+                                        font_size: 13.0,
+                                        color: if is_selected {
+                                            GameColors::PRIMARY
+                                        } else {
+                                            Color::WHITE
+                                        },
+                                    },
+                                ));
+                            });
+                        }
+                    });
+
+                // Wave start info text (hidden when wave == 1)
+                parent.spawn((
+                    TextBundle::from_section(
+                        "",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 11.0,
+                            color: Color::srgba(1.0, 0.85, 0.2, 0.6),
+                        },
+                    )
+                    .with_style(Style {
+                        margin: UiRect::top(Val::Px(4.0)),
+                        ..default()
+                    }),
+                    WaveStartInfoText,
+                ));
+            }
+
             // Features list
             parent.spawn(
                 TextBundle::from_section(
@@ -286,7 +439,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, selected_map: Res
                     },
                 )
                 .with_style(Style {
-                    margin: UiRect::top(Val::Px(40.0)),
+                    margin: UiRect::top(Val::Px(30.0)),
                     ..default()
                 }),
             );
@@ -494,11 +647,33 @@ fn map_button_hover(
     }
 }
 
+fn wave_button_hover(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<WaveStartButton>),
+    >,
+) {
+    for (interaction, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = Color::srgb(0.18, 0.2, 0.24).into();
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.2, 0.22, 0.26).into();
+            }
+            Interaction::None => {
+                *color = GameColors::BUTTON_NORMAL.into();
+            }
+        }
+    }
+}
+
 fn button_interaction(
     interaction_query: Query<&Interaction, (Changed<Interaction>, With<PlayButton>)>,
     mut next_state: ResMut<NextState<GameState>>,
     analytics: Res<Analytics>,
     selected_map: Res<SelectedMap>,
+    selected_wave: Res<SelectedStartWave>,
     screen_info: Res<ScreenInfo>,
 ) {
     for interaction in &interaction_query {
@@ -506,10 +681,12 @@ fn button_interaction(
             let map_name = selected_map.0.name();
             let mobile = if screen_info.is_mobile { "true" } else { "false" };
             let landscape = if screen_info.is_landscape { "true" } else { "false" };
+            let wave_str = selected_wave.0.to_string();
             track_with_context(&analytics, "game_started", &[
                 ("map", map_name),
                 ("mobile", mobile),
                 ("landscape", landscape),
+                ("start_wave", &wave_str),
             ]);
             next_state.set(GameState::Playing);
         }
@@ -552,6 +729,64 @@ fn map_select_interaction(
                             Color::WHITE
                         };
                     }
+                }
+            }
+        }
+    }
+}
+
+fn wave_start_interaction(
+    interaction_query: Query<(&Interaction, &WaveStartButton), Changed<Interaction>>,
+    mut selected_wave: ResMut<SelectedStartWave>,
+    mut all_buttons: Query<(&WaveStartButton, &mut BorderColor, &Children)>,
+    mut text_query: Query<&mut Text, Without<WaveStartInfoText>>,
+    mut info_query: Query<&mut Text, With<WaveStartInfoText>>,
+) {
+    let mut new_selection = None;
+
+    for (interaction, wave_btn) in &interaction_query {
+        if *interaction == Interaction::Pressed {
+            new_selection = Some(wave_btn.0);
+        }
+    }
+
+    if let Some(wave) = new_selection {
+        selected_wave.0 = wave;
+
+        // Update button visuals
+        for (btn, mut border, children) in &mut all_buttons {
+            let is_selected = btn.0 == wave;
+            *border = if is_selected {
+                GameColors::PRIMARY.into()
+            } else {
+                Color::srgba(1.0, 1.0, 1.0, 0.15).into()
+            };
+
+            // Update the text color (first child)
+            if let Some(&text_child) = children.first() {
+                if let Ok(mut text) = text_query.get_mut(text_child) {
+                    if let Some(section) = text.sections.first_mut() {
+                        section.style.color = if is_selected {
+                            GameColors::PRIMARY
+                        } else {
+                            Color::WHITE
+                        };
+                    }
+                }
+            }
+        }
+
+        // Update info text
+        for mut text in &mut info_query {
+            if let Some(section) = text.sections.first_mut() {
+                if wave > 1 {
+                    let gold = selected_wave.starting_gold();
+                    section.value = format!(
+                        "Starting at Wave {} with {}g — Practice Mode (scores not recorded)",
+                        wave, gold
+                    );
+                } else {
+                    section.value.clear();
                 }
             }
         }
