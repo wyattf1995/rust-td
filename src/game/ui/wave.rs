@@ -104,6 +104,27 @@ pub(super) fn start_wave_button(
                     ..default()
                 }));
             }
+            // Show previous wave's income breakdown (interest + bonus)
+            let interest = wave_manager.last_interest;
+            let bonus = wave_manager.last_bonus;
+            if interest > 0 || bonus > 0 {
+                let mut income_parts = Vec::new();
+                if bonus > 0 { income_parts.push(format!("+{}g bonus", bonus)); }
+                if interest > 0 { income_parts.push(format!("+{}g interest", interest)); }
+                let income_text = income_parts.join("  ");
+
+                parent.spawn(TextBundle::from_section(
+                    income_text,
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 14.0,
+                        color: GameColors::GOLD,
+                    },
+                ).with_style(Style {
+                    margin: UiRect::top(Val::Px(4.0)),
+                    ..default()
+                }));
+            }
             if !modifier_name.is_empty() {
                 parent.spawn(TextBundle::from_section(
                     modifier_name,

@@ -129,14 +129,18 @@ pub fn load_settings() -> GameSettings {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn save_settings(settings: &GameSettings) {
+pub fn save_settings(settings: &GameSettings) -> bool {
     let storage = web_sys::window()
         .and_then(|w| w.local_storage().ok())
         .flatten();
     if let Some(storage) = storage {
         if storage.set_item(SETTINGS_KEY, &settings.to_json()).is_err() {
             web_sys::console::warn_1(&"Failed to save settings (storage full or disabled)".into());
+            return false;
         }
+        true
+    } else {
+        false
     }
 }
 
@@ -146,7 +150,7 @@ pub fn load_settings() -> GameSettings {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn save_settings(_settings: &GameSettings) {}
+pub fn save_settings(_settings: &GameSettings) -> bool { true }
 
 #[derive(Clone, Debug)]
 pub struct HighScoreEntry {
@@ -271,7 +275,7 @@ pub fn load_highscores() -> HighScores {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn save_highscores(high_scores: &HighScores) {
+pub fn save_highscores(high_scores: &HighScores) -> bool {
     let storage = web_sys::window()
         .and_then(|w| w.local_storage().ok())
         .flatten();
@@ -279,7 +283,11 @@ pub fn save_highscores(high_scores: &HighScores) {
     if let Some(storage) = storage {
         if storage.set_item(STORAGE_KEY, &high_scores.to_json()).is_err() {
             web_sys::console::warn_1(&"Failed to save high scores (storage full or disabled)".into());
+            return false;
         }
+        true
+    } else {
+        false
     }
 }
 
@@ -289,8 +297,8 @@ pub fn load_highscores() -> HighScores {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn save_highscores(_high_scores: &HighScores) {
-    // No-op on native
+pub fn save_highscores(_high_scores: &HighScores) -> bool {
+    true
 }
 
 // ── Lifetime Stats ──
@@ -370,12 +378,18 @@ pub fn load_lifetime_stats() -> LifetimeStats {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn save_lifetime_stats(stats: &LifetimeStats) {
+pub fn save_lifetime_stats(stats: &LifetimeStats) -> bool {
     let storage = web_sys::window()
         .and_then(|w| w.local_storage().ok())
         .flatten();
     if let Some(storage) = storage {
-        let _ = storage.set_item(LIFETIME_KEY, &stats.to_json());
+        if storage.set_item(LIFETIME_KEY, &stats.to_json()).is_err() {
+            web_sys::console::warn_1(&"Failed to save lifetime stats (storage full or disabled)".into());
+            return false;
+        }
+        true
+    } else {
+        false
     }
 }
 
@@ -385,7 +399,7 @@ pub fn load_lifetime_stats() -> LifetimeStats {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn save_lifetime_stats(_stats: &LifetimeStats) {}
+pub fn save_lifetime_stats(_stats: &LifetimeStats) -> bool { true }
 
 // ── Tips Tracking ──
 
@@ -469,6 +483,18 @@ pub fn load_tips() -> TipsShown {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn save_tips(_tips: &TipsShown) {}
 
+/// Warning toast when localStorage save fails.
+#[derive(Resource, Default)]
+pub struct SaveWarning {
+    pub timer: Option<Timer>,
+}
+
+impl SaveWarning {
+    pub fn trigger(&mut self) {
+        self.timer = Some(Timer::from_seconds(4.0, TimerMode::Once));
+    }
+}
+
 fn init_persistence(mut commands: Commands) {
     commands.insert_resource(load_highscores());
     commands.insert_resource(load_settings());
@@ -485,6 +511,7 @@ impl Plugin for PersistencePlugin {
             .init_resource::<SettingsOpen>()
             .init_resource::<LifetimeStats>()
             .init_resource::<TipsShown>()
+            .init_resource::<SaveWarning>()
             .add_systems(Startup, init_persistence);
     }
 }

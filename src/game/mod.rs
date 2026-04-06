@@ -14,7 +14,7 @@ pub mod tower;
 pub mod ui;
 
 use crate::analytics::{Analytics, track_with_context};
-use crate::persistence::{GameSettings, HighScores, LifetimeStats, save_highscores, save_lifetime_stats};
+use crate::persistence::{GameSettings, HighScores, LifetimeStats, SaveWarning, save_highscores, save_lifetime_stats};
 use crate::GameState;
 use crate::graphics::shapes::GameColors;
 
@@ -70,7 +70,7 @@ impl Plugin for GamePlugin {
         .init_resource::<CopyFeedback>()
         .add_systems(
             Update,
-            (restart_button_system, restart_interaction, share_button_system)
+            (restart_button_system, restart_interaction, retry_button_system, retry_interaction, share_button_system, update_save_warning_toast)
                 .run_if(in_state(GameState::GameOver)),
         );
     }
@@ -122,6 +122,9 @@ struct GameOverScreen;
 #[derive(Component)]
 struct RestartButton;
 
+#[derive(Component)]
+struct RetryButton;
+
 fn setup_game(mut _commands: Commands) {
     // Camera is already spawned in loading state and persists
 }
@@ -143,6 +146,7 @@ fn setup_game_over(
     mut high_scores: ResMut<HighScores>,
     mut game_stats: ResMut<stats::GameStats>,
     mut lifetime: ResMut<LifetimeStats>,
+    mut save_warning: ResMut<SaveWarning>,
 ) {
     let map_name = selected_map.0.name();
     let wave = wave_manager.current_wave;
@@ -153,8 +157,8 @@ fn setup_game_over(
 
     // Check and save high score
     let is_new_best = high_scores.update_if_better(map_name, wave, score);
-    if is_new_best {
-        save_highscores(&high_scores);
+    if is_new_best && !save_highscores(&high_scores) {
+        save_warning.trigger();
     }
 
     // Update and save lifetime stats
@@ -163,7 +167,9 @@ fn setup_game_over(
         wave,
         game_stats.total_gold_earned,
     );
-    save_lifetime_stats(&lifetime);
+    if !save_lifetime_stats(&lifetime) {
+        save_warning.trigger();
+    }
 
     // Track game over event with stats
     let wave_reached = wave.to_string();
@@ -407,7 +413,7 @@ fn setup_game_over(
                 });
             });
 
-            // Button row: Restart + Copy Run
+            // Button row: Retry + Menu + Copy Run
             parent.spawn(NodeBundle {
                 style: Style {
                     flex_direction: FlexDirection::Row,
@@ -416,23 +422,24 @@ fn setup_game_over(
                 },
                 ..default()
             }).with_children(|row| {
+                // RETRY button (same map, skip menu)
                 row.spawn((
                     ButtonBundle {
                         style: Style {
-                            width: Val::Px(200.0),
+                            width: Val::Px(160.0),
                             height: Val::Px(60.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()
                         },
-                        background_color: GameColors::PRIMARY.into(),
+                        background_color: GameColors::BUTTON_START.into(),
                         ..default()
                     },
-                    RestartButton,
+                    RetryButton,
                 ))
                 .with_children(|parent| {
                     parent.spawn(TextBundle::from_section(
-                        "RESTART",
+                        "RETRY",
                         TextStyle {
                             font: assets.font.clone(),
                             font_size: 28.0,
@@ -441,6 +448,34 @@ fn setup_game_over(
                     ));
                 });
 
+                // MENU button (back to menu)
+                row.spawn((
+                    ButtonBundle {
+                        style: Style {
+                            width: Val::Px(120.0),
+                            height: Val::Px(60.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        background_color: GameColors::BUTTON_GHOST.into(),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
+                        ..default()
+                    },
+                    RestartButton,
+                ))
+                .with_children(|parent| {
+                    parent.spawn(TextBundle::from_section(
+                        "MENU",
+                        TextStyle {
+                            font: assets.font.clone(),
+                            font_size: 28.0,
+                            color: Color::srgba(1.0, 1.0, 1.0, 0.8),
+                        },
+                    ));
+                });
+
+                // COPY RUN button
                 row.spawn((
                     ButtonBundle {
                         style: Style {
@@ -473,7 +508,7 @@ fn setup_game_over(
 
             // Hint
             parent.spawn(TextBundle::from_section(
-                "Press R to restart",
+                "R = Retry same map",
                 TextStyle {
                     font: assets.font.clone(),
                     font_size: 13.0,
@@ -502,10 +537,20 @@ fn setup_game_over(
         });
 }
 
-fn cleanup_game_over(mut commands: Commands, query: Query<Entity, With<GameOverScreen>>) {
-    for entity in &query {
+fn cleanup_game_over(
+    mut commands: Commands,
+    game_over_query: Query<Entity, With<GameOverScreen>>,
+    game_entity_query: Query<Entity, With<GameEntity>>,
+) {
+    for entity in &game_over_query {
         commands.entity(entity).despawn_recursive();
     }
+    // Also clean up all game entities so retry (GameOver -> Playing) starts fresh.
+    // When going GameOver -> Menu, cleanup_game will run too but find nothing (harmless).
+    for entity in &game_entity_query {
+        commands.entity(entity).despawn_recursive();
+    }
+    commands.remove_resource::<GameActive>();
 }
 
 fn restart_button_system(
@@ -517,13 +562,34 @@ fn restart_button_system(
     for (interaction, mut color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
-                *color = GameColors::SECONDARY.into();
+                *color = Color::srgba(1.0, 1.0, 1.0, 0.3).into();
             }
             Interaction::Hovered => {
-                *color = GameColors::PRIMARY.with_alpha(0.8).into();
+                *color = GameColors::BUTTON_GHOST_HOVER.into();
             }
             Interaction::None => {
-                *color = GameColors::PRIMARY.into();
+                *color = GameColors::BUTTON_GHOST.into();
+            }
+        }
+    }
+}
+
+fn retry_button_system(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<RetryButton>),
+    >,
+) {
+    for (interaction, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = GameColors::BUTTON_START_PRESSED.into();
+            }
+            Interaction::Hovered => {
+                *color = GameColors::BUTTON_START_HOVER.into();
+            }
+            Interaction::None => {
+                *color = GameColors::BUTTON_START.into();
             }
         }
     }
@@ -689,6 +755,84 @@ fn update_screen_shake(
     }
 }
 
+/// Marker for the save warning toast UI node.
+#[derive(Component)]
+struct SaveWarningToast {
+    lifetime: Timer,
+}
+
+/// Spawns a save-failure toast when SaveWarning is triggered; fades and despawns it.
+fn update_save_warning_toast(
+    mut commands: Commands,
+    assets: Res<crate::loading::GameAssets>,
+    mut save_warning: ResMut<SaveWarning>,
+    mut toasts: Query<(Entity, &mut SaveWarningToast, &Children)>,
+    mut text_query: Query<&mut Text>,
+    time: Res<Time>,
+) {
+    // Spawn toast if warning was just triggered and no toast exists
+    if let Some(ref timer) = save_warning.timer {
+        if toasts.is_empty() && !timer.finished() {
+            commands.spawn((
+                NodeBundle {
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        bottom: Val::Px(80.0),
+                        left: Val::Percent(50.0),
+                        margin: UiRect::left(Val::Px(-140.0)),
+                        width: Val::Px(280.0),
+                        padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.12, 0.05, 0.05, 0.85).into(),
+                    border_radius: BorderRadius::all(Val::Px(6.0)),
+                    ..default()
+                },
+                SaveWarningToast {
+                    lifetime: Timer::from_seconds(4.0, TimerMode::Once),
+                },
+            )).with_children(|parent| {
+                parent.spawn(TextBundle::from_section(
+                    "Save failed \u{2014} scores may not persist",
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 14.0,
+                        color: GameColors::WARNING_TEXT,
+                    },
+                ));
+            });
+        }
+    }
+
+    // Tick and fade existing toasts
+    for (entity, mut toast, children) in &mut toasts {
+        toast.lifetime.tick(time.delta());
+        let progress = toast.lifetime.fraction();
+
+        // Fade out in the last 30%
+        let alpha = if progress > 0.7 {
+            1.0 - (progress - 0.7) / 0.3
+        } else {
+            1.0
+        };
+
+        for &child in children.iter() {
+            if let Ok(mut text) = text_query.get_mut(child) {
+                if let Some(section) = text.sections.get_mut(0) {
+                    section.style.color = GameColors::WARNING_TEXT.with_alpha(alpha);
+                }
+            }
+        }
+
+        if toast.lifetime.finished() {
+            commands.entity(entity).despawn_recursive();
+            save_warning.timer = None;
+        }
+    }
+}
+
 fn restart_interaction(
     interaction_query: Query<&Interaction, (Changed<Interaction>, With<RestartButton>)>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -703,12 +847,38 @@ fn restart_interaction(
         }
     }
 
-    if keyboard.just_pressed(KeyCode::KeyR) {
+    // M key goes to menu
+    if keyboard.just_pressed(KeyCode::KeyM) {
         restarting = true;
     }
 
     if restarting {
-        track_with_context(&analytics, "game_restarted", &[]);
+        track_with_context(&analytics, "game_restarted", &[("action", "menu")]);
         next_state.set(GameState::Menu);
+    }
+}
+
+fn retry_interaction(
+    interaction_query: Query<&Interaction, (Changed<Interaction>, With<RetryButton>)>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut next_state: ResMut<NextState<GameState>>,
+    analytics: Res<Analytics>,
+) {
+    let mut retrying = false;
+
+    for interaction in &interaction_query {
+        if *interaction == Interaction::Pressed {
+            retrying = true;
+        }
+    }
+
+    // R key retries same map
+    if keyboard.just_pressed(KeyCode::KeyR) {
+        retrying = true;
+    }
+
+    if retrying {
+        track_with_context(&analytics, "game_restarted", &[("action", "retry")]);
+        next_state.set(GameState::Playing);
     }
 }

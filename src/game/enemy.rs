@@ -167,6 +167,7 @@ pub struct Enemy {
     pub poison_damage: f32,         // Damage per second from poison
     pub poison_timer: Option<Timer>, // Duration of poison effect
     pub bonus_armor: f32,           // Extra armor from wave modifiers
+    pub regen_active: bool,         // True when spawned during a Regen wave
     pub last_hit_by: Option<Entity>, // Tower entity that last dealt damage (for stats)
 }
 
@@ -185,6 +186,7 @@ impl Enemy {
             poison_damage: 0.0,
             poison_timer: None,
             bonus_armor: 0.0,
+            regen_active: false,
             last_hit_by: None,
         }
     }
@@ -597,6 +599,11 @@ fn wave_spawner(
                 // Apply ArmoredWave modifier (+25% armor)
                 if wave_manager.current_modifier == WaveModifier::ArmoredWave {
                     enemy.bonus_armor = 0.25;
+                }
+
+                // Mark enemies spawned during Regen wave
+                if wave_manager.current_modifier == WaveModifier::Regen {
+                    enemy.regen_active = true;
                 }
 
                 let size = enemy_type.size();
@@ -1121,6 +1128,11 @@ fn spawn_mini_splitters(
             // Inherit path progress from parent Splitter
             enemy.path_index = event.path_index;
 
+            // Inherit regen status from wave modifier
+            if wave_manager.current_modifier == WaveModifier::Regen {
+                enemy.regen_active = true;
+            }
+
             let enemy_entity = commands
                 .spawn((
                     SpriteBundle {
@@ -1343,6 +1355,15 @@ fn update_enemy_status_visuals(
                 base_color.to_srgba().red * 0.7 + slow.to_srgba().red * 0.3,
                 base_color.to_srgba().green * 0.7 + slow.to_srgba().green * 0.3,
                 base_color.to_srgba().blue * 0.7 + slow.to_srgba().blue * 0.3,
+            );
+        } else if enemy.regen_active {
+            // Regen: subtle green tint
+            let srgba = base_color.to_srgba();
+            let regen_tint = 0.15;
+            sprite.color = Color::srgb(
+                srgba.red * (1.0 - regen_tint),
+                (srgba.green + regen_tint).min(1.0),
+                srgba.blue * (1.0 - regen_tint),
             );
         } else {
             sprite.color = base_color;

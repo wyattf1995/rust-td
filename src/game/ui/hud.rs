@@ -245,3 +245,53 @@ pub(super) fn speed_button_system(
         }
     }
 }
+
+/// Show/hide the "Z = Undo" hint based on RecentPlacement timer.
+pub(super) fn update_undo_hint(
+    mut commands: Commands,
+    recent: Res<RecentPlacement>,
+    mut hint_query: Query<(Entity, &mut Text, &mut Style), With<UndoHintText>>,
+    assets: Res<GameAssets>,
+) {
+    let is_active = recent.timer.as_ref().is_some_and(|t| !t.finished());
+
+    if is_active {
+        let remaining = recent.timer.as_ref().map_or(0.0, |t| t.remaining_secs());
+        let label = format!("Z = Undo ({:.0}s)", remaining.ceil());
+
+        if let Ok((_entity, mut text, mut style)) = hint_query.get_single_mut() {
+            // Update existing hint
+            text.sections[0].value = label;
+            style.display = Display::Flex;
+            // Fade out in last second
+            let alpha = if remaining < 1.0 { remaining } else { 0.7 };
+            text.sections[0].style.color = Color::srgba(0.4, 1.0, 0.5, alpha);
+        } else {
+            // Spawn hint text (positioned bottom-center, above ability bar)
+            commands.spawn((
+                TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        font: assets.font.clone(),
+                        font_size: 14.0,
+                        color: Color::srgba(0.4, 1.0, 0.5, 0.7),
+                    },
+                ).with_style(Style {
+                    position_type: PositionType::Absolute,
+                    bottom: Val::Px(120.0),
+                    left: Val::Percent(50.0),
+                    margin: UiRect::left(Val::Px(-40.0)),
+                    display: Display::Flex,
+                    ..default()
+                }),
+                UndoHintText,
+                super::GameEntity,
+            ));
+        }
+    } else {
+        // Hide hint when not active
+        for (_entity, _text, mut style) in &mut hint_query {
+            style.display = Display::None;
+        }
+    }
+}

@@ -10,7 +10,7 @@ use super::{
     economy::{PlayerEconomy, KillStreak},
     enemy::{EnemyType, WaveManager, WaveModifier},
     map::{GameMap, HoveredTile, TileType},
-    tower::{PlaceTowerEvent, SelectedTowerType, SelectedPlacedTower, SellTowerEvent, UpgradeTowerEvent, SpecializeTowerEvent, Specialization, Tower, TowerType, TowerSynergies},
+    tower::{PlaceTowerEvent, RecentPlacement, SelectedTowerType, SelectedPlacedTower, SellTowerEvent, UpgradeTowerEvent, SpecializeTowerEvent, Specialization, Tower, TowerType, TowerSynergies},
     GameEntity,
 };
 
@@ -76,7 +76,9 @@ impl Plugin for GameUiPlugin {
                         wave::update_start_button_text,
                         tower_panel::update_info_panel,
                         wave::update_wave_preview,
+                        hud::update_undo_hint,
                         pause::pause_input,
+                        pause::pause_on_blur,
                     ),
                 )
                     .chain()
@@ -256,6 +258,9 @@ pub(super) struct SellPending {
     pub(super) timer: Option<Timer>,
     pub(super) tower: Option<Entity>,
 }
+
+#[derive(Component)]
+pub(super) struct UndoHintText;
 
 #[derive(Component)]
 pub(super) struct AbilityBar;

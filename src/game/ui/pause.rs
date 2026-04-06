@@ -1,5 +1,19 @@
 use super::*;
 
+/// Auto-pause when the browser tab loses focus.
+/// Does NOT auto-resume on regain — player must resume manually via pause menu or ESC.
+pub(super) fn pause_on_blur(
+    mut events: EventReader<bevy::window::WindowFocused>,
+    mut next_state: ResMut<NextState<GameState>>,
+    state: Res<State<GameState>>,
+) {
+    for event in events.read() {
+        if !event.focused && *state.get() == GameState::Playing {
+            next_state.set(GameState::Paused);
+        }
+    }
+}
+
 pub(super) fn pause_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,

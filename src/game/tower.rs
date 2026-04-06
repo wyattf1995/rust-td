@@ -23,6 +23,16 @@ use super::{
 #[derive(Resource, Default)]
 pub struct SynergyDirty(pub bool);
 
+/// Tracks the most recent tower placement for undo (3-second window, 100% refund).
+#[derive(Resource, Default)]
+pub struct RecentPlacement {
+    pub tower_entity: Option<Entity>,
+    pub cost: u32,
+    pub grid_x: usize,
+    pub grid_y: usize,
+    pub timer: Option<Timer>,
+}
+
 /// Dirty flag for buff aura recalculation (set on tower place/sell/upgrade)
 #[derive(Resource, Default)]
 pub struct BuffDirty(pub bool);
@@ -36,6 +46,7 @@ impl Plugin for TowerPlugin {
             .init_resource::<SelectedPlacedTower>()
             .init_resource::<SynergyDirty>()
             .init_resource::<BuffDirty>()
+            .init_resource::<RecentPlacement>()
             .add_event::<PlaceTowerEvent>()
             .add_event::<SellTowerEvent>()
             .add_event::<UpgradeTowerEvent>()
@@ -50,7 +61,14 @@ impl Plugin for TowerPlugin {
                     tower_targeting,
                     update_buff_auras,
                     update_tower_synergies,
+                    update_synergy_indicators,
                     tower_attack,
+                )
+                    .run_if(in_state(GameState::Playing)),
+            )
+            .add_systems(
+                Update,
+                (
                     update_tower_visuals,
                     update_range_indicators,
                     update_muzzle_flashes,
@@ -58,6 +76,7 @@ impl Plugin for TowerPlugin {
                     update_buff_aura_visuals,
                     update_upgrade_flashes,
                     tower_hotkeys,
+                    tower_undo,
                 )
                     .run_if(in_state(GameState::Playing)),
             );
@@ -703,6 +722,7 @@ fn handle_tower_placement(
     mut synergy_dirty: ResMut<SynergyDirty>,
     mut buff_dirty: ResMut<BuffDirty>,
     mut stats: ResMut<GameStats>,
+    mut recent: ResMut<RecentPlacement>,
     assets: Res<GameAssets>,
 ) {
     for event in events.read() {
@@ -747,6 +767,13 @@ fn handle_tower_placement(
 
         stats.register_tower(tower_entity, event.tower_type, cost);
         spawn_tower_visuals(&mut commands, tower_entity, pos, accent_color, range, event.tower_type, &assets);
+
+        // Record for undo (3-second window)
+        recent.tower_entity = Some(tower_entity);
+        recent.cost = cost;
+        recent.grid_x = event.grid_x;
+        recent.grid_y = event.grid_y;
+        recent.timer = Some(Timer::from_seconds(3.0, TimerMode::Once));
     }
 }
 
@@ -1454,6 +1481,61 @@ fn tower_hotkeys(
     }
 }
 
+/// Undo the most recent tower placement within a 3-second window (100% gold refund).
+/// Triggered by pressing Z. Only works for the single most recent placement.
+fn tower_undo(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut recent: ResMut<RecentPlacement>,
+    mut economy: ResMut<PlayerEconomy>,
+    mut sell_events: EventWriter<SellTowerEvent>,
+    mut selected_placed: ResMut<SelectedPlacedTower>,
+    towers: Query<&Tower>,
+    time: Res<Time>,
+) {
+    // Tick the undo timer
+    if let Some(ref mut timer) = recent.timer {
+        timer.tick(time.delta());
+        if timer.finished() {
+            // Window expired — clear undo state
+            recent.tower_entity = None;
+            recent.cost = 0;
+            recent.timer = None;
+            return;
+        }
+    } else {
+        return;
+    }
+
+    // Z key triggers undo
+    if keyboard.just_pressed(KeyCode::KeyZ) {
+        if let Some(tower_entity) = recent.tower_entity {
+            // Only undo if the tower still exists and is level 1 (hasn't been upgraded)
+            if let Ok(tower) = towers.get(tower_entity) {
+                if tower.level == 1 {
+                    // The sell system refunds 75%. We need 100%.
+                    // So we add the 25% difference BEFORE the sell event processes.
+                    let sell_value = tower.sell_value();
+                    let difference = recent.cost.saturating_sub(sell_value);
+                    economy.gold = economy.gold.saturating_add(difference);
+
+                    // Send sell event to handle despawning + map cleanup
+                    sell_events.send(SellTowerEvent { tower: tower_entity });
+
+                    // Clear tower selection if the undone tower was selected
+                    if selected_placed.0 == Some(tower_entity) {
+                        selected_placed.0 = None;
+                    }
+                }
+            }
+
+            // Clear undo state regardless
+            recent.tower_entity = None;
+            recent.cost = 0;
+            recent.timer = None;
+        }
+    }
+}
+
 fn update_level_badges(
     towers: Query<(&Tower, &Transform)>,
     mut badges: Query<(&TowerLevelBadge, &mut Text, &mut Transform), Without<Tower>>,
@@ -1592,6 +1674,45 @@ fn update_tower_synergies(
         synergies.poison_duration_bonus = result.poison_duration_bonus;
         synergies.speed_buff_multiplier = result.speed_buff_multiplier;
         synergies.extra_chain_bounces = result.extra_chain_bounces;
+    }
+}
+
+/// Updates bracket colors to indicate active synergies.
+/// Runs every frame but only applies changes when synergies were just recalculated
+/// (i.e. SynergyDirty transitioned from true to false on the previous tick).
+fn update_synergy_indicators(
+    towers: Query<(Entity, &Tower, &TowerSynergies)>,
+    mut brackets: Query<(&TowerBracket, &mut Sprite), (Without<Tower>, Without<TowerCore>, Without<RangeIndicator>, Without<TowerBarrel>)>,
+    synergy_dirty: Res<SynergyDirty>,
+    mut was_dirty: Local<bool>,
+) {
+    // Detect the frame after synergies were recalculated:
+    // update_tower_synergies sets dirty to false after recalculating,
+    // so we trigger when was_dirty=true and dirty is now false.
+    let should_update = *was_dirty && !synergy_dirty.0;
+    *was_dirty = synergy_dirty.0;
+
+    if !should_update {
+        return;
+    }
+
+    // Build lookup: tower entity -> (accent_color, has_active_synergies, level)
+    let tower_info: HashMap<Entity, (Color, bool, u32)> = towers
+        .iter()
+        .map(|(e, tower, syn)| (e, (tower.accent_color(), !syn.active.is_empty(), tower.level)))
+        .collect();
+
+    for (bracket, mut sprite) in &mut brackets {
+        if let Some(&(accent_color, has_synergy, level)) = tower_info.get(&bracket.tower) {
+            if has_synergy {
+                sprite.color = GameColors::SYNERGY.with_alpha(0.5);
+            } else {
+                // Restore default: accent color with level-scaled alpha
+                let bracket_alpha = (BRACKET_ALPHA_BASE + BRACKET_ALPHA_PER_LEVEL * (level - 1) as f32)
+                    .min(BRACKET_ALPHA_MAX);
+                sprite.color = accent_color.with_alpha(bracket_alpha);
+            }
+        }
     }
 }
 
