@@ -475,12 +475,18 @@ pub fn load_tips() -> TipsShown {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn save_tips(tips: &TipsShown) {
+pub fn save_tips(tips: &TipsShown) -> bool {
     let storage = web_sys::window()
         .and_then(|w| w.local_storage().ok())
         .flatten();
     if let Some(storage) = storage {
-        let _ = storage.set_item(TIPS_KEY, &tips.to_json());
+        if storage.set_item(TIPS_KEY, &tips.to_json()).is_err() {
+            web_sys::console::warn_1(&"Failed to save tips to localStorage".into());
+            return false;
+        }
+        true
+    } else {
+        false
     }
 }
 
@@ -490,7 +496,7 @@ pub fn load_tips() -> TipsShown {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn save_tips(_tips: &TipsShown) {}
+pub fn save_tips(_tips: &TipsShown) -> bool { true }
 
 /// Warning toast when localStorage save fails.
 #[derive(Resource, Default)]

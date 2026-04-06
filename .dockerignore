@@ -2,6 +2,14 @@ target/
 dist/
 .git/
 .gitignore
-README.md
+.github/
+.serena/
+.env
+.env.*
 *.md
+docs/
 .DS_Store
+.vscode/
+.idea/
+Dockerfile
+.dockerignore
