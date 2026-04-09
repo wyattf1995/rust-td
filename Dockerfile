@@ -36,8 +36,11 @@ COPY assets ./assets
 COPY index.html ./
 COPY robots.txt sitemap.xml ./
 
-# Build release (recompiles only game code, deps are cached)
-RUN trunk build --release
+# Remove dummy binary so cargo recompiles the real source
+# (COPY preserves host timestamps which can be older than the cached build)
+RUN rm -f target/wasm32-unknown-unknown/release/rust-td.wasm \
+    && rm -f target/wasm32-unknown-unknown/release/deps/rust_td-* \
+    && trunk build --release
 
 # Production stage - serve static files with nginx (unprivileged)
 FROM nginx:1.29-alpine
