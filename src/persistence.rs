@@ -305,7 +305,7 @@ pub fn save_highscores(_high_scores: &HighScores) -> bool {
 
 const LIFETIME_KEY: &str = "neon_command_lifetime";
 
-#[derive(Resource, Clone, Debug)]
+#[derive(Resource, Clone, Debug, Default)]
 pub struct LifetimeStats {
     pub total_games: u32,
     pub total_kills: u32,
@@ -314,17 +314,7 @@ pub struct LifetimeStats {
     pub best_wave_ever: usize,
 }
 
-impl Default for LifetimeStats {
-    fn default() -> Self {
-        Self {
-            total_games: 0,
-            total_kills: 0,
-            total_waves: 0,
-            total_gold_earned: 0,
-            best_wave_ever: 0,
-        }
-    }
-}
+// All fields default to 0/false, so #[derive(Default)] suffices
 
 impl LifetimeStats {
     fn to_json(&self) -> String {
@@ -406,7 +396,7 @@ pub fn save_lifetime_stats(_stats: &LifetimeStats) -> bool { true }
 const TIPS_KEY: &str = "neon_command_tips";
 
 /// Tracks which contextual tips have been shown (persisted across sessions).
-#[derive(Resource, Clone, Debug)]
+#[derive(Resource, Clone, Debug, Default)]
 pub struct TipsShown {
     pub specialization: bool,
     pub synergy: bool,
@@ -416,18 +406,7 @@ pub struct TipsShown {
     pub economy: bool,
 }
 
-impl Default for TipsShown {
-    fn default() -> Self {
-        Self {
-            specialization: false,
-            synergy: false,
-            early_send: false,
-            targeting: false,
-            welcome: false,
-            economy: false,
-        }
-    }
-}
+// All fields default to false, so #[derive(Default)] suffices
 
 impl TipsShown {
     fn to_json(&self) -> String {

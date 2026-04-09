@@ -62,9 +62,6 @@ impl Plugin for MenuPlugin {
 struct MenuScreen;
 
 #[derive(Component)]
-struct MenuCamera;
-
-#[derive(Component)]
 struct PlayButton;
 
 #[derive(Component)]
@@ -110,8 +107,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
             selected_map.0 = preset;
         }
     }
-    // Spawn menu camera
-    commands.spawn((Camera2dBundle::default(), MenuCamera, MenuScreen));
+    // Camera persists from loading state — no need to spawn another
 
     // Spawn background projectiles
     let mut rng = rand::thread_rng();

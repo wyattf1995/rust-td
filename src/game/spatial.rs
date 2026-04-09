@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use super::enemy::Enemy;
+use super::GameSet;
 use crate::GameState;
 
 pub struct SpatialPlugin;
@@ -11,7 +12,9 @@ impl Plugin for SpatialPlugin {
         app.init_resource::<SpatialGrid>()
             .add_systems(
                 Update,
-                update_spatial_grid.run_if(in_state(GameState::Playing)),
+                update_spatial_grid
+                    .in_set(GameSet::SpatialUpdate)
+                    .run_if(in_state(GameState::Playing)),
             );
     }
 }

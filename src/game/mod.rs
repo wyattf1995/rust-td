@@ -48,11 +48,29 @@ pub(crate) fn ease_out(t: f32) -> f32 {
     1.0 - (1.0 - t) * (1.0 - t)
 }
 
+/// System ordering sets for cross-plugin dependencies.
+/// SpatialUpdate → TowerLogic → ProjectileLogic ensures:
+/// - Spatial grid is fresh before towers query it for targeting
+/// - Tower attacks (which emit SpawnProjectileEvent) run before projectiles process them
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GameSet {
+    SpatialUpdate,
+    TowerLogic,
+    ProjectileLogic,
+}
+
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
+        app.configure_sets(
+                Update,
+                (
+                    GameSet::SpatialUpdate.before(GameSet::TowerLogic),
+                    GameSet::TowerLogic.before(GameSet::ProjectileLogic),
+                ),
+            )
+            .add_plugins((
             map::MapPlugin,
             tower::TowerPlugin,
             enemy::EnemyPlugin,
@@ -763,7 +781,7 @@ fn build_suggestion(current_map: &str, wave: usize, high_scores: &HighScores) ->
     for &map_name in &all_maps {
         if map_name != current_map {
             if let Some(entry) = high_scores.get(map_name) {
-                if weakest.map_or(true, |w| entry.wave < w.1) {
+                if weakest.is_none_or(|w| entry.wave < w.1) {
                     weakest = Some((map_name, entry.wave));
                 }
             }

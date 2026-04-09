@@ -64,7 +64,7 @@ struct LoadingScreen;
 struct LoadingBar;
 
 fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut assets: ResMut<GameAssets>) {
-    // Spawn camera for UI rendering
+    // Spawn the single game camera — persists across all states
     commands.spawn(Camera2dBundle::default());
 
     // Load font

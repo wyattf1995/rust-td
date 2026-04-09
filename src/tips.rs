@@ -69,23 +69,19 @@ fn check_tip_triggers(
     }
 
     // Tip: Welcome — first frame of first-ever game
-    if !tips_shown.welcome {
-        if lifetime_stats.total_games == 0 {
-            active.current = Some(TipKind::Welcome);
-            tips_shown.welcome = true;
-            save_tips(&tips_shown);
-            return;
-        }
+    if !tips_shown.welcome && lifetime_stats.total_games == 0 {
+        active.current = Some(TipKind::Welcome);
+        tips_shown.welcome = true;
+        save_tips(&tips_shown);
+        return;
     }
 
     // Tip: Economy — after wave 1 completes (between waves)
-    if !tips_shown.economy {
-        if wave_manager.current_wave >= 1 && !wave_manager.wave_active {
-            active.current = Some(TipKind::Economy);
-            tips_shown.economy = true;
-            save_tips(&tips_shown);
-            return;
-        }
+    if !tips_shown.economy && wave_manager.current_wave >= 1 && !wave_manager.wave_active {
+        active.current = Some(TipKind::Economy);
+        tips_shown.economy = true;
+        save_tips(&tips_shown);
+        return;
     }
 
     // Tip: Specialization — when any tower reaches Level 2
@@ -101,32 +97,26 @@ fn check_tip_triggers(
     }
 
     // Tip: Synergy — when 3+ towers placed (likely adjacent pairs)
-    if !tips_shown.synergy {
-        if towers.iter().count() >= 3 {
-            active.current = Some(TipKind::Synergy);
-            tips_shown.synergy = true;
-            save_tips(&tips_shown);
-            return;
-        }
+    if !tips_shown.synergy && towers.iter().count() >= 3 {
+        active.current = Some(TipKind::Synergy);
+        tips_shown.synergy = true;
+        save_tips(&tips_shown);
+        return;
     }
 
     // Tip: Early send — after completing wave 2 (player has seen the basics)
-    if !tips_shown.early_send {
-        if wave_manager.current_wave >= 2 && !wave_manager.wave_active {
-            active.current = Some(TipKind::EarlySend);
-            tips_shown.early_send = true;
-            save_tips(&tips_shown);
-            return;
-        }
+    if !tips_shown.early_send && wave_manager.current_wave >= 2 && !wave_manager.wave_active {
+        active.current = Some(TipKind::EarlySend);
+        tips_shown.early_send = true;
+        save_tips(&tips_shown);
+        return;
     }
 
     // Tip: Targeting — after wave 5 (player is established)
-    if !tips_shown.targeting {
-        if wave_manager.current_wave >= 5 {
-            active.current = Some(TipKind::Targeting);
-            tips_shown.targeting = true;
-            save_tips(&tips_shown);
-        }
+    if !tips_shown.targeting && wave_manager.current_wave >= 5 {
+        active.current = Some(TipKind::Targeting);
+        tips_shown.targeting = true;
+        save_tips(&tips_shown);
     }
 }
 

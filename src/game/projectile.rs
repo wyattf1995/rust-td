@@ -17,6 +17,7 @@ use super::{
     stats::GameStats,
     tower::{TowerType, Specialization},
     GameEntity,
+    GameSet,
 };
 
 pub struct ProjectilePlugin;
@@ -27,6 +28,7 @@ impl Plugin for ProjectilePlugin {
             .add_systems(
                 Update,
                 (spawn_projectiles, projectile_movement, projectile_collision, update_effects, update_damage_numbers, update_napalm_zones, update_blizzard_zones)
+                    .in_set(GameSet::ProjectileLogic)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -221,6 +223,7 @@ fn projectile_movement(
 
         // Spawn trail particle (frequency based on particle density setting)
         let trail_skip = settings.particle_density.trail_skip();
+        #[allow(clippy::manual_is_multiple_of)] // is_multiple_of is unstable (Rust 1.85)
         if trail_skip > 0 && *frame_count % trail_skip == 0 {
             let trail_alpha = if matches!(projectile.tower_type, TowerType::Chain) { 0.6 } else { 0.5 };
             let trail_color = projectile.tower_type.projectile_color().with_alpha(trail_alpha);
@@ -564,7 +567,10 @@ fn handle_pierce_continuation(
                     GameEntity,
                 ));
             }
-            commands.entity(proj_entity).despawn_recursive();
+            // proj_entity came from a Vec intermediary — may have been despawned already
+            if let Some(ec) = commands.get_entity(proj_entity) {
+                ec.despawn_recursive();
+            }
         }
     }
 }

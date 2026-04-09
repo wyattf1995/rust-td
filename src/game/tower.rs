@@ -17,6 +17,7 @@ use super::{
     spatial::SpatialGrid,
     stats::GameStats,
     GameEntity,
+    GameSet,
 };
 
 /// Set to true when towers are placed or sold — triggers synergy recalculation.
@@ -64,6 +65,7 @@ impl Plugin for TowerPlugin {
                     update_synergy_indicators,
                     tower_attack,
                 )
+                    .in_set(GameSet::TowerLogic)
                     .run_if(in_state(GameState::Playing)),
             )
             .add_systems(

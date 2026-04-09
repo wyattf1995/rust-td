@@ -109,6 +109,7 @@ fn update_speed_streaks(
 
     // Spawn streaks for fast enemies
     let streak_skip = settings.particle_density.trail_skip() * 2;
+    #[allow(clippy::manual_is_multiple_of)] // is_multiple_of is unstable (Rust 1.85)
     if streak_skip > 0 && *frame_count % streak_skip == 0 {
         for (enemy, transform) in &enemies {
             if enemy.speed > 80.0 && !enemy.marked_dead && enemy.health > 0.0 {

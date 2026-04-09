@@ -1,4 +1,7 @@
 #![deny(clippy::unwrap_used)]
+#![allow(clippy::needless_pass_by_value)] // Bevy systems require owned Res/Query params
+#![allow(clippy::type_complexity)] // Bevy queries with filters are inherently complex
+#![allow(clippy::too_many_arguments)] // Bevy systems legitimately need many params
 
 use bevy::prelude::*;
 #[cfg(debug_assertions)]
