@@ -109,7 +109,7 @@ fn update_speed_streaks(
 
     // Spawn streaks for fast enemies
     let streak_skip = settings.particle_density.trail_skip() * 2;
-    if (*frame_count).is_multiple_of(streak_skip) {
+    if streak_skip > 0 && *frame_count % streak_skip == 0 {
         for (enemy, transform) in &enemies {
             if enemy.speed > 80.0 && !enemy.marked_dead && enemy.health > 0.0 {
                 let pos = transform.translation.truncate();
