@@ -18,6 +18,7 @@ use super::{
     rules,
     stats::GameStats,
     GameEntity,
+    GameSet,
     ScreenShake,
 };
 
@@ -32,9 +33,14 @@ impl Plugin for EnemyPlugin {
             .add_systems(OnEnter(GameState::Playing), reset_wave_manager)
             .add_systems(
                 Update,
+                (wave_spawner, enemy_movement)
+                    .chain()
+                    .in_set(GameSet::EnemyMovement)
+                    .run_if(in_state(GameState::Playing)),
+            )
+            .add_systems(
+                Update,
                 (
-                    wave_spawner,
-                    enemy_movement,
                     poison_tick,
                     enemy_health_check,
                     update_health_bars,
@@ -48,6 +54,7 @@ impl Plugin for EnemyPlugin {
                     update_flying_shadows,
                 )
                     .chain()
+                    .in_set(GameSet::EnemyDamage)
                     .run_if(in_state(GameState::Playing)),
             );
     }

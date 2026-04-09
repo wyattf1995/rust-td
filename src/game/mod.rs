@@ -49,14 +49,21 @@ pub(crate) fn ease_out(t: f32) -> f32 {
 }
 
 /// System ordering sets for cross-plugin dependencies.
-/// SpatialUpdate → TowerLogic → ProjectileLogic ensures:
-/// - Spatial grid is fresh before towers query it for targeting
-/// - Tower attacks (which emit SpawnProjectileEvent) run before projectiles process them
+///
+/// EnemyMovement → SpatialUpdate → TowerLogic → ProjectileLogic → EnemyDamage
+///
+/// - Enemies spawn and move first (positions are current)
+/// - Spatial grid rebuilds from current positions
+/// - Towers query the grid for targeting, fire projectiles
+/// - Projectiles move, collide, deal damage to enemies
+/// - Enemy damage processing: health checks, deaths, wave completion, visual effects
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GameSet {
+    EnemyMovement,
     SpatialUpdate,
     TowerLogic,
     ProjectileLogic,
+    EnemyDamage,
 }
 
 pub struct GamePlugin;
@@ -66,8 +73,10 @@ impl Plugin for GamePlugin {
         app.configure_sets(
                 Update,
                 (
+                    GameSet::EnemyMovement.before(GameSet::SpatialUpdate),
                     GameSet::SpatialUpdate.before(GameSet::TowerLogic),
                     GameSet::TowerLogic.before(GameSet::ProjectileLogic),
+                    GameSet::ProjectileLogic.before(GameSet::EnemyDamage),
                 ),
             )
             .add_plugins((

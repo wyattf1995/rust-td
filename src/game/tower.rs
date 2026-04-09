@@ -55,6 +55,8 @@ impl Plugin for TowerPlugin {
             .add_systems(
                 Update,
                 (
+                    tower_hotkeys,
+                    tower_undo,
                     handle_tower_placement,
                     handle_tower_selling,
                     handle_tower_upgrade,
@@ -77,8 +79,6 @@ impl Plugin for TowerPlugin {
                     update_level_badges,
                     update_buff_aura_visuals,
                     update_upgrade_flashes,
-                    tower_hotkeys,
-                    tower_undo,
                 )
                     .run_if(in_state(GameState::Playing)),
             );
