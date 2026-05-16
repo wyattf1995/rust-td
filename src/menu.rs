@@ -584,11 +584,11 @@ fn animate_projectiles(
 }
 
 fn animate_title_glow(
-    mut query: Query<&mut Text, With<TitleText>>,
+    mut query: Query<&mut TextColor, With<TitleText>>,
     time: Res<Time>,
     settings: Res<crate::persistence::GameSettings>,
 ) {
-    for mut text in &mut query {
+    for mut text_color in &mut query {
         let pulse = if settings.reduce_motion {
             1.0
         } else {
@@ -596,9 +596,7 @@ fn animate_title_glow(
             (t * 2.0).sin() * 0.15 + 0.85
         };
 
-        if let Some(section) = text.sections.first_mut() {
-            section.style.color = Color::srgb(0.91 * pulse, 0.27 * pulse, 0.38 * pulse);
-        }
+        text_color.0 = Color::srgb(0.91 * pulse, 0.27 * pulse, 0.38 * pulse);
     }
 }
 
@@ -677,7 +675,7 @@ fn map_select_interaction(
     interaction_query: Query<(&Interaction, &MapSelectButton), Changed<Interaction>>,
     mut selected_map: ResMut<SelectedMap>,
     mut all_buttons: Query<(&MapSelectButton, &mut BorderColor, &Children)>,
-    mut text_query: Query<&mut Text>,
+    mut text_query: Query<&mut TextColor>,
 ) {
     let mut new_selection = None;
 
@@ -701,14 +699,12 @@ fn map_select_interaction(
 
             // Update the name text color (second child, after preview container)
             if let Some(&name_child) = children.get(1) {
-                if let Ok(mut text) = text_query.get_mut(name_child) {
-                    if let Some(section) = text.sections.first_mut() {
-                        section.style.color = if is_selected {
-                            GameColors::PRIMARY
-                        } else {
-                            Color::WHITE
-                        };
-                    }
+                if let Ok(mut text_color) = text_query.get_mut(name_child) {
+                    text_color.0 = if is_selected {
+                        GameColors::PRIMARY
+                    } else {
+                        Color::WHITE
+                    };
                 }
             }
         }
@@ -719,7 +715,7 @@ fn wave_start_interaction(
     interaction_query: Query<(&Interaction, &WaveStartButton), Changed<Interaction>>,
     mut selected_wave: ResMut<SelectedStartWave>,
     mut all_buttons: Query<(&WaveStartButton, &mut BorderColor, &Children)>,
-    mut text_query: Query<&mut Text, Without<WaveStartInfoText>>,
+    mut text_query: Query<&mut TextColor, Without<WaveStartInfoText>>,
     mut info_query: Query<&mut Text, With<WaveStartInfoText>>,
 ) {
     let mut new_selection = None;
@@ -744,30 +740,26 @@ fn wave_start_interaction(
 
             // Update the text color (first child)
             if let Some(&text_child) = children.first() {
-                if let Ok(mut text) = text_query.get_mut(text_child) {
-                    if let Some(section) = text.sections.first_mut() {
-                        section.style.color = if is_selected {
-                            GameColors::PRIMARY
-                        } else {
-                            Color::WHITE
-                        };
-                    }
+                if let Ok(mut text_color) = text_query.get_mut(text_child) {
+                    text_color.0 = if is_selected {
+                        GameColors::PRIMARY
+                    } else {
+                        Color::WHITE
+                    };
                 }
             }
         }
 
         // Update info text
         for mut text in &mut info_query {
-            if let Some(section) = text.sections.first_mut() {
-                if wave > 1 {
-                    let gold = selected_wave.starting_gold();
-                    section.value = format!(
-                        "Starting at Wave {} with {}g — Practice Mode (scores not recorded)",
-                        wave, gold
-                    );
-                } else {
-                    section.value.clear();
-                }
+            if wave > 1 {
+                let gold = selected_wave.starting_gold();
+                text.0 = format!(
+                    "Starting at Wave {} with {}g — Practice Mode (scores not recorded)",
+                    wave, gold
+                );
+            } else {
+                text.0.clear();
             }
         }
     }

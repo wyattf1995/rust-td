@@ -321,8 +321,8 @@ fn reset_ui_clicked(mut ui_clicked: ResMut<UiClicked>) {
 
 /// Update UI zone boundaries from actual rendered node sizes
 fn update_ui_zones(
-    top_bar: Query<&Node, With<TopHudBar>>,
-    bottom_bar: Query<&Node, With<BottomTowerBar>>,
+    top_bar: Query<&ComputedNode, With<TopHudBar>>,
+    bottom_bar: Query<&ComputedNode, With<BottomTowerBar>>,
     mut zones: ResMut<UiZones>,
 ) {
     if let Ok(node) = top_bar.get_single() {
@@ -353,7 +353,7 @@ fn handle_tile_click(
     let Ok(window) = windows.get_single() else { return; };
     let Ok((camera, camera_transform)) = camera_q.get_single() else { return; };
     let Some(cursor_pos) = pointer.position else { return; };
-    let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) else { return; };
+    let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) else { return; };
     let Some((grid_x, grid_y)) = GameMap::world_to_grid(world_pos) else { return; };
 
     // UI zone check FIRST — clicks in HUD area should not trigger feedback

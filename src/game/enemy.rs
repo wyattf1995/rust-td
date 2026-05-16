@@ -906,18 +906,14 @@ fn spawn_gold_toast(
     let toast_size = if is_boosted { 18.0 } else { 14.0 };
     let toast_color = if is_boosted { GameColors::ABILITY_GOLD_RUSH } else { GameColors::GOLD_TEXT };
     commands.spawn((
-        Text2dBundle {
-            text: Text::from_section(
-                format!("+{}g", reward),
-                TextStyle {
-                    font: assets.font.clone(),
-                    font_size: toast_size,
-                    color: toast_color,
-                },
-            ),
-            transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 20.0, ZDepth::FLOATING_TEXT)),
+        Text2d::new(format!("+{}g", reward)),
+        TextFont {
+            font: assets.font.clone(),
+            font_size: toast_size,
             ..default()
         },
+        TextColor(toast_color),
+        Transform::from_translation(Vec3::new(pos.x, pos.y + 20.0, ZDepth::FLOATING_TEXT)),
         GoldNumber {
             lifetime: Timer::from_seconds(0.7, TimerMode::Once),
             velocity,
@@ -1328,10 +1324,10 @@ fn check_wave_complete(
 
 fn update_gold_numbers(
     mut commands: Commands,
-    mut numbers: Query<(Entity, &mut GoldNumber, &mut Transform, &mut Text)>,
+    mut numbers: Query<(Entity, &mut GoldNumber, &mut Transform, &mut TextColor)>,
     time: Res<Time>,
 ) {
-    for (entity, mut number, mut transform, mut text) in &mut numbers {
+    for (entity, mut number, mut transform, mut text_color) in &mut numbers {
         number.lifetime.tick(time.delta());
 
         // Move upward
@@ -1343,9 +1339,7 @@ fn update_gold_numbers(
 
         // Fade out
         let alpha = 1.0 - number.lifetime.fraction();
-        if let Some(section) = text.sections.get_mut(0) {
-            section.style.color = GameColors::GOLD_TEXT.with_alpha(alpha);
-        }
+        text_color.0 = GameColors::GOLD_TEXT.with_alpha(alpha);
 
         if number.lifetime.finished() {
             commands.entity(entity).despawn_recursive();

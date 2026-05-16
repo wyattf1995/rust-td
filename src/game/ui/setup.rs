@@ -644,24 +644,13 @@ fn spawn_stats_section(parent: &mut ChildBuilder, assets: &GameAssets) {
         })
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_sections([
-                    TextSection::new(
-                        "Basic Tower Lv1\n",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 12.0,
-                            color: Color::WHITE,
-                        },
-                    ),
-                    TextSection::new(
-                        "DMG: 25  RNG: 150  SPD: 1.0/s",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 10.0,
-                            color: Color::srgba(0.7, 0.8, 0.9, 1.0),
-                        },
-                    ),
-                ]),
+                Text::new("Basic Tower Lv1\nDMG: 25  RNG: 150  SPD: 1.0/s"),
+                TextFont {
+                    font: assets.font.clone(),
+                    font_size: 11.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
                 TowerStatsText,
             ));
         });
@@ -683,24 +672,13 @@ fn spawn_upgrade_preview(parent: &mut ChildBuilder, assets: &GameAssets) {
         })
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_sections([
-                    TextSection::new(
-                        "Next Level\n",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 10.0,
-                            color: GameColors::SUCCESS,
-                        },
-                    ),
-                    TextSection::new(
-                        "DMG: 30 (+5)\nRNG: 165 (+15)\nSPD: 1.2/s (+0.2)",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 10.0,
-                            color: Color::srgba(0.6, 0.95, 0.6, 1.0),
-                        },
-                    ),
-                ]),
+                Text::new("Next Level\nDMG: 30 (+5)\nRNG: 165 (+15)\nSPD: 1.2/s (+0.2)"),
+                TextFont {
+                    font: assets.font.clone(),
+                    font_size: 10.0,
+                    ..default()
+                },
+                TextColor(GameColors::SUCCESS),
                 TowerUpgradePreview,
             ));
         });
@@ -1020,10 +998,9 @@ fn spawn_ability_button(
                     TextFont {
                         font: assets.font.clone(),
                         font_size: 13.0,
-                        color,
                         ..default()
                     },
-                    TextColor(Color::WHITE),
+                    TextColor(color),
                 ));
             });
 

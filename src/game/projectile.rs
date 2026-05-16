@@ -707,15 +707,14 @@ fn spawn_damage_text(commands: &mut Commands, assets: &GameAssets, pos: Vec2, da
     };
 
     commands.spawn((
-        Text2dBundle {
-            text: Text::from_section(text, TextStyle {
-                font: assets.font.clone(),
-                font_size,
-                color,
-            }),
-            transform: Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, ZDepth::FLOATING_TEXT)),
+        Text2d::new(text),
+        TextFont {
+            font: assets.font.clone(),
+            font_size,
             ..default()
         },
+        TextColor(color),
+        Transform::from_translation(Vec3::new(pos.x, pos.y + 15.0, ZDepth::FLOATING_TEXT)),
         DamageNumber {
             lifetime: Timer::from_seconds(CombatConstants::DAMAGE_NUMBER_LIFETIME, TimerMode::Once),
             velocity: Vec2::new(offset_x, velocity_y),
@@ -726,10 +725,10 @@ fn spawn_damage_text(commands: &mut Commands, assets: &GameAssets, pos: Vec2, da
 
 fn update_damage_numbers(
     mut commands: Commands,
-    mut numbers: Query<(Entity, &mut DamageNumber, &mut Transform, &mut Text)>,
+    mut numbers: Query<(Entity, &mut DamageNumber, &mut Transform, &mut TextColor)>,
     time: Res<Time>,
 ) {
-    for (entity, mut number, mut transform, mut text) in &mut numbers {
+    for (entity, mut number, mut transform, mut text_color) in &mut numbers {
         number.lifetime.tick(time.delta());
 
         // Move upward
@@ -741,9 +740,7 @@ fn update_damage_numbers(
 
         // Fade out
         let alpha = 1.0 - ease_out(number.lifetime.fraction());
-        if let Some(section) = text.sections.get_mut(0) {
-            section.style.color = GameColors::DAMAGE_TEXT.with_alpha(alpha);
-        }
+        text_color.0 = GameColors::DAMAGE_TEXT.with_alpha(alpha);
 
         if number.lifetime.finished() {
             commands.entity(entity).despawn_recursive();

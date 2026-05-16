@@ -258,7 +258,7 @@ pub(super) fn update_start_button_text(
 pub(super) fn update_wave_announcement(
     mut commands: Commands,
     mut announcements: Query<(Entity, &mut WaveAnnouncement, &Children)>,
-    mut text_query: Query<&mut Text, Without<StartWaveButtonText>>,
+    mut text_query: Query<&mut TextColor, Without<StartWaveButtonText>>,
     time: Res<Time>,
 ) {
     for (entity, mut announcement, children) in &mut announcements {
@@ -278,11 +278,9 @@ pub(super) fn update_wave_announcement(
 
         // Update all child text alphas
         for &child in children.iter() {
-            if let Ok(mut text) = text_query.get_mut(child) {
-                if let Some(section) = text.sections.get_mut(0) {
-                    let base_color = section.style.color;
-                    section.style.color = base_color.with_alpha(alpha);
-                }
+            if let Ok(mut text_color) = text_query.get_mut(child) {
+                let base_color = text_color.0;
+                text_color.0 = base_color.with_alpha(alpha);
             }
         }
 

@@ -846,20 +846,17 @@ fn spawn_tower_visuals(
     ));
 
     commands.spawn((
-        Text2dBundle {
-            text: Text::from_section(
-                "1",
-                TextStyle {
-                    font: assets.font.clone(),
-                    font_size: 12.0,
-                    color: Color::WHITE,
-                },
-            ).with_justify(JustifyText::Center),
-            transform: Transform::from_translation(
-                (pos + badge_offset).extend(ZDepth::BADGE_TEXT)
-            ),
+        Text2d::new("1"),
+        TextFont {
+            font: assets.font.clone(),
+            font_size: 12.0,
             ..default()
         },
+        TextColor(Color::WHITE),
+        TextLayout::new_with_justify(JustifyText::Center),
+        Transform::from_translation(
+            (pos + badge_offset).extend(ZDepth::BADGE_TEXT)
+        ),
         TowerLevelBadge { tower: tower_entity },
         GameEntity,
     ));

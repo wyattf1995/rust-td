@@ -178,7 +178,7 @@ fn ability_input(
                     // Don't fire if clicking on UI areas (dynamic zone boundaries)
                     let window_height = window.height();
                     if cursor_pos.y <= window_height - ui_zones.bottom_bar_height - 10.0 && cursor_pos.y >= ui_zones.top_bar_height + 10.0 {
-                        if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
+                        if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
                             artillery_events.send(ArtilleryAbilityEvent { position: world_pos });
                             abilities.artillery_targeting = false;
                             abilities.artillery_ready = false;
@@ -360,7 +360,7 @@ fn update_artillery_target(
     if abilities.artillery_targeting {
         if let Ok((camera, camera_transform)) = camera_q.get_single() {
             if let Some(cursor_pos) = pointer.position {
-                if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
+                if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
                     // Update or spawn cursor
                     if let Ok((_, mut transform)) = cursor_query.get_single_mut() {
                         transform.translation = world_pos.extend(ZDepth::ARTILLERY_CURSOR);

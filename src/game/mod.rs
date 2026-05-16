@@ -703,7 +703,7 @@ fn share_button_system(
         (Changed<Interaction>, With<ShareButton>),
     >,
     share_text: Option<Res<ShareText>>,
-    mut text_query: Query<&mut Text, With<ShareButtonText>>,
+    mut text_query: Query<(&mut Text, &mut TextColor), With<ShareButtonText>>,
     mut feedback: ResMut<CopyFeedback>,
     time: Res<Time>,
 ) {
@@ -712,9 +712,9 @@ fn share_button_system(
         timer.tick(time.delta());
         if timer.finished() {
             feedback.timer = None;
-            for mut text in &mut text_query {
+            for (mut text, mut text_color) in &mut text_query {
                 text.0 = "SHARE".into();
-                text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.8);
+                text_color.0 = Color::srgba(1.0, 1.0, 1.0, 0.8);
             }
         }
     }
@@ -729,9 +729,9 @@ fn share_button_system(
                     { let _ = &share.0; }
                 }
                 // Show "Copied!" feedback
-                for mut text in &mut text_query {
+                for (mut text, mut text_color) in &mut text_query {
                     text.0 = "COPIED!".into();
-                    text.sections[0].style.color = Color::srgb(0.4, 1.0, 0.5);
+                    text_color.0 = Color::srgb(0.4, 1.0, 0.5);
                 }
                 feedback.timer = Some(Timer::from_seconds(1.5, TimerMode::Once));
                 *color = Color::srgba(0.4, 1.0, 0.5, 0.2).into();
@@ -916,7 +916,7 @@ fn update_save_warning_toast(
     assets: Res<crate::loading::GameAssets>,
     mut save_warning: ResMut<SaveWarning>,
     mut toasts: Query<(Entity, &mut SaveWarningToast, &Children)>,
-    mut text_query: Query<&mut Text>,
+    mut text_color_query: Query<&mut TextColor>,
     time: Res<Time>,
 ) {
     // Spawn toast if warning was just triggered and no toast exists
@@ -969,10 +969,8 @@ fn update_save_warning_toast(
         };
 
         for &child in children.iter() {
-            if let Ok(mut text) = text_query.get_mut(child) {
-                if let Some(section) = text.sections.get_mut(0) {
-                    section.style.color = GameColors::WARNING_TEXT.with_alpha(alpha);
-                }
+            if let Ok(mut text_color) = text_color_query.get_mut(child) {
+                text_color.0 = GameColors::WARNING_TEXT.with_alpha(alpha);
             }
         }
 
