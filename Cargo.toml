@@ -6,7 +6,7 @@ authors = ["Wyatt Fleming"]
 description = "A browser-based tower defense game built with Rust and Bevy"
 
 [dependencies]
-bevy = { version = "0.14", default-features = false, features = [
+bevy = { version = "0.15", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_render",

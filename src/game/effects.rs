@@ -83,9 +83,9 @@ fn update_hit_sparks(
         spark.lifetime.tick(time.delta());
 
         // Move with deceleration
-        transform.translation.x += spark.velocity.x * time.delta_seconds();
-        transform.translation.y += spark.velocity.y * time.delta_seconds();
-        spark.velocity *= 0.85_f32.powf(time.delta_seconds() * 60.0);
+        transform.translation.x += spark.velocity.x * time.delta_secs();
+        transform.translation.y += spark.velocity.y * time.delta_secs();
+        spark.velocity *= 0.85_f32.powf(time.delta_secs() * 60.0);
 
         // Fade out
         let alpha = (1.0 - ease_out(spark.lifetime.fraction())) * 0.9;
@@ -158,7 +158,7 @@ fn update_armor_shimmer(
     }
     if settings.reduce_motion { return; }
 
-    let elapsed = time.elapsed_seconds();
+    let elapsed = time.elapsed_secs();
 
     for (enemy, mut sprite) in &mut enemies {
         if (enemy.enemy_type.armor() > 0.0 || enemy.bonus_armor > 0.0) && !enemy.marked_dead {
@@ -187,7 +187,7 @@ fn update_tower_idle_glow(
     }
     if settings.reduce_motion { return; }
 
-    let elapsed = time.elapsed_seconds();
+    let elapsed = time.elapsed_secs();
 
     for (core, mut sprite) in &mut cores {
         if let Ok((tower, _)) = towers.get(core.tower) {
@@ -219,7 +219,7 @@ fn update_path_energy_pulse(
     }
     if settings.reduce_motion { return; }
 
-    let elapsed = time.elapsed_seconds();
+    let elapsed = time.elapsed_secs();
 
     for (dot, mut sprite) in &mut dots {
         // Occasional bright flash using modulo condition

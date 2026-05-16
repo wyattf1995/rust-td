@@ -119,7 +119,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -128,7 +128,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                     ..default()
                 },
                 background_color: Color::srgba(0.06, 0.06, 0.1, 0.85).into(),
-                z_index: ZIndex::Global(10),
+                z_index: ZIndex(10),
                 ..default()
             },
             MenuScreen,
@@ -136,36 +136,34 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
         .with_children(|parent| {
             // Title with glow effect
             parent.spawn((
-                TextBundle::from_section(
-                    "NEON COMMAND",
-                    TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 82.0,
-                        color: GameColors::BRAND,
-                    },
-                )
-                .with_style(Style {
+                Text::new("NEON COMMAND"),
+                TextFont {
+                    font: assets.font.clone(),
+                    font_size: 82.0,
+                    ..default()
+                },
+                TextColor(GameColors::BRAND),
+                Node {
                     margin: UiRect::bottom(Val::Px(15.0)),
                     ..default()
-                }),
+                },
                 TitleText,
             ));
 
             // Subtitle
-            parent.spawn(
-                TextBundle::from_section(
-                    "TACTICAL TOWER DEFENSE",
-                    TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 22.0,
-                        color: Color::srgba(0.4, 0.85, 1.0, 0.7),
-                    },
-                )
-                .with_style(Style {
+            parent.spawn((
+                Text::new("TACTICAL TOWER DEFENSE"),
+                TextFont {
+                    font: assets.font.clone(),
+                    font_size: 22.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(0.4, 0.85, 1.0, 0.7)),
+                Node {
                     margin: UiRect::bottom(Val::Px(50.0)),
                     ..default()
-                }),
-            );
+                },
+            ));
 
             // Challenge banner (only shown when opened via challenge URL)
             if let Some(ref map_name) = challenge.map_name {
@@ -179,30 +177,29 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                     .map(|p| p.name().to_string())
                     .unwrap_or_else(|| map_name.clone());
 
-                parent.spawn(
-                    TextBundle::from_section(
-                        format!(
-                            "Challenge: Beat Wave {} on {}{}!",
-                            wave, display_name, score_text
-                        ),
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 18.0,
-                            color: GameColors::GOLD,
-                        },
-                    )
-                    .with_style(Style {
+                parent.spawn((
+                    Text::new(format!(
+                        "Challenge: Beat Wave {} on {}{}!",
+                        wave, display_name, score_text
+                    )),
+                    TextFont {
+                        font: assets.font.clone(),
+                        font_size: 18.0,
+                        ..default()
+                    },
+                    TextColor(GameColors::GOLD),
+                    Node {
                         margin: UiRect::bottom(Val::Px(16.0)),
                         ..default()
-                    }),
-                );
+                    },
+                ));
             }
 
             // Play button
             parent
                 .spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(220.0),
                             height: Val::Px(65.0),
                             justify_content: JustifyContent::Center,
@@ -217,20 +214,21 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                     PlayButton,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "PLAY",
-                        TextStyle {
+                    parent.spawn((
+                        Text::new("PLAY"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 32.0,
-                            color: Color::WHITE,
+                            ..default()
                         },
+                        TextColor(Color::WHITE),
                     ));
                 });
 
             // Map selection row
             parent
                 .spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         flex_direction: FlexDirection::Row,
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
@@ -252,7 +250,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
 
                         row.spawn((
                             ButtonBundle {
-                                style: Style {
+                                node: Node {
                                     width: Val::Px(130.0),
                                     height: Val::Px(95.0),
                                     flex_direction: FlexDirection::Column,
@@ -272,7 +270,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                             // Preview container
                             let path = GameMap::generate_path_for(preset);
                             btn.spawn(NodeBundle {
-                                style: Style {
+                                node: Node {
                                     width: Val::Px(90.0),
                                     height: Val::Px(55.0),
                                     position_type: PositionType::Relative,
@@ -286,7 +284,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                                 for &(px, py) in &path {
                                     if px < GRID_WIDTH && py < GRID_HEIGHT {
                                         preview.spawn(NodeBundle {
-                                            style: Style {
+                                            node: Node {
                                                 width: Val::Px(4.0),
                                                 height: Val::Px(4.0),
                                                 position_type: PositionType::Absolute,
@@ -302,38 +300,41 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                             });
 
                             // Preset name
-                            btn.spawn(TextBundle::from_section(
-                                preset.name(),
-                                TextStyle {
+                            btn.spawn((
+                                Text::new(preset.name()),
+                                TextFont {
                                     font: assets.font.clone(),
                                     font_size: 12.0,
-                                    color: if is_selected {
+                                    ..default()
+                                },
+                                TextColor(if is_selected {
                                         GameColors::PRIMARY
                                     } else {
                                         Color::WHITE
-                                    },
-                                },
+                                    }),
                             ));
 
                             // Description
-                            btn.spawn(TextBundle::from_section(
-                                preset.description(),
-                                TextStyle {
+                            btn.spawn((
+                                Text::new(preset.description()),
+                                TextFont {
                                     font: assets.font.clone(),
                                     font_size: 10.0,
-                                    color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                                    ..default()
                                 },
+                                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.4)),
                             ));
 
                             // Best wave (if record exists)
                             if let Some(entry) = high_scores.get(preset.name()) {
-                                btn.spawn(TextBundle::from_section(
-                                    format!("Best: Wave {}", entry.wave),
-                                    TextStyle {
+                                btn.spawn((
+                                    Text::new(format!("Best: Wave {}", entry.wave)),
+                                    TextFont {
                                         font: assets.font.clone(),
                                         font_size: 10.0,
-                                        color: Color::srgba(1.0, 0.85, 0.2, 0.5),
+                                        ..default()
                                     },
+                                    TextColor(Color::srgba(1.0, 0.85, 0.2, 0.5)),
                                 ));
                             }
                         });
@@ -345,7 +346,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                 let start_wave = 1usize; // default
                 parent
                     .spawn(NodeBundle {
-                        style: Style {
+                        node: Node {
                             flex_direction: FlexDirection::Row,
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
@@ -357,13 +358,14 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                     })
                     .with_children(|row| {
                         // Label
-                        row.spawn(TextBundle::from_section(
-                            "START WAVE:",
-                            TextStyle {
+                        row.spawn((
+                            Text::new("START WAVE:"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 11.0,
-                                color: Color::srgba(1.0, 1.0, 1.0, 0.5),
+                                ..default()
                             },
+                            TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)),
                         ));
 
                         for wave in [1, 5, 10, 15] {
@@ -376,7 +378,7 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
 
                             row.spawn((
                                 ButtonBundle {
-                                    style: Style {
+                                    node: Node {
                                         width: Val::Px(50.0),
                                         height: Val::Px(30.0),
                                         justify_content: JustifyContent::Center,
@@ -391,17 +393,18 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                                 WaveStartButton(wave),
                             ))
                             .with_children(|btn| {
-                                btn.spawn(TextBundle::from_section(
-                                    format!("{}", wave),
-                                    TextStyle {
+                                btn.spawn((
+                                    Text::new(format!("{}", wave)),
+                                    TextFont {
                                         font: assets.font.clone(),
                                         font_size: 13.0,
-                                        color: if is_selected {
+                                        ..default()
+                                    },
+                                    TextColor(if is_selected {
                                             GameColors::PRIMARY
                                         } else {
                                             Color::WHITE
-                                        },
-                                    },
+                                        }),
                                 ));
                             });
                         }
@@ -409,59 +412,56 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
 
                 // Wave start info text (hidden when wave == 1)
                 parent.spawn((
-                    TextBundle::from_section(
-                        "",
-                        TextStyle {
-                            font: assets.font.clone(),
-                            font_size: 11.0,
-                            color: Color::srgba(1.0, 0.85, 0.2, 0.6),
-                        },
-                    )
-                    .with_style(Style {
+                    Text::new(""),
+                    TextFont {
+                        font: assets.font.clone(),
+                        font_size: 11.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgba(1.0, 0.85, 0.2, 0.6)),
+                    Node {
                         margin: UiRect::top(Val::Px(4.0)),
                         ..default()
-                    }),
+                    },
                     WaveStartInfoText,
                 ));
             }
 
             // Features list
-            parent.spawn(
-                TextBundle::from_section(
-                    "8 Towers • Synergy Combos • Infinite Waves",
-                    TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 16.0,
-                        color: Color::srgba(1.0, 1.0, 1.0, 0.5),
-                    },
-                )
-                .with_style(Style {
+            parent.spawn((
+                Text::new("8 Towers • Synergy Combos • Infinite Waves"),
+                TextFont {
+                    font: assets.font.clone(),
+                    font_size: 16.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)),
+                Node {
                     margin: UiRect::top(Val::Px(30.0)),
                     ..default()
-                }),
-            );
+                },
+            ));
 
             // Controls hint
-            parent.spawn(
-                TextBundle::from_section(
-                    "Keys 1-8 to select towers • Click to place • Space to send wave",
-                    TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 14.0,
-                        color: Color::srgba(1.0, 1.0, 1.0, 0.35),
-                    },
-                )
-                .with_style(Style {
+            parent.spawn((
+                Text::new("Keys 1-8 to select towers • Click to place • Space to send wave"),
+                TextFont {
+                    font: assets.font.clone(),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.35)),
+                Node {
                     margin: UiRect::top(Val::Px(15.0)),
                     ..default()
-                }),
-            );
+                },
+            ));
 
             // Settings button
             parent
                 .spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(120.0),
                             height: Val::Px(36.0),
                             justify_content: JustifyContent::Center,
@@ -476,35 +476,38 @@ fn setup_menu(mut commands: Commands, assets: Res<GameAssets>, mut selected_map:
                     MenuSettingsButton,
                 ))
                 .with_children(|btn| {
-                    btn.spawn(TextBundle::from_section(
-                        "SETTINGS",
-                        TextStyle {
+                    btn.spawn((
+                        Text::new("SETTINGS"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 14.0,
-                            color: Color::srgba(1.0, 1.0, 1.0, 0.6),
+                            ..default()
                         },
+                        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
                     ));
                 });
 
             // Lifetime stats (only shown after at least 1 game)
             if lifetime.total_games > 0 {
-                parent.spawn(TextBundle::from_section(
-                    format!(
+                parent.spawn((
+                    Text::new(format!(
                         "{} games • {} kills • best wave {} • {}g earned",
                         lifetime.total_games,
                         lifetime.total_kills,
                         lifetime.best_wave_ever,
                         lifetime.total_gold_earned
-                    ),
-                    TextStyle {
+                    )),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 11.0,
-                        color: Color::srgba(1.0, 0.85, 0.2, 0.35),
+                        ..default()
                     },
-                ).with_style(Style {
-                    margin: UiRect::top(Val::Px(15.0)),
-                    ..default()
-                }));
+                    TextColor(Color::srgba(1.0, 0.85, 0.2, 0.35)),
+                    Node {
+                        margin: UiRect::top(Val::Px(15.0)),
+                        ..default()
+                    },
+                ));
             }
         });
 }
@@ -569,8 +572,8 @@ fn animate_projectiles(
 
     for (entity, mut transform, projectile) in &mut query {
         // Move projectile
-        transform.translation.x += projectile.velocity.x * time.delta_seconds();
-        transform.translation.y += projectile.velocity.y * time.delta_seconds();
+        transform.translation.x += projectile.velocity.x * time.delta_secs();
+        transform.translation.y += projectile.velocity.y * time.delta_secs();
 
         // If off screen, respawn
         if transform.translation.x > 800.0 || transform.translation.y.abs() > 450.0 {
@@ -589,7 +592,7 @@ fn animate_title_glow(
         let pulse = if settings.reduce_motion {
             1.0
         } else {
-            let t = time.elapsed_seconds();
+            let t = time.elapsed_secs();
             (t * 2.0).sin() * 0.15 + 0.85
         };
 

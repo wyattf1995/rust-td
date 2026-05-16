@@ -6,22 +6,22 @@ pub(super) fn update_gold_display(
 ) {
     if economy.is_changed() {
         for mut text in &mut query {
-            text.sections[0].value = format!("{}", economy.gold);
+            text.0 = format!("{}", economy.gold);
         }
     }
 }
 
 pub(super) fn update_gold_reject_flash(
     mut flash: ResMut<GoldRejectFlash>,
-    mut query: Query<&mut Text, With<GoldText>>,
+    mut query: Query<&mut TextColor, With<GoldText>>,
     time: Res<Time>,
 ) {
     if let Some(ref mut timer) = flash.timer {
         timer.tick(time.delta());
         let t = timer.fraction();
         let flash_color = GameColors::HEALTH_LOW.mix(&GameColors::GOLD, t);
-        for mut text in &mut query {
-            text.sections[0].style.color = flash_color;
+        for mut text_color in &mut query {
+            text_color.0 = flash_color;
         }
         if timer.finished() {
             flash.timer = None;
@@ -31,45 +31,45 @@ pub(super) fn update_gold_reject_flash(
 
 pub(super) fn update_gold_rush_indicator(
     abilities: Res<PlayerAbilities>,
-    mut indicator_query: Query<(&mut Text, &mut Style), With<GoldRushIndicator>>,
-    mut gold_text_query: Query<&mut Text, (With<GoldText>, Without<GoldRushIndicator>)>,
+    mut indicator_query: Query<(&mut Text, &mut TextColor, &mut Node), With<GoldRushIndicator>>,
+    mut gold_text_query: Query<&mut TextColor, (With<GoldText>, Without<GoldRushIndicator>)>,
     time: Res<Time>,
     settings: Res<crate::persistence::GameSettings>,
 ) {
     let is_active = abilities.gold_rush_active.is_some();
     let remaining = abilities.gold_rush_active.as_ref().map(|t| t.remaining_secs()).unwrap_or(0.0);
 
-    for (mut text, mut style) in &mut indicator_query {
+    for (mut text, mut text_color, mut style) in &mut indicator_query {
         if is_active {
             style.display = Display::Flex;
-            text.sections[0].value = format!("2x {:.0}s", remaining);
+            text.0 = format!("2x {:.0}s", remaining);
 
             let alpha = if settings.reduce_motion {
                 1.0
             } else {
-                let pulse = (time.elapsed_seconds() * 4.0).sin() * 0.5 + 0.5;
+                let pulse = (time.elapsed_secs() * 4.0).sin() * 0.5 + 0.5;
                 0.7 + pulse * 0.3
             };
-            text.sections[0].style.color = GameColors::ABILITY_GOLD_RUSH.with_alpha(alpha);
+            text_color.0 = GameColors::ABILITY_GOLD_RUSH.with_alpha(alpha);
         } else {
             style.display = Display::None;
         }
     }
 
     // Pulse the gold amount text while Gold Rush is active
-    for mut text in &mut gold_text_query {
+    for mut text_color in &mut gold_text_query {
         if is_active {
             if settings.reduce_motion {
-                text.sections[0].style.color = GameColors::GOLD;
+                text_color.0 = GameColors::GOLD;
             } else {
-                let pulse = (time.elapsed_seconds() * 3.0).sin() * 0.5 + 0.5;
+                let pulse = (time.elapsed_secs() * 3.0).sin() * 0.5 + 0.5;
                 let r = GameColors::GOLD.to_srgba().red * (0.85 + pulse * 0.15);
                 let g = GameColors::GOLD.to_srgba().green * (0.85 + pulse * 0.15);
                 let b = GameColors::GOLD.to_srgba().blue * (0.85 + pulse * 0.15);
-                text.sections[0].style.color = Color::srgb(r.min(1.0), g.min(1.0), b.min(1.0));
+                text_color.0 = Color::srgb(r.min(1.0), g.min(1.0), b.min(1.0));
             }
         } else {
-            text.sections[0].style.color = GameColors::GOLD;
+            text_color.0 = GameColors::GOLD;
         }
     }
 }
@@ -87,28 +87,28 @@ pub(super) fn update_lives_display(
         flash.previous_lives = economy.lives;
 
         for mut text in &mut query {
-            text.sections[0].value = format!("{}", economy.lives);
+            text.0 = format!("{}", economy.lives);
         }
     }
 }
 
 pub(super) fn update_life_flash(
     mut flash: ResMut<LifeLostFlash>,
-    mut query: Query<&mut Text, With<LivesText>>,
+    mut query: Query<&mut TextColor, With<LivesText>>,
     time: Res<Time>,
 ) {
     if let Some(ref mut timer) = flash.timer {
         timer.tick(time.delta());
         let progress = timer.fraction();
 
-        for mut text in &mut query {
+        for mut text_color in &mut query {
             // Lerp from bright red back to primary color
             let flash_color = GameColors::HEALTH_LOW;
             let normal_color = GameColors::PRIMARY;
             let r = flash_color.to_srgba().red + (normal_color.to_srgba().red - flash_color.to_srgba().red) * progress;
             let g = flash_color.to_srgba().green + (normal_color.to_srgba().green - flash_color.to_srgba().green) * progress;
             let b = flash_color.to_srgba().blue + (normal_color.to_srgba().blue - flash_color.to_srgba().blue) * progress;
-            text.sections[0].style.color = Color::srgb(r, g, b);
+            text_color.0 = Color::srgb(r, g, b);
         }
 
         if timer.finished() {
@@ -138,14 +138,14 @@ pub(super) fn update_wave_display(
             WaveModifier::GoldRush => " [GOLD!]",
         };
 
-        text.sections[0].value = format!("Wave {}{}{}{}", current, difficulty, modifier, status);
+        text.0 = format!("Wave {}{}{}{}", current, difficulty, modifier, status);
     }
 }
 
 pub(super) fn update_combo_display(
     kill_streak: Res<KillStreak>,
-    mut display_query: Query<&mut Style, With<ComboDisplay>>,
-    mut text_query: Query<&mut Text, With<ComboText>>,
+    mut display_query: Query<&mut Node, With<ComboDisplay>>,
+    mut text_query: Query<(&mut Text, &mut TextColor), With<ComboText>>,
 ) {
     if !kill_streak.is_changed() { return; }
     for mut style in &mut display_query {
@@ -157,12 +157,12 @@ pub(super) fn update_combo_display(
         };
     }
 
-    for mut text in &mut text_query {
+    for (mut text, mut text_color) in &mut text_query {
         if kill_streak.count >= 3 {
-            text.sections[0].value = format!("COMBO x{}", kill_streak.count);
+            text.0 = format!("COMBO x{}", kill_streak.count);
 
             // Color changes based on combo level
-            text.sections[0].style.color = if kill_streak.count >= 10 {
+            text_color.0 = if kill_streak.count >= 10 {
                 Color::srgb(1.0, 0.3, 0.3) // Red for 10+
             } else if kill_streak.count >= 6 {
                 Color::srgb(1.0, 0.6, 0.0) // Orange for 6+
@@ -179,7 +179,7 @@ pub(super) fn update_score_display(
 ) {
     if economy.is_changed() {
         for mut text in &mut query {
-            text.sections[0].value = format!("Score: {}", economy.score);
+            text.0 = format!("Score: {}", economy.score);
         }
     }
 }
@@ -190,7 +190,7 @@ pub(super) fn speed_button_system(
         With<SpeedButton>,
     >,
     mut game_speed: ResMut<GameSpeed>,
-    mut text_query: Query<&mut Text>,
+    mut text_color_query: Query<&mut TextColor>,
     mut time: ResMut<Time<Virtual>>,
     mut ui_clicked: ResMut<UiClicked>,
 ) {
@@ -223,24 +223,24 @@ pub(super) fn speed_button_system(
             *color = active_bg;
             *border = BorderColor(GameColors::PRIMARY);
             for &child in children.iter() {
-                if let Ok(mut text) = text_query.get_mut(child) {
-                    text.sections[0].style.color = GameColors::PRIMARY;
+                if let Ok(mut text_color) = text_color_query.get_mut(child) {
+                    text_color.0 = GameColors::PRIMARY;
                 }
             }
         } else if *interaction == Interaction::Hovered {
             *color = hover_bg;
             *border = BorderColor(Color::NONE);
             for &child in children.iter() {
-                if let Ok(mut text) = text_query.get_mut(child) {
-                    text.sections[0].style.color = GameColors::TEXT_MEDIUM;
+                if let Ok(mut text_color) = text_color_query.get_mut(child) {
+                    text_color.0 = GameColors::TEXT_MEDIUM;
                 }
             }
         } else {
             *color = inactive_bg;
             *border = BorderColor(Color::NONE);
             for &child in children.iter() {
-                if let Ok(mut text) = text_query.get_mut(child) {
-                    text.sections[0].style.color = GameColors::TEXT_MEDIUM;
+                if let Ok(mut text_color) = text_color_query.get_mut(child) {
+                    text_color.0 = GameColors::TEXT_MEDIUM;
                 }
             }
         }
@@ -251,7 +251,7 @@ pub(super) fn speed_button_system(
 pub(super) fn update_undo_hint(
     mut commands: Commands,
     recent: Res<RecentPlacement>,
-    mut hint_query: Query<(Entity, &mut Text, &mut Style), With<UndoHintText>>,
+    mut hint_query: Query<(Entity, &mut Text, &mut TextColor, &mut Node), With<UndoHintText>>,
     assets: Res<GameAssets>,
 ) {
     let is_active = recent.timer.as_ref().is_some_and(|t| !t.finished());
@@ -260,38 +260,38 @@ pub(super) fn update_undo_hint(
         let remaining = recent.timer.as_ref().map_or(0.0, |t| t.remaining_secs());
         let label = format!("Z = Undo ({:.0}s)", remaining.ceil());
 
-        if let Ok((_entity, mut text, mut style)) = hint_query.get_single_mut() {
+        if let Ok((_entity, mut text, mut text_color, mut style)) = hint_query.get_single_mut() {
             // Update existing hint
-            text.sections[0].value = label;
+            text.0 = label;
             style.display = Display::Flex;
             // Fade out in last second
             let alpha = if remaining < 1.0 { remaining } else { 0.7 };
-            text.sections[0].style.color = Color::srgba(0.4, 1.0, 0.5, alpha);
+            text_color.0 = Color::srgba(0.4, 1.0, 0.5, alpha);
         } else {
             // Spawn hint text (positioned bottom-center, above ability bar)
             commands.spawn((
-                TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 14.0,
-                        color: Color::srgba(0.4, 1.0, 0.5, 0.7),
-                    },
-                ).with_style(Style {
+                Text::new(label),
+                TextFont {
+                    font: assets.font.clone(),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(0.4, 1.0, 0.5, 0.7)),
+                Node {
                     position_type: PositionType::Absolute,
                     bottom: Val::Px(120.0),
                     left: Val::Percent(50.0),
                     margin: UiRect::left(Val::Px(-40.0)),
                     display: Display::Flex,
                     ..default()
-                }),
+                },
                 UndoHintText,
                 super::GameEntity,
             ));
         }
     } else {
         // Hide hint when not active
-        for (_entity, _text, mut style) in &mut hint_query {
+        for (_entity, _text, _text_color, mut style) in &mut hint_query {
             style.display = Display::None;
         }
     }

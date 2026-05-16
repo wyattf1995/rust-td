@@ -43,7 +43,7 @@ pub(super) fn ability_button_activate(
 pub(super) fn update_ability_display(
     abilities: Res<PlayerAbilities>,
     mut button_query: Query<(&AbilityButton, &Interaction, &mut BackgroundColor, &mut BorderColor)>,
-    mut cooldown_text_query: Query<(&AbilityCooldownText, &mut Text)>,
+    mut cooldown_text_query: Query<(&AbilityCooldownText, &mut Text, &mut TextColor)>,
 ) {
     for (button, interaction, mut bg_color, mut border_color) in &mut button_query {
         let (ready, active, _remaining) = ability_state(&abilities, button.0);
@@ -70,18 +70,18 @@ pub(super) fn update_ability_display(
         }
     }
 
-    for (cooldown_text, mut text) in &mut cooldown_text_query {
+    for (cooldown_text, mut text, mut text_color) in &mut cooldown_text_query {
         let (ready, active, remaining) = ability_state(&abilities, cooldown_text.0);
 
         if ready {
-            text.sections[0].value = "Ready".to_string();
-            text.sections[0].style.color = GameColors::SUCCESS;
+            **text = "Ready".to_string();
+            text_color.0 = GameColors::SUCCESS;
         } else if active {
-            text.sections[0].value = format!("{:.0}s", remaining);
-            text.sections[0].style.color = GameColors::GOLD;
+            **text = format!("{:.0}s", remaining);
+            text_color.0 = GameColors::GOLD;
         } else {
-            text.sections[0].value = format!("{:.0}s", remaining);
-            text.sections[0].style.color = GameColors::TEXT_MEDIUM;
+            **text = format!("{:.0}s", remaining);
+            text_color.0 = GameColors::TEXT_MEDIUM;
         }
     }
 }
@@ -111,7 +111,7 @@ pub(super) fn update_ability_tooltips(
 
         commands.spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     position_type: PositionType::Absolute,
                     left: Val::Px(100.0),
                     top: Val::Px(60.0),
@@ -128,21 +128,23 @@ pub(super) fn update_ability_tooltips(
             AbilityTooltip,
             GameEntity,
         )).with_children(|parent| {
-            parent.spawn(TextBundle::from_section(
-                title,
-                TextStyle {
+            parent.spawn((
+                Text::new(title),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 13.0,
-                    color: Color::WHITE,
+                    ..default()
                 },
+                TextColor(Color::WHITE),
             ));
-            parent.spawn(TextBundle::from_section(
-                desc,
-                TextStyle {
+            parent.spawn((
+                Text::new(desc),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 11.0,
-                    color: GameColors::TEXT_BRIGHT,
+                    ..default()
                 },
+                TextColor(GameColors::TEXT_BRIGHT),
             ));
         });
     }
@@ -150,8 +152,8 @@ pub(super) fn update_ability_tooltips(
 
 pub(super) fn adapt_ability_bar_layout(
     screen_info: Res<ScreenInfo>,
-    mut ability_bar: Query<&mut Style, With<AbilityBar>>,
-    mut ability_buttons: Query<&mut Style, (With<AbilityButton>, Without<AbilityBar>)>,
+    mut ability_bar: Query<&mut Node, With<AbilityBar>>,
+    mut ability_buttons: Query<&mut Node, (With<AbilityButton>, Without<AbilityBar>)>,
 ) {
     if !screen_info.is_changed() { return; }
 

@@ -50,7 +50,7 @@ fn toggle_synergy_panel(
 fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
     commands.spawn((
         NodeBundle {
-            style: Style {
+            node: Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 position_type: PositionType::Absolute,
@@ -59,14 +59,14 @@ fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
                 ..default()
             },
             background_color: GameColors::OVERLAY_DIM.into(),
-            z_index: ZIndex::Global(21),
+            z_index: ZIndex(21),
             ..default()
         },
         SynergyOverlay,
     )).with_children(|parent| {
         // Panel container
         parent.spawn(NodeBundle {
-            style: Style {
+            node: Node {
                 width: Val::Percent(90.0),
                 max_width: Val::Px(380.0),
                 flex_direction: FlexDirection::Column,
@@ -81,7 +81,7 @@ fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
         }).with_children(|panel| {
             // Header row
             panel.spawn(NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     justify_content: JustifyContent::SpaceBetween,
                     align_items: AlignItems::Center,
@@ -90,18 +90,19 @@ fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
                 },
                 ..default()
             }).with_children(|row| {
-                row.spawn(TextBundle::from_section(
-                    "TOWER SYNERGIES",
-                    TextStyle {
+                row.spawn((
+                    Text::new("TOWER SYNERGIES"),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 22.0,
-                        color: GameColors::PRIMARY,
+                        ..default()
                     },
+                    TextColor(GameColors::PRIMARY),
                 ));
                 // Close button
                 row.spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(30.0),
                             height: Val::Px(30.0),
                             justify_content: JustifyContent::Center,
@@ -114,13 +115,14 @@ fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
                     },
                     SynergyCloseButton,
                 )).with_children(|btn| {
-                    btn.spawn(TextBundle::from_section(
-                        "X",
-                        TextStyle {
+                    btn.spawn((
+                        Text::new("X"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 16.0,
-                            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                            ..default()
                         },
+                        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
                     ));
                 });
             });
@@ -132,17 +134,19 @@ fn spawn_synergy_panel(commands: &mut Commands, assets: &GameAssets) {
             }
 
             // Footer explanation
-            panel.spawn(TextBundle::from_section(
-                "Place towers adjacent (including diagonals) to activate",
-                TextStyle {
+            panel.spawn((
+                Text::new("Place towers adjacent (including diagonals) to activate"),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 10.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.45),
+                    ..default()
                 },
-            ).with_style(Style {
-                margin: UiRect::top(Val::Px(4.0)),
-                ..default()
-            }));
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.45)),
+                Node {
+                    margin: UiRect::top(Val::Px(4.0)),
+                    ..default()
+                },
+            ));
         });
     });
 }
@@ -155,7 +159,7 @@ fn spawn_synergy_row(
     tower_b: TowerType,
 ) {
     parent.spawn(NodeBundle {
-        style: Style {
+        node: Node {
             width: Val::Percent(100.0),
             padding: UiRect::all(Val::Px(10.0)),
             flex_direction: FlexDirection::Column,
@@ -167,17 +171,18 @@ fn spawn_synergy_row(
         ..default()
     }).with_children(|row| {
         // Top line: synergy name
-        row.spawn(TextBundle::from_section(
-            format!("  {}  {}", synergy.name(), synergy.description()),
-            TextStyle {
+        row.spawn((
+            Text::new(format!("  {}  {}", synergy.name(), synergy.description())),
+            TextFont {
                 font: assets.font.clone(),
                 font_size: 14.0,
-                color: GameColors::SYNERGY,
+                ..default()
             },
+            TextColor(GameColors::SYNERGY),
         ));
         // Bottom line: tower requirement with colored indicators
         row.spawn(NodeBundle {
-            style: Style {
+            node: Node {
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 column_gap: Val::Px(6.0),
@@ -187,7 +192,7 @@ fn spawn_synergy_row(
         }).with_children(|req| {
             // Tower A color swatch
             req.spawn(NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Px(12.0),
                     height: Val::Px(12.0),
                     ..default()
@@ -196,25 +201,27 @@ fn spawn_synergy_row(
                 border_radius: BorderRadius::all(Val::Px(2.0)),
                 ..default()
             });
-            req.spawn(TextBundle::from_section(
-                tower_a.name(),
-                TextStyle {
+            req.spawn((
+                Text::new(tower_a.name()),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 11.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                    ..default()
                 },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
             ));
-            req.spawn(TextBundle::from_section(
-                " + ",
-                TextStyle {
+            req.spawn((
+                Text::new(" + "),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 11.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                    ..default()
                 },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.4)),
             ));
             // Tower B color swatch
             req.spawn(NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Px(12.0),
                     height: Val::Px(12.0),
                     ..default()
@@ -223,13 +230,14 @@ fn spawn_synergy_row(
                 border_radius: BorderRadius::all(Val::Px(2.0)),
                 ..default()
             });
-            req.spawn(TextBundle::from_section(
-                tower_b.name(),
-                TextStyle {
+            req.spawn((
+                Text::new(tower_b.name()),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 11.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                    ..default()
                 },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
             ));
         });
     });

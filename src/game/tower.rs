@@ -1012,7 +1012,7 @@ fn tower_attack(
         // Minigun ramp-up: track same-target duration
         let minigun_speed_mult = if tower.specialization == Some(Specialization::Minigun) {
             if tower.target == tower.ramp_up_target && tower.target.is_some() {
-                tower.ramp_up_timer += time.delta_seconds();
+                tower.ramp_up_timer += time.delta_secs();
             } else {
                 tower.ramp_up_timer = 0.0;
                 tower.ramp_up_target = tower.target;
@@ -1539,7 +1539,7 @@ fn update_level_badges(
     for (badge, mut text, mut badge_transform) in &mut badges {
         if let Ok((tower, tower_transform)) = towers.get(badge.tower) {
             // Update badge text to show current level + spec initial
-            text.sections[0].value = if let Some(spec) = tower.specialization {
+            text.0 = if let Some(spec) = tower.specialization {
                 format!("{}{}", tower.level, spec.initial())
             } else {
                 format!("{}", tower.level)
@@ -1720,7 +1720,7 @@ fn update_buff_aura_visuals(
     selected: Res<SelectedPlacedTower>,
     time: Res<Time>,
 ) {
-    let pulse = (time.elapsed_seconds() * 2.0).sin() * 0.5 + 0.5;
+    let pulse = (time.elapsed_secs() * 2.0).sin() * 0.5 + 0.5;
 
     for (indicator, mut sprite, mut transform) in &mut indicators {
         if let Ok((tower, tower_transform)) = towers.get(indicator.tower) {

@@ -48,7 +48,7 @@ pub(super) fn update_tower_selection(
 pub(super) fn update_tower_affordability(
     economy: Res<PlayerEconomy>,
     button_query: Query<(&TowerButton, &Interaction, &Children)>,
-    mut cost_text_query: Query<&mut Text, With<TowerCostText>>,
+    mut cost_text_query: Query<&mut TextColor, With<TowerCostText>>,
 ) {
     for (tower_button, interaction, children) in &button_query {
         let can_afford = economy.gold >= tower_button.0.cost();
@@ -58,8 +58,8 @@ pub(super) fn update_tower_affordability(
         }
 
         for &child in children.iter() {
-            if let Ok(mut text) = cost_text_query.get_mut(child) {
-                text.sections[0].style.color = if can_afford {
+            if let Ok(mut text_color) = cost_text_query.get_mut(child) {
+                text_color.0 = if can_afford {
                     GameColors::GOLD
                 } else {
                     GameColors::HEALTH_LOW
@@ -71,7 +71,7 @@ pub(super) fn update_tower_affordability(
 
 pub(super) fn update_info_panel(
     selected: Res<SelectedTowerType>,
-    mut name_query: Query<&mut Text, (With<InfoPanelName>, Without<InfoPanelDesc>, Without<InfoPanelStats>, Without<InfoPanelCost>)>,
+    mut name_query: Query<(&mut Text, &mut TextColor), (With<InfoPanelName>, Without<InfoPanelDesc>, Without<InfoPanelStats>, Without<InfoPanelCost>)>,
     mut desc_query: Query<&mut Text, (With<InfoPanelDesc>, Without<InfoPanelName>, Without<InfoPanelStats>, Without<InfoPanelCost>)>,
     mut stats_query: Query<&mut Text, (With<InfoPanelStats>, Without<InfoPanelName>, Without<InfoPanelDesc>, Without<InfoPanelCost>)>,
     mut cost_query: Query<&mut Text, (With<InfoPanelCost>, Without<InfoPanelName>, Without<InfoPanelDesc>, Without<InfoPanelStats>)>,
@@ -79,23 +79,23 @@ pub(super) fn update_info_panel(
     if selected.is_changed() {
         let tower_type = selected.0;
 
-        for mut text in &mut name_query {
-            text.sections[0].value = tower_type.name().to_string();
-            text.sections[0].style.color = tower_type.color();
+        for (mut text, mut text_color) in &mut name_query {
+            text.0 = tower_type.name().to_string();
+            text_color.0 = tower_type.color();
         }
 
         for mut text in &mut desc_query {
-            text.sections[0].value = tower_type.description().to_string();
+            text.0 = tower_type.description().to_string();
         }
 
         for mut text in &mut stats_query {
             if tower_type == TowerType::Buff {
-                text.sections[0].value = format!(
+                text.0 = format!(
                     "BUFF: +25%  RNG: {:.0}",
                     tower_type.range()
                 );
             } else {
-                text.sections[0].value = format!(
+                text.0 = format!(
                     "DMG: {:.0}  RNG: {:.0}\nSPD: {:.1}/s",
                     tower_type.damage(),
                     tower_type.range(),
@@ -105,7 +105,7 @@ pub(super) fn update_info_panel(
         }
 
         for mut text in &mut cost_query {
-            text.sections[0].value = format!("Cost: {}g", tower_type.cost());
+            text.0 = format!("Cost: {}g", tower_type.cost());
         }
     }
 }
@@ -169,7 +169,7 @@ pub(super) fn update_tower_context_menu(
     map: Res<GameMap>,
     towers: Query<(Entity, &Tower, Option<&TowerSynergies>)>,
     mut selected_tower: ResMut<SelectedPlacedTower>,
-    mut context_menu: Query<&mut Style, With<TowerDetailPanel>>,
+    mut context_menu: Query<&mut Node, With<TowerDetailPanel>>,
     mut upgrade_text: Query<&mut Text, (With<UpgradeCostText>, Without<SellValueText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
     mut sell_text: Query<&mut Text, (With<SellValueText>, Without<UpgradeCostText>, Without<TowerStatsText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
     mut stats_text: Query<&mut Text, (With<TowerStatsText>, Without<UpgradeCostText>, Without<SellValueText>, Without<TowerUpgradePreview>, Without<TargetingText>, Without<SynergyText>)>,
@@ -218,7 +218,7 @@ pub(super) fn update_tower_context_menu(
                     let spec_label = tower.specialization
                         .map(|s| format!(" [{}]", s.name()))
                         .unwrap_or_default();
-                    text.sections[0].value = format!("{}{} Lv{}\n", tower.tower_type.name(), spec_label, tower.level);
+                    text.0 = format!("{}{} Lv{}\n", tower.tower_type.name(), spec_label, tower.level);
                     if is_buff_tower {
                         let buff_pct = tower.buff_percentage() * 100.0;
                         text.sections[1].value = format!(
@@ -241,17 +241,17 @@ pub(super) fn update_tower_context_menu(
                 if needs_spec {
                     // Clear upgrade button/preview when spec choice is needed
                     for mut text in &mut upgrade_text {
-                        text.sections[0].value = String::new();
+                        text.0 = String::new();
                     }
                     for mut text in &mut preview_text {
-                        text.sections[0].value = "Choose Specialization\n".to_string();
+                        text.0 = "Choose Specialization\n".to_string();
                         text.sections[1].value = String::new();
                     }
                 } else {
                     // Update upgrade preview text using the tower's preview method
                     for mut text in &mut preview_text {
                         let (next_damage, next_range, next_speed) = tower.preview_upgrade();
-                        text.sections[0].value = format!("Level {} Preview\n", tower.level + 1);
+                        text.0 = format!("Level {} Preview\n", tower.level + 1);
                         if is_buff_tower {
                             let curr_buff = tower.buff_percentage() * 100.0;
                             let next_buff = tower.buff_percentage_next() * 100.0;
@@ -278,7 +278,7 @@ pub(super) fn update_tower_context_menu(
                     let upgrade_cost = tower.upgrade_cost();
                     let can_afford = economy.gold >= upgrade_cost;
                     for mut text in &mut upgrade_text {
-                        text.sections[0].value = if can_afford {
+                        text.0 = if can_afford {
                             format!("Upgrade [U] - {}g", upgrade_cost)
                         } else {
                             format!("Need {}g (have {})", upgrade_cost, economy.gold)
@@ -289,20 +289,20 @@ pub(super) fn update_tower_context_menu(
                     if sell_pending.tower == Some(tower_entity) {
                         if let Some(ref timer) = sell_pending.timer {
                             let remaining = timer.duration().as_secs_f32() - timer.elapsed_secs();
-                            text.sections[0].value = format!("Sell +{}g? [S] ({:.1}s)", tower.sell_value(), remaining.max(0.0));
+                            text.0 = format!("Sell +{}g? [S] ({:.1}s)", tower.sell_value(), remaining.max(0.0));
                             text.sections[0].style.color = GameColors::WARNING_TEXT;
                         } else {
-                            text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
+                            text.0 = format!("Sell [S] +{}g", tower.sell_value());
                             text.sections[0].style.color = Color::WHITE;
                         }
                     } else {
-                        text.sections[0].value = format!("Sell [S] +{}g", tower.sell_value());
+                        text.0 = format!("Sell [S] +{}g", tower.sell_value());
                         text.sections[0].style.color = Color::WHITE;
                     }
                 }
                 // Update targeting text to show current mode
                 for mut text in &mut targeting_text {
-                    text.sections[0].value = format!("Target: {} [T]", tower.targeting.name());
+                    text.0 = format!("Target: {} [T]", tower.targeting.name());
                 }
                 // Update synergy text
                 for mut text in &mut synergy_text {
@@ -314,13 +314,13 @@ pub(super) fn update_tower_context_menu(
                                 if i > 0 { result.push('\n'); }
                                 let _ = write!(result, "\u{26A1} {}: {}", s.name(), s.description());
                             }
-                            text.sections[0].value = result;
+                            text.0 = result;
                         } else {
-                            text.sections[0].value = "No synergies \u{2014} place matching towers adjacent".to_string();
+                            text.0 = "No synergies \u{2014} place matching towers adjacent".to_string();
                             text.sections[0].style.color = GameColors::TEXT_MEDIUM;
                         }
                     } else {
-                        text.sections[0].value = "No synergies \u{2014} place matching towers adjacent".to_string();
+                        text.0 = "No synergies \u{2014} place matching towers adjacent".to_string();
                         text.sections[0].style.color = GameColors::TEXT_MEDIUM;
                     }
                 }
@@ -337,7 +337,7 @@ pub(super) fn update_tower_context_menu(
 pub(super) fn update_spec_panel(
     selected_tower: Res<SelectedPlacedTower>,
     towers: Query<&Tower>,
-    mut spec_panel: Query<&mut Style, With<SpecChoicePanel>>,
+    mut spec_panel: Query<&mut Node, With<SpecChoicePanel>>,
     mut spec_buttons: Query<(&mut SpecButton, &Children)>,
     mut spec_texts: Query<&mut Text, With<SpecButtonText>>,
 ) {
@@ -370,7 +370,7 @@ pub(super) fn update_spec_panel(
                     spec_btn.0 = *spec;
                     for child in children.iter() {
                         if let Ok(mut text) = spec_texts.get_mut(*child) {
-                            text.sections[0].value = format!(
+                            text.0 = format!(
                                 "{}\n{}\n{}g",
                                 spec.name(),
                                 spec.description(),
@@ -490,7 +490,7 @@ pub(super) fn tower_context_buttons(
 
                 // Update targeting text
                 for mut text in &mut targeting_text {
-                    text.sections[0].value = format!("Target: {} [T]", tower.targeting.name());
+                    text.0 = format!("Target: {} [T]", tower.targeting.name());
                 }
             }
         }

@@ -1120,7 +1120,7 @@ fn update_path_flow_dots(
 
     for (mut dot, mut transform, mut sprite) in &mut dots {
         // Advance progress
-        dot.progress += dot.speed * time.delta_seconds();
+        dot.progress += dot.speed * time.delta_secs();
         if dot.progress >= 1.0 {
             dot.progress -= 1.0;
         }
@@ -1144,7 +1144,7 @@ fn update_path_flow_dots(
         let alpha = if settings.reduce_motion {
             0.25
         } else {
-            0.2 + 0.15 * (time.elapsed_seconds() * 3.0 + dot.progress * std::f32::consts::TAU).sin()
+            0.2 + 0.15 * (time.elapsed_secs() * 3.0 + dot.progress * std::f32::consts::TAU).sin()
         };
         sprite.color = GameColors::PATH_INDICATOR.with_alpha(alpha);
     }
@@ -1197,7 +1197,7 @@ fn update_spawn_exit_markers(
         if settings.reduce_motion {
             transform.scale = Vec3::splat(1.0);
         } else {
-            let t = time.elapsed_seconds();
+            let t = time.elapsed_secs();
 
             // Gentle scale pulse
             let scale_pulse = 1.0 + 0.15 * (t * 2.5).sin();

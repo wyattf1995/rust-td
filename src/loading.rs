@@ -74,7 +74,7 @@ fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut ass
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -89,22 +89,23 @@ fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut ass
         ))
         .with_children(|parent| {
             // Title
-            parent.spawn(TextBundle::from_section(
-                "TACTICAL TOWER DEFENSE",
-                TextStyle {
+            parent.spawn((
+                Text::new("TACTICAL TOWER DEFENSE"),
+                TextFont {
                     font_size: 48.0,
-                    color: GameColors::BRAND,
                     ..default()
                 },
-            ).with_style(Style {
-                margin: UiRect::bottom(Val::Px(40.0)),
-                ..default()
-            }));
+                TextColor(GameColors::BRAND),
+                Node {
+                    margin: UiRect::bottom(Val::Px(40.0)),
+                    ..default()
+                },
+            ));
 
             // Loading bar background
             parent
                 .spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         width: Val::Px(300.0),
                         height: Val::Px(8.0),
                         ..default()
@@ -116,7 +117,7 @@ fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut ass
                     // Loading bar fill
                     parent.spawn((
                         NodeBundle {
-                            style: Style {
+                            node: Node {
                                 width: Val::Percent(0.0),
                                 height: Val::Percent(100.0),
                                 ..default()
@@ -129,24 +130,25 @@ fn setup_loading(mut commands: Commands, asset_server: Res<AssetServer>, mut ass
                 });
 
             // Loading text
-            parent.spawn(TextBundle::from_section(
-                "Loading assets...",
-                TextStyle {
+            parent.spawn((
+                Text::new("Loading assets..."),
+                TextFont {
                     font_size: 16.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.6),
                     ..default()
                 },
-            ).with_style(Style {
-                margin: UiRect::top(Val::Px(20.0)),
-                ..default()
-            }));
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
+                Node {
+                    margin: UiRect::top(Val::Px(20.0)),
+                    ..default()
+                },
+            ));
         });
 }
 
 fn check_loading(
     asset_server: Res<AssetServer>,
     mut assets: ResMut<GameAssets>,
-    mut loading_bar: Query<&mut Style, With<LoadingBar>>,
+    mut loading_bar: Query<&mut Node, With<LoadingBar>>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     use bevy::asset::LoadState;

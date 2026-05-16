@@ -84,7 +84,7 @@ fn toggle_settings_overlay(
 fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings: &GameSettings) {
     commands.spawn((
         NodeBundle {
-            style: Style {
+            node: Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 position_type: PositionType::Absolute,
@@ -93,14 +93,14 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                 ..default()
             },
             background_color: GameColors::OVERLAY_DIM.into(),
-            z_index: ZIndex::Global(20),
+            z_index: ZIndex(20),
             ..default()
         },
         SettingsOverlay,
     )).with_children(|parent| {
         // Panel
         parent.spawn(NodeBundle {
-            style: Style {
+            node: Node {
                 width: Val::Percent(90.0),
                 max_width: Val::Px(340.0),
                 flex_direction: FlexDirection::Column,
@@ -115,7 +115,7 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
         }).with_children(|panel| {
             // Header row
             panel.spawn(NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     justify_content: JustifyContent::SpaceBetween,
                     align_items: AlignItems::Center,
@@ -124,18 +124,19 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                 },
                 ..default()
             }).with_children(|row| {
-                row.spawn(TextBundle::from_section(
-                    "SETTINGS",
-                    TextStyle {
+                row.spawn((
+                    Text::new("SETTINGS"),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 22.0,
-                        color: GameColors::PRIMARY,
+                        ..default()
                     },
+                    TextColor(GameColors::PRIMARY),
                 ));
                 // Close button
                 row.spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(40.0),
                             height: Val::Px(40.0),
                             justify_content: JustifyContent::Center,
@@ -148,11 +149,15 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                     },
                     SettingsCloseButton,
                 )).with_children(|btn| {
-                    btn.spawn(TextBundle::from_section("X", TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 16.0,
-                        color: Color::WHITE,
-                    }));
+                    btn.spawn((
+                        Text::new("X"),
+                        TextFont {
+                            font: assets.font.clone(),
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
                 });
             });
 
@@ -171,7 +176,7 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
             // Reset high scores button
             panel.spawn((
                 ButtonBundle {
-                    style: Style {
+                    node: Node {
                         width: Val::Percent(100.0),
                         height: Val::Px(36.0),
                         justify_content: JustifyContent::Center,
@@ -185,11 +190,15 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
                 },
                 ResetHighScoresButton,
             )).with_children(|btn| {
-                btn.spawn(TextBundle::from_section("RESET HIGH SCORES", TextStyle {
-                    font: assets.font.clone(),
-                    font_size: 13.0,
-                    color: Color::WHITE,
-                }));
+                btn.spawn((
+                    Text::new("RESET HIGH SCORES"),
+                    TextFont {
+                        font: assets.font.clone(),
+                        font_size: 13.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                ));
             });
         });
     });
@@ -197,7 +206,7 @@ fn spawn_settings_overlay(commands: &mut Commands, assets: &GameAssets, settings
 
 fn spawn_toggle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str, field: SettingField, value: &str) {
     parent.spawn(NodeBundle {
-        style: Style {
+        node: Node {
             width: Val::Percent(100.0),
             height: Val::Px(36.0),
             justify_content: JustifyContent::SpaceBetween,
@@ -209,15 +218,19 @@ fn spawn_toggle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str,
         border_radius: BorderRadius::all(Val::Px(4.0)),
         ..default()
     }).with_children(|row| {
-        row.spawn(TextBundle::from_section(label, TextStyle {
-            font: assets.font.clone(),
-            font_size: 13.0,
-            color: Color::WHITE,
-        }));
+        row.spawn((
+            Text::new(label),
+            TextFont {
+                font: assets.font.clone(),
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::WHITE),
+        ));
         let is_on = value == "ON";
         row.spawn((
             ButtonBundle {
-                style: Style {
+                node: Node {
                     width: Val::Px(50.0),
                     height: Val::Px(26.0),
                     justify_content: JustifyContent::Center,
@@ -231,11 +244,15 @@ fn spawn_toggle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str,
             SettingsToggle(field),
         )).with_children(|btn| {
             btn.spawn((
-                TextBundle::from_section(value, TextStyle {
-                    font: assets.font.clone(),
-                    font_size: 12.0,
-                    color: Color::WHITE,
-                }),
+                (
+                    Text::new(value),
+                    TextFont {
+                        font: assets.font.clone(),
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                ),
                 SettingsValueText(field),
             ));
         });
@@ -244,7 +261,7 @@ fn spawn_toggle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str,
 
 fn spawn_cycle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str, field: SettingField, value: &str) {
     parent.spawn(NodeBundle {
-        style: Style {
+        node: Node {
             width: Val::Percent(100.0),
             height: Val::Px(36.0),
             justify_content: JustifyContent::SpaceBetween,
@@ -256,14 +273,18 @@ fn spawn_cycle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str, 
         border_radius: BorderRadius::all(Val::Px(4.0)),
         ..default()
     }).with_children(|row| {
-        row.spawn(TextBundle::from_section(label, TextStyle {
-            font: assets.font.clone(),
-            font_size: 13.0,
-            color: Color::WHITE,
-        }));
+        row.spawn((
+            Text::new(label),
+            TextFont {
+                font: assets.font.clone(),
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::WHITE),
+        ));
         row.spawn((
             ButtonBundle {
-                style: Style {
+                node: Node {
                     width: Val::Px(50.0),
                     height: Val::Px(26.0),
                     justify_content: JustifyContent::Center,
@@ -277,11 +298,15 @@ fn spawn_cycle_row(parent: &mut ChildBuilder, assets: &GameAssets, label: &str, 
             SettingsToggle(field),
         )).with_children(|btn| {
             btn.spawn((
-                TextBundle::from_section(value, TextStyle {
-                    font: assets.font.clone(),
-                    font_size: 12.0,
-                    color: Color::WHITE,
-                }),
+                (
+                    Text::new(value),
+                    TextFont {
+                        font: assets.font.clone(),
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                ),
                 SettingsValueText(field),
             ));
         });
@@ -378,7 +403,7 @@ fn settings_button_system(
                     settings.reduce_motion,
                 ),
             };
-            text.sections[0].value = label.to_string();
+            text.0 = label.to_string();
         }
 
         // Update toggle button colors
@@ -422,7 +447,7 @@ fn reset_highscores_button(
             // Spawn confirmation dialog
             commands.spawn((
                 NodeBundle {
-                    style: Style {
+                    node: Node {
                         width: Val::Percent(100.0),
                         height: Val::Percent(100.0),
                         position_type: PositionType::Absolute,
@@ -431,13 +456,13 @@ fn reset_highscores_button(
                         ..default()
                     },
                     background_color: GameColors::PANEL_BG.into(),
-                    z_index: ZIndex::Global(30),
+                    z_index: ZIndex(30),
                     ..default()
                 },
                 ResetConfirmPanel,
             )).with_children(|parent| {
                 parent.spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         width: Val::Px(260.0),
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::Center,
@@ -449,14 +474,18 @@ fn reset_highscores_button(
                     border_radius: BorderRadius::all(Val::Px(8.0)),
                     ..default()
                 }).with_children(|panel| {
-                    panel.spawn(TextBundle::from_section("Reset all high scores? This cannot be undone.", TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 16.0,
-                        color: Color::WHITE,
-                    }));
+                    panel.spawn((
+                        Text::new("Reset all high scores? This cannot be undone."),
+                        TextFont {
+                            font: assets.font.clone(),
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
 
                     panel.spawn(NodeBundle {
-                        style: Style {
+                        node: Node {
                             flex_direction: FlexDirection::Row,
                             column_gap: Val::Px(12.0),
                             ..default()
@@ -465,7 +494,7 @@ fn reset_highscores_button(
                     }).with_children(|row| {
                         row.spawn((
                             ButtonBundle {
-                                style: Style {
+                                node: Node {
                                     width: Val::Px(80.0),
                                     height: Val::Px(32.0),
                                     justify_content: JustifyContent::Center,
@@ -478,16 +507,20 @@ fn reset_highscores_button(
                             },
                             ResetConfirmYes,
                         )).with_children(|btn| {
-                            btn.spawn(TextBundle::from_section("Reset Scores", TextStyle {
-                                font: assets.font.clone(),
-                                font_size: 14.0,
-                                color: Color::WHITE,
-                            }));
+                            btn.spawn((
+                                Text::new("Reset Scores"),
+                                TextFont {
+                                    font: assets.font.clone(),
+                                    font_size: 14.0,
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                            ));
                         });
 
                         row.spawn((
                             ButtonBundle {
-                                style: Style {
+                                node: Node {
                                     width: Val::Px(80.0),
                                     height: Val::Px(32.0),
                                     justify_content: JustifyContent::Center,
@@ -500,11 +533,15 @@ fn reset_highscores_button(
                             },
                             ResetConfirmNo,
                         )).with_children(|btn| {
-                            btn.spawn(TextBundle::from_section("Keep Scores", TextStyle {
-                                font: assets.font.clone(),
-                                font_size: 14.0,
-                                color: Color::WHITE,
-                            }));
+                            btn.spawn((
+                                Text::new("Keep Scores"),
+                                TextFont {
+                                    font: assets.font.clone(),
+                                    font_size: 14.0,
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                            ));
                         });
                     });
                 });

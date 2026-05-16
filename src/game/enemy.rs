@@ -718,7 +718,7 @@ fn enemy_movement(
 
         // Apply regen modifier (2% HP/sec)
         if regen_active {
-            enemy.health = (enemy.health + enemy.max_health * 0.02 * time.delta_seconds())
+            enemy.health = (enemy.health + enemy.max_health * 0.02 * time.delta_secs())
                 .min(enemy.max_health);
         }
 
@@ -758,7 +758,7 @@ fn enemy_movement(
 
         let direction = (target_pos - current_pos).normalize_or_zero();
         // Apply speed modifier from wave
-        let movement = direction * enemy.speed * speed_modifier * time.delta_seconds();
+        let movement = direction * enemy.speed * speed_modifier * time.delta_secs();
 
         transform.translation.x += movement.x;
         transform.translation.y += movement.y;
@@ -779,7 +779,7 @@ fn poison_tick(
     mut enemies: Query<&mut Enemy>,
     time: Res<Time>,
 ) {
-    let delta = time.delta_seconds();
+    let delta = time.delta_secs();
 
     for mut enemy in &mut enemies {
         if enemy.marked_dead {
@@ -1220,9 +1220,9 @@ fn update_death_effects(
         let alpha = 1.0 - progress;
 
         // Move particle and decelerate
-        transform.translation.x += effect.velocity.x * time.delta_seconds();
-        transform.translation.y += effect.velocity.y * time.delta_seconds();
-        effect.velocity *= 0.92_f32.powf(time.delta_seconds() * 60.0);
+        transform.translation.x += effect.velocity.x * time.delta_secs();
+        transform.translation.y += effect.velocity.y * time.delta_secs();
+        effect.velocity *= 0.92_f32.powf(time.delta_secs() * 60.0);
 
         // Shrink and fade
         let scale = 1.0 - progress * 0.6;
@@ -1301,7 +1301,7 @@ fn check_wave_complete(
         super::announce(&income_msg);
 
         wave_manager.wave_active = false;
-        wave_manager.wave_ended_at = Some(time.elapsed_seconds_f64());
+        wave_manager.wave_ended_at = Some(time.elapsed_secs_f64());
         wave_manager.current_wave += 1;
 
         // Track milestone waves (5, 10, 15, 20...) to measure progression
@@ -1335,8 +1335,8 @@ fn update_gold_numbers(
         number.lifetime.tick(time.delta());
 
         // Move upward
-        transform.translation.x += number.velocity.x * time.delta_seconds();
-        transform.translation.y += number.velocity.y * time.delta_seconds();
+        transform.translation.x += number.velocity.x * time.delta_secs();
+        transform.translation.y += number.velocity.y * time.delta_secs();
 
         // Slow down velocity
         number.velocity *= 0.95;

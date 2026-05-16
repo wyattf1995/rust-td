@@ -148,7 +148,7 @@ fn update_tip_display(
 
             commands.spawn((
                 NodeBundle {
-                    style: Style {
+                    node: Node {
                         position_type: PositionType::Absolute,
                         top: Val::Px(8.0),
                         left: Val::Percent(50.0),
@@ -161,18 +161,19 @@ fn update_tip_display(
                     },
                     background_color: Color::srgba(0.06, 0.12, 0.2, 0.92).into(),
                     border_radius: BorderRadius::all(Val::Px(6.0)),
-                    z_index: ZIndex::Global(50),
+                    z_index: ZIndex(50),
                     ..default()
                 },
                 TipOverlay,
             )).with_children(|parent| {
-                parent.spawn(TextBundle::from_section(
-                    kind.text(),
-                    TextStyle {
+                parent.spawn((
+                    Text::new(kind.text()),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 13.0,
-                        color: GameColors::SECONDARY,
+                        ..default()
                     },
+                    TextColor(GameColors::SECONDARY),
                 ));
             });
         }

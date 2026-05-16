@@ -216,7 +216,7 @@ fn projectile_movement(
 
         let current_pos = transform.translation.truncate();
         let direction = (target_pos - current_pos).normalize_or_zero();
-        let movement = direction * projectile.speed * time.delta_seconds();
+        let movement = direction * projectile.speed * time.delta_secs();
 
         transform.translation.x += movement.x;
         transform.translation.y += movement.y;
@@ -733,11 +733,11 @@ fn update_damage_numbers(
         number.lifetime.tick(time.delta());
 
         // Move upward
-        transform.translation.x += number.velocity.x * time.delta_seconds();
-        transform.translation.y += number.velocity.y * time.delta_seconds();
+        transform.translation.x += number.velocity.x * time.delta_secs();
+        transform.translation.y += number.velocity.y * time.delta_secs();
 
         // Slow down velocity
-        number.velocity *= 0.95_f32.powf(time.delta_seconds() * 60.0);
+        number.velocity *= 0.95_f32.powf(time.delta_secs() * 60.0);
 
         // Fade out
         let alpha = 1.0 - ease_out(number.lifetime.fraction());

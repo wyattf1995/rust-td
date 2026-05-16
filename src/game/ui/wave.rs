@@ -41,7 +41,7 @@ pub(super) fn start_wave_button(
 
     if should_start && !wave_manager.wave_active {
         // Calculate early-send bonus before starting wave
-        let early_bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
+        let early_bonus = wave_manager.early_send_bonus(time.elapsed_secs_f64());
 
         wave_manager.start_wave();
         super::super::announce(&format!("Wave {} started", wave_manager.current_wave + 1));
@@ -64,7 +64,7 @@ pub(super) fn start_wave_button(
 
         commands.spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     position_type: PositionType::Absolute,
                     top: Val::Percent(35.0),
                     left: Val::Percent(50.0),
@@ -84,26 +84,29 @@ pub(super) fn start_wave_button(
             },
             GameEntity,
         )).with_children(|parent| {
-            parent.spawn(TextBundle::from_section(
-                format!("WAVE {}", wave_num),
-                TextStyle {
+            parent.spawn((
+                Text::new(format!("WAVE {}", wave_num)),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 40.0,
-                    color: GameColors::PRIMARY,
+                    ..default()
                 },
+                TextColor(GameColors::PRIMARY),
             ));
             if early_bonus > 0 {
-                parent.spawn(TextBundle::from_section(
-                    format!("+{}g EARLY BONUS", early_bonus),
-                    TextStyle {
+                parent.spawn((
+                    Text::new(format!("+{}g EARLY BONUS", early_bonus)),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 16.0,
-                        color: GameColors::GOLD,
+                        ..default()
                     },
-                ).with_style(Style {
-                    margin: UiRect::top(Val::Px(4.0)),
-                    ..default()
-                }));
+                    TextColor(GameColors::GOLD),
+                    Node {
+                        margin: UiRect::top(Val::Px(4.0)),
+                        ..default()
+                    },
+                ));
             }
             // Show previous wave's income breakdown (interest + bonus)
             let interest = wave_manager.last_interest;
@@ -114,30 +117,34 @@ pub(super) fn start_wave_button(
                 if interest > 0 { income_parts.push(format!("+{}g interest", interest)); }
                 let income_text = income_parts.join("  ");
 
-                parent.spawn(TextBundle::from_section(
-                    income_text,
-                    TextStyle {
+                parent.spawn((
+                    Text::new(income_text),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 14.0,
-                        color: GameColors::GOLD,
+                        ..default()
                     },
-                ).with_style(Style {
-                    margin: UiRect::top(Val::Px(4.0)),
-                    ..default()
-                }));
+                    TextColor(GameColors::GOLD),
+                    Node {
+                        margin: UiRect::top(Val::Px(4.0)),
+                        ..default()
+                    },
+                ));
             }
             if !modifier_name.is_empty() {
-                parent.spawn(TextBundle::from_section(
-                    modifier_name,
-                    TextStyle {
+                parent.spawn((
+                    Text::new(modifier_name),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 18.0,
-                        color: GameColors::GOLD,
+                        ..default()
                     },
-                ).with_style(Style {
-                    margin: UiRect::top(Val::Px(4.0)),
-                    ..default()
-                }));
+                    TextColor(GameColors::GOLD),
+                    Node {
+                        margin: UiRect::top(Val::Px(4.0)),
+                        ..default()
+                    },
+                ));
             }
         });
     }
@@ -145,7 +152,7 @@ pub(super) fn start_wave_button(
 
 pub(super) fn update_wave_preview(
     wave_manager: Res<WaveManager>,
-    mut panel_query: Query<&mut Style, With<WavePreviewPanel>>,
+    mut panel_query: Query<&mut Node, With<WavePreviewPanel>>,
     mut text_query: Query<&mut Text, With<WavePreviewText>>,
     mut cached_wave: Local<usize>,
     mut cached_text: Local<String>,
@@ -190,7 +197,7 @@ pub(super) fn update_wave_preview(
         }
 
         for mut text in &mut text_query {
-            text.sections[0].value = cached_text.clone();
+            text.0 = cached_text.clone();
         }
     }
 }
@@ -213,25 +220,25 @@ fn fuzzy_count(count: usize) -> &'static str {
 pub(super) fn update_start_button_text(
     wave_manager: Res<WaveManager>,
     time: Res<Time>,
-    mut text_query: Query<&mut Text, With<StartWaveButtonText>>,
+    mut text_query: Query<(&mut Text, &mut TextColor), With<StartWaveButtonText>>,
     mut button_query: Query<&mut BackgroundColor, (With<StartWaveButton>, Without<StartWaveButtonText>)>,
 ) {
     let active = wave_manager.wave_active;
 
-    for mut text in &mut text_query {
+    for (mut text, mut text_color) in &mut text_query {
         let new_value = if active {
             "IN PROGRESS".to_string()
         } else {
-            let bonus = wave_manager.early_send_bonus(time.elapsed_seconds_f64());
+            let bonus = wave_manager.early_send_bonus(time.elapsed_secs_f64());
             if bonus > 0 { format!("START +{}g", bonus) } else { "START".into() }
         };
-        if text.sections[0].value != new_value {
-            text.sections[0].value = new_value;
+        if text.0 != new_value {
+            text.0 = new_value;
         }
         // Dim text during active wave
         let target_color = if active { GameColors::TEXT_MEDIUM } else { Color::WHITE };
-        if text.sections[0].style.color != target_color {
-            text.sections[0].style.color = target_color;
+        if text_color.0 != target_color {
+            text_color.0 = target_color;
         }
     }
 

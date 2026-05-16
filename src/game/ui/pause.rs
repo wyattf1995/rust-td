@@ -84,7 +84,7 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -98,23 +98,25 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
             PauseMenu,
         ))
         .with_children(|parent| {
-            parent.spawn(TextBundle::from_section(
-                "PAUSED",
-                TextStyle {
+            parent.spawn((
+                Text::new("PAUSED"),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 64.0,
-                    color: Color::WHITE,
+                    ..default()
                 },
-            ).with_style(Style {
-                margin: UiRect::bottom(Val::Px(40.0)),
-                ..default()
-            }));
+                TextColor(Color::WHITE),
+                Node {
+                    margin: UiRect::bottom(Val::Px(40.0)),
+                    ..default()
+                },
+            ));
 
             // Resume button
             parent
                 .spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(200.0),
                             height: Val::Px(50.0),
                             justify_content: JustifyContent::Center,
@@ -128,13 +130,14 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
                     ResumeButton,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "RESUME",
-                        TextStyle {
+                    parent.spawn((
+                        Text::new("RESUME"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 24.0,
-                            color: Color::WHITE,
+                            ..default()
                         },
+                        TextColor(Color::WHITE),
                     ));
                 });
 
@@ -142,7 +145,7 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
             parent
                 .spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(200.0),
                             height: Val::Px(50.0),
                             justify_content: JustifyContent::Center,
@@ -156,13 +159,14 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
                     PauseSettingsButton,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "SETTINGS",
-                        TextStyle {
+                    parent.spawn((
+                        Text::new("SETTINGS"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 24.0,
-                            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                            ..default()
                         },
+                        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
                     ));
                 });
 
@@ -170,7 +174,7 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
             parent
                 .spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(200.0),
                             height: Val::Px(50.0),
                             justify_content: JustifyContent::Center,
@@ -184,13 +188,14 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
                     PauseSynergyButton,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "SYNERGIES",
-                        TextStyle {
+                    parent.spawn((
+                        Text::new("SYNERGIES"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 24.0,
-                            color: GameColors::SYNERGY,
+                            ..default()
                         },
+                        TextColor(GameColors::SYNERGY),
                     ));
                 });
 
@@ -198,7 +203,7 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
             parent
                 .spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(200.0),
                             height: Val::Px(50.0),
                             justify_content: JustifyContent::Center,
@@ -211,28 +216,31 @@ pub(super) fn setup_pause_menu(mut commands: Commands, assets: Res<GameAssets>) 
                     QuitButton,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "QUIT TO MENU",
-                        TextStyle {
+                    parent.spawn((
+                        Text::new("QUIT TO MENU"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 24.0,
-                            color: Color::WHITE,
+                            ..default()
                         },
+                        TextColor(Color::WHITE),
                     ));
                 });
 
             // Hint text
-            parent.spawn(TextBundle::from_section(
-                "Press ESC to resume",
-                TextStyle {
+            parent.spawn((
+                Text::new("Press ESC to resume"),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 16.0,
-                    color: GameColors::TEXT_MEDIUM,
+                    ..default()
                 },
-            ).with_style(Style {
-                margin: UiRect::top(Val::Px(30.0)),
-                ..default()
-            }));
+                TextColor(GameColors::TEXT_MEDIUM),
+                Node {
+                    margin: UiRect::top(Val::Px(30.0)),
+                    ..default()
+                },
+            ));
         });
 }
 

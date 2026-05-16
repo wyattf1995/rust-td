@@ -287,7 +287,7 @@ fn setup_game_over(
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -303,46 +303,52 @@ fn setup_game_over(
         .with_children(|parent| {
             // Practice mode notice or "NEW BEST!" text above game over
             if is_practice {
-                parent.spawn(TextBundle::from_section(
-                    format!("PRACTICE MODE (started wave {}) — scores not recorded", start_wave.0),
-                    TextStyle {
+                parent.spawn((
+                    Text::new(format!("PRACTICE MODE (started wave {}) — scores not recorded", start_wave.0)),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 16.0,
-                        color: Color::srgba(1.0, 0.85, 0.2, 0.7),
+                        ..default()
                     },
-                ).with_style(Style {
-                    margin: UiRect::bottom(Val::Px(10.0)),
-                    ..default()
-                }));
+                    TextColor(Color::srgba(1.0, 0.85, 0.2, 0.7)),
+                    Node {
+                        margin: UiRect::bottom(Val::Px(10.0)),
+                        ..default()
+                    },
+                ));
             } else if is_new_best {
-                parent.spawn(TextBundle::from_section(
-                    "NEW BEST!",
-                    TextStyle {
+                parent.spawn((
+                    Text::new("NEW BEST!"),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 32.0,
-                        color: Color::srgb(1.0, 0.85, 0.2),
+                        ..default()
                     },
-                ).with_style(Style {
-                    margin: UiRect::bottom(Val::Px(10.0)),
-                    ..default()
-                }));
+                    TextColor(Color::srgb(1.0, 0.85, 0.2)),
+                    Node {
+                        margin: UiRect::bottom(Val::Px(10.0)),
+                        ..default()
+                    },
+                ));
             }
 
-            parent.spawn(TextBundle::from_section(
-                "GAME OVER",
-                TextStyle {
+            parent.spawn((
+                Text::new("GAME OVER"),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 56.0,
-                    color: GameColors::PRIMARY,
+                    ..default()
                 },
-            ).with_style(Style {
-                margin: UiRect::bottom(Val::Px(16.0)),
-                ..default()
-            }));
+                TextColor(GameColors::PRIMARY),
+                Node {
+                    margin: UiRect::bottom(Val::Px(16.0)),
+                    ..default()
+                },
+            ));
 
             // Stats panel
             parent.spawn(NodeBundle {
-                style: Style {
+                node: Node {
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(20.0),
                     margin: UiRect::bottom(Val::Px(16.0)),
@@ -352,7 +358,7 @@ fn setup_game_over(
             }).with_children(|row| {
                 // Left column: Summary stats
                 row.spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         flex_direction: FlexDirection::Column,
                         padding: UiRect::all(Val::Px(10.0)),
                         row_gap: Val::Px(4.0),
@@ -362,42 +368,46 @@ fn setup_game_over(
                     border_radius: BorderRadius::all(Val::Px(6.0)),
                     ..default()
                 }).with_children(|col| {
-                    col.spawn(TextBundle::from_section(
-                        &summary,
-                        TextStyle {
+                    col.spawn((
+                        Text::new(&summary),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 12.0,
-                            color: Color::WHITE,
+                            ..default()
                         },
+                        TextColor(Color::WHITE),
                     ));
 
                     if !kill_breakdown.is_empty() {
-                        col.spawn(TextBundle::from_section(
-                            "Kills by Type:",
-                            TextStyle {
+                        col.spawn((
+                            Text::new("Kills by Type:"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 11.0,
-                                color: GameColors::PRIMARY,
+                                ..default()
                             },
-                        ).with_style(Style {
-                            margin: UiRect::top(Val::Px(6.0)),
-                            ..default()
-                        }));
+                            TextColor(GameColors::PRIMARY),
+                            Node {
+                                margin: UiRect::top(Val::Px(6.0)),
+                                ..default()
+                            },
+                        ));
 
-                        col.spawn(TextBundle::from_section(
-                            &kill_breakdown,
-                            TextStyle {
+                        col.spawn((
+                            Text::new(&kill_breakdown),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 11.0,
-                                color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                                ..default()
                             },
+                            TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
                         ));
                     }
                 });
 
                 // Right column: Best tower + gold timeline
                 row.spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         flex_direction: FlexDirection::Column,
                         padding: UiRect::all(Val::Px(10.0)),
                         row_gap: Val::Px(4.0),
@@ -407,40 +417,44 @@ fn setup_game_over(
                     border_radius: BorderRadius::all(Val::Px(6.0)),
                     ..default()
                 }).with_children(|col| {
-                    col.spawn(TextBundle::from_section(
-                        "MVP Tower:",
-                        TextStyle {
+                    col.spawn((
+                        Text::new("MVP Tower:"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 11.0,
-                            color: GameColors::PRIMARY,
+                            ..default()
                         },
+                        TextColor(GameColors::PRIMARY),
                     ));
-                    col.spawn(TextBundle::from_section(
-                        &best_tower_text,
-                        TextStyle {
+                    col.spawn((
+                        Text::new(&best_tower_text),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 12.0,
-                            color: Color::WHITE,
+                            ..default()
                         },
+                        TextColor(Color::WHITE),
                     ));
 
                     // Gold per wave mini bar chart
                     if !game_stats.wave_gold.is_empty() {
-                        col.spawn(TextBundle::from_section(
-                            "Gold Timeline:",
-                            TextStyle {
+                        col.spawn((
+                            Text::new("Gold Timeline:"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 11.0,
-                                color: GameColors::PRIMARY,
+                                ..default()
                             },
-                        ).with_style(Style {
-                            margin: UiRect::top(Val::Px(6.0)),
-                            ..default()
-                        }));
+                            TextColor(GameColors::PRIMARY),
+                            Node {
+                                margin: UiRect::top(Val::Px(6.0)),
+                                ..default()
+                            },
+                        ));
 
                         // Bar chart container
                         col.spawn(NodeBundle {
-                            style: Style {
+                            node: Node {
                                 flex_direction: FlexDirection::Row,
                                 align_items: AlignItems::FlexEnd,
                                 column_gap: Val::Px(2.0),
@@ -461,7 +475,7 @@ fn setup_game_over(
                                 let total = record.gold_from_kills + record.gold_from_bonus + record.gold_from_interest + record.gold_from_early_send;
                                 let height_pct = (total as f32 / max_gold as f32) * 36.0;
                                 chart.spawn(NodeBundle {
-                                    style: Style {
+                                    node: Node {
                                         width: Val::Px(6.0),
                                         height: Val::Px(height_pct.max(2.0)),
                                         ..default()
@@ -478,7 +492,7 @@ fn setup_game_over(
 
             // Button row: Retry + Menu + Copy Run
             parent.spawn(NodeBundle {
-                style: Style {
+                node: Node {
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(12.0),
                     ..default()
@@ -488,7 +502,7 @@ fn setup_game_over(
                 // RETRY button (same map, skip menu)
                 row.spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(160.0),
                             height: Val::Px(60.0),
                             justify_content: JustifyContent::Center,
@@ -501,20 +515,21 @@ fn setup_game_over(
                     RetryButton,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "RETRY",
-                        TextStyle {
+                    parent.spawn((
+                        Text::new("RETRY"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 28.0,
-                            color: Color::WHITE,
+                            ..default()
                         },
+                        TextColor(Color::WHITE),
                     ));
                 });
 
                 // MENU button (back to menu)
                 row.spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(120.0),
                             height: Val::Px(60.0),
                             justify_content: JustifyContent::Center,
@@ -528,20 +543,21 @@ fn setup_game_over(
                     RestartButton,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "MAIN MENU",
-                        TextStyle {
+                    parent.spawn((
+                        Text::new("MAIN MENU"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 28.0,
-                            color: Color::srgba(1.0, 1.0, 1.0, 0.8),
+                            ..default()
                         },
+                        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
                     ));
                 });
 
                 // COPY RUN button
                 row.spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(140.0),
                             height: Val::Px(60.0),
                             justify_content: JustifyContent::Center,
@@ -556,13 +572,14 @@ fn setup_game_over(
                 ))
                 .with_children(|parent| {
                     parent.spawn((
-                        TextBundle::from_section(
-                            "SHARE",
-                            TextStyle {
+                        (
+                            Text::new("SHARE"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 18.0,
-                                color: Color::srgba(1.0, 1.0, 1.0, 0.8),
+                                ..default()
                             },
+                            TextColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
                         ),
                         ShareButtonText,
                     ));
@@ -570,48 +587,54 @@ fn setup_game_over(
             });
 
             // Hint
-            parent.spawn(TextBundle::from_section(
-                "R = Retry same map",
-                TextStyle {
+            parent.spawn((
+                Text::new("R = Retry same map"),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 13.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.4),
+                    ..default()
                 },
-            ).with_style(Style {
-                margin: UiRect::top(Val::Px(8.0)),
-                ..default()
-            }));
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.4)),
+                Node {
+                    margin: UiRect::top(Val::Px(8.0)),
+                    ..default()
+                },
+            ));
 
             // Death diagnostic
             {
                 let diagnostic = build_diagnostic(&game_stats, &economy, wave);
-                parent.spawn(TextBundle::from_section(
-                    diagnostic,
-                    TextStyle {
+                parent.spawn((
+                    Text::new(diagnostic),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 14.0,
-                        color: GameColors::WARNING_TEXT,
+                        ..default()
                     },
-                ).with_style(Style {
-                    margin: UiRect::top(Val::Px(8.0)),
-                    ..default()
-                }));
+                    TextColor(GameColors::WARNING_TEXT),
+                    Node {
+                        margin: UiRect::top(Val::Px(8.0)),
+                        ..default()
+                    },
+                ));
             }
 
             // Post-game suggestion
             {
                 let suggestion = build_suggestion(map_name, wave, &high_scores);
-                parent.spawn(TextBundle::from_section(
-                    suggestion,
-                    TextStyle {
+                parent.spawn((
+                    Text::new(suggestion),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 12.0,
-                        color: Color::srgba(0.4, 0.85, 1.0, 0.6),
+                        ..default()
                     },
-                ).with_style(Style {
-                    margin: UiRect::top(Val::Px(6.0)),
-                    ..default()
-                }));
+                    TextColor(Color::srgba(0.4, 0.85, 1.0, 0.6)),
+                    Node {
+                        margin: UiRect::top(Val::Px(6.0)),
+                        ..default()
+                    },
+                ));
             }
         });
 }
@@ -690,7 +713,7 @@ fn share_button_system(
         if timer.finished() {
             feedback.timer = None;
             for mut text in &mut text_query {
-                text.sections[0].value = "SHARE".into();
+                text.0 = "SHARE".into();
                 text.sections[0].style.color = Color::srgba(1.0, 1.0, 1.0, 0.8);
             }
         }
@@ -707,7 +730,7 @@ fn share_button_system(
                 }
                 // Show "Copied!" feedback
                 for mut text in &mut text_query {
-                    text.sections[0].value = "COPIED!".into();
+                    text.0 = "COPIED!".into();
                     text.sections[0].style.color = Color::srgb(0.4, 1.0, 0.5);
                 }
                 feedback.timer = Some(Timer::from_seconds(1.5, TimerMode::Once));
@@ -857,9 +880,9 @@ fn update_screen_shake(
 
     if screen_shake.trauma > 0.01 {
         // Decay trauma
-        screen_shake.trauma *= 0.92_f32.powf(time.delta_seconds() * 60.0);
+        screen_shake.trauma *= 0.92_f32.powf(time.delta_secs() * 60.0);
 
-        let t = time.elapsed_seconds();
+        let t = time.elapsed_secs();
         let offset_x = screen_shake.trauma * (t * 50.0).sin() * 3.0;
         let offset_y = screen_shake.trauma * (t * 40.0).cos() * 3.0;
 
@@ -901,7 +924,7 @@ fn update_save_warning_toast(
         if toasts.is_empty() && !timer.finished() {
             commands.spawn((
                 NodeBundle {
-                    style: Style {
+                    node: Node {
                         position_type: PositionType::Absolute,
                         bottom: Val::Px(80.0),
                         left: Val::Percent(50.0),
@@ -920,13 +943,14 @@ fn update_save_warning_toast(
                     lifetime: Timer::from_seconds(4.0, TimerMode::Once),
                 },
             )).with_children(|parent| {
-                parent.spawn(TextBundle::from_section(
-                    "Scores not saved \u{2014} browser storage full or disabled",
-                    TextStyle {
+                parent.spawn((
+                    Text::new("Scores not saved \u{2014} browser storage full or disabled"),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 14.0,
-                        color: GameColors::WARNING_TEXT,
+                        ..default()
                     },
+                    TextColor(GameColors::WARNING_TEXT),
                 ));
             });
         }

@@ -15,7 +15,7 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(50.0),
                     padding: UiRect::horizontal(Val::Px(20.0)),
@@ -36,7 +36,7 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
             // Left side - Gold
             parent
                 .spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
                         column_gap: Val::Px(8.0),
@@ -47,7 +47,7 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                 .with_children(|parent| {
                     // Gold icon (yellow square)
                     parent.spawn(NodeBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(20.0),
                             height: Val::Px(20.0),
                             ..default()
@@ -57,29 +57,30 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                     });
                     // Gold text
                     parent.spawn((
-                        TextBundle::from_section(
-                            "200",
-                            TextStyle {
+                        (
+                            Text::new("200"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 28.0,
-                                color: GameColors::GOLD,
+                                ..default()
                             },
+                            TextColor(GameColors::GOLD),
                         ),
                         GoldText,
                     ));
                     // Gold Rush indicator (hidden by default)
                     parent.spawn((
-                        TextBundle::from_section(
-                            "2x",
-                            TextStyle {
-                                font: assets.font.clone(),
-                                font_size: 18.0,
-                                color: GameColors::ABILITY_GOLD_RUSH,
-                            },
-                        ).with_style(Style {
+                        Text::new("2x"),
+                        TextFont {
+                            font: assets.font.clone(),
+                            font_size: 18.0,
+                            ..default()
+                        },
+                        TextColor(GameColors::ABILITY_GOLD_RUSH),
+                        Node {
                             display: Display::None,
                             ..default()
-                        }),
+                        },
                         GoldRushIndicator,
                     ));
                 });
@@ -87,7 +88,7 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
             // Center section - Wave info and Score
             parent
                 .spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::Center,
                         row_gap: Val::Px(2.0),
@@ -97,24 +98,26 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                 })
                 .with_children(|parent| {
                     parent.spawn((
-                        TextBundle::from_section(
-                            "Wave 1 / 10",
-                            TextStyle {
+                        (
+                            Text::new("Wave 1 / 10"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 22.0,
-                                color: Color::WHITE,
+                                ..default()
                             },
+                            TextColor(Color::WHITE),
                         ),
                         WaveText,
                     ));
                     parent.spawn((
-                        TextBundle::from_section(
-                            "Score: 0",
-                            TextStyle {
+                        (
+                            Text::new("Score: 0"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 14.0,
-                                color: GameColors::TEXT_BRIGHT,
+                                ..default()
                             },
+                            TextColor(GameColors::TEXT_BRIGHT),
                         ),
                         ScoreText,
                     ));
@@ -123,7 +126,7 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
             // Speed controls
             parent
                 .spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
                         column_gap: Val::Px(3.0),
@@ -137,7 +140,7 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                         parent
                             .spawn((
                                 ButtonBundle {
-                                    style: Style {
+                                    node: Node {
                                         width: Val::Px(44.0),
                                         height: Val::Px(44.0),
                                         justify_content: JustifyContent::Center,
@@ -161,17 +164,18 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                                 SpeedButton(speed),
                             ))
                             .with_children(|parent| {
-                                parent.spawn(TextBundle::from_section(
-                                    format!("{}x", speed as u32),
-                                    TextStyle {
+                                parent.spawn((
+                                    Text::new(format!("{}x", speed as u32)),
+                                    TextFont {
                                         font: assets.font.clone(),
                                         font_size: 12.0,
-                                        color: if is_default {
+                                        ..default()
+                                    },
+                                    TextColor(if is_default {
                                             GameColors::PRIMARY
                                         } else {
                                             GameColors::TEXT_MEDIUM
-                                        },
-                                    },
+                                        }),
                                 ));
                             });
                     }
@@ -180,7 +184,7 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
             // Right side - Lives
             parent
                 .spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
                         column_gap: Val::Px(8.0),
@@ -191,7 +195,7 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                 .with_children(|parent| {
                     // Heart icon (red square)
                     parent.spawn(NodeBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(20.0),
                             height: Val::Px(20.0),
                             ..default()
@@ -201,20 +205,21 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                     });
                     // Lives text
                     parent.spawn((
-                        TextBundle::from_section(
-                            "20",
-                            TextStyle {
+                        (
+                            Text::new("20"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 28.0,
-                                color: GameColors::PRIMARY,
+                                ..default()
                             },
+                            TextColor(GameColors::PRIMARY),
                         ),
                         LivesText,
                     ));
                     // Pause button
                     parent.spawn((
                         ButtonBundle {
-                            style: Style {
+                            node: Node {
                                 width: Val::Px(44.0),
                                 height: Val::Px(44.0),
                                 justify_content: JustifyContent::Center,
@@ -229,19 +234,20 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                         HudPauseButton,
                     ))
                     .with_children(|parent| {
-                        parent.spawn(TextBundle::from_section(
-                            "| |",
-                            TextStyle {
+                        parent.spawn((
+                            Text::new("| |"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 14.0,
-                                color: GameColors::TEXT_MEDIUM,
+                                ..default()
                             },
+                            TextColor(GameColors::TEXT_MEDIUM),
                         ));
                     });
                     // Synergy reference button
                     parent.spawn((
                         ButtonBundle {
-                            style: Style {
+                            node: Node {
                                 width: Val::Px(44.0),
                                 height: Val::Px(44.0),
                                 justify_content: JustifyContent::Center,
@@ -256,13 +262,14 @@ fn setup_top_bar(commands: &mut Commands, assets: &GameAssets) {
                         HudSynergyButton,
                     ))
                     .with_children(|parent| {
-                        parent.spawn(TextBundle::from_section(
-                            "?",
-                            TextStyle {
+                        parent.spawn((
+                            Text::new("?"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 16.0,
-                                color: GameColors::SYNERGY,
+                                ..default()
                             },
+                            TextColor(GameColors::SYNERGY),
                         ));
                     });
                 });
@@ -274,7 +281,7 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     min_height: Val::Px(65.0),
                     max_height: Val::Px(220.0),
@@ -303,7 +310,7 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
                 parent
                     .spawn((
                         NodeBundle {
-                            style: Style {
+                            node: Node {
                                 min_width: Val::Px(56.0),
                                 max_width: Val::Px(75.0),
                                 flex_basis: Val::Px(65.0),
@@ -321,7 +328,7 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
                         parent
                             .spawn((
                                 ButtonBundle {
-                                    style: Style {
+                                    node: Node {
                                         width: Val::Percent(100.0),
                                         height: Val::Percent(100.0),
                                         flex_direction: FlexDirection::Column,
@@ -337,24 +344,26 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
                             ))
                             .with_children(|parent| {
                                 // Keyboard shortcut label
-                                parent.spawn(TextBundle::from_section(
-                                    format!("{}", idx + 1),
-                                    TextStyle {
+                                parent.spawn((
+                                    Text::new(format!("{}", idx + 1)),
+                                    TextFont {
                                         font: assets.font.clone(),
                                         font_size: 10.0,
-                                        color: GameColors::TEXT_MEDIUM,
+                                        ..default()
                                     },
-                                ).with_style(Style {
-                                    align_self: AlignSelf::FlexStart,
-                                    position_type: PositionType::Absolute,
-                                    top: Val::Px(2.0),
-                                    left: Val::Px(4.0),
-                                    ..default()
-                                }));
+                                    TextColor(GameColors::TEXT_MEDIUM),
+                                    Node {
+                                        align_self: AlignSelf::FlexStart,
+                                        position_type: PositionType::Absolute,
+                                        top: Val::Px(2.0),
+                                        left: Val::Px(4.0),
+                                        ..default()
+                                    },
+                                ));
 
                                 // Tower icon
                                 parent.spawn(NodeBundle {
-                                    style: Style {
+                                    node: Node {
                                         width: Val::Px(28.0),
                                         height: Val::Px(28.0),
                                         ..default()
@@ -364,51 +373,55 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
                                 });
 
                                 // Tower name
-                                parent.spawn(TextBundle::from_section(
-                                    tower_type.name(),
-                                    TextStyle {
+                                parent.spawn((
+                                    Text::new(tower_type.name()),
+                                    TextFont {
                                         font: assets.font.clone(),
                                         font_size: 12.0,
-                                        color: Color::WHITE,
+                                        ..default()
                                     },
+                                    TextColor(Color::WHITE),
                                 ));
 
                                 // Cost
                                 parent.spawn((
-                                    TextBundle::from_section(
-                                        format!("{}g", tower_type.cost()),
-                                        TextStyle {
+                                    (
+                                        Text::new(format!("{}g", tower_type.cost())),
+                                        TextFont {
                                             font: assets.font.clone(),
                                             font_size: 13.0,
-                                            color: GameColors::GOLD,
+                                            ..default()
                                         },
+                                        TextColor(GameColors::GOLD),
                                     ),
                                     TowerCostText,
                                 ));
 
                                 // 3-stat rows (or 2 for Buff tower)
                                 if tower_type == TowerType::Buff {
-                                    parent.spawn(TextBundle::from_section(
-                                        format!("BUFF +25%\nRNG {:.0}", tower_type.range()),
-                                        TextStyle {
+                                    parent.spawn((
+                                        Text::new(format!("BUFF +25%\nRNG {:.0}", tower_type.range())),
+                                        TextFont {
                                             font: assets.font.clone(),
                                             font_size: 10.0,
-                                            color: GameColors::TEXT_BRIGHT,
+                                            ..default()
                                         },
+                                        TextColor(GameColors::TEXT_BRIGHT),
                                     ));
                                 } else {
-                                    parent.spawn(TextBundle::from_section(
-                                        format!(
+                                    parent.spawn((
+                                        Text::new(format!(
                                             "DMG {:.0}\nRNG {:.0}\nSPD {:.1}",
                                             tower_type.damage(),
                                             tower_type.range(),
                                             tower_type.attack_speed()
-                                        ),
-                                        TextStyle {
+                                        )),
+                                        TextFont {
                                             font: assets.font.clone(),
                                             font_size: 10.0,
-                                            color: GameColors::TEXT_BRIGHT,
+                                            ..default()
                                         },
+                                        TextColor(GameColors::TEXT_BRIGHT),
                                     ));
                                 }
                             });
@@ -419,7 +432,7 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
             parent
                 .spawn((
                     NodeBundle {
-                        style: Style {
+                        node: Node {
                             min_width: Val::Px(140.0),
                             max_width: Val::Px(180.0),
                             flex_basis: Val::Px(160.0),
@@ -440,49 +453,53 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
                 .with_children(|parent| {
                     // Tower name in accent color
                     parent.spawn((
-                        TextBundle::from_section(
-                            "Basic",
-                            TextStyle {
+                        (
+                            Text::new("Basic"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 13.0,
-                                color: TowerType::Basic.color(),
+                                ..default()
                             },
+                            TextColor(TowerType::Basic.color()),
                         ),
                         InfoPanelName,
                     ));
                     // Description
                     parent.spawn((
-                        TextBundle::from_section(
-                            "Balanced single-target damage",
-                            TextStyle {
+                        (
+                            Text::new("Balanced single-target damage"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 10.0,
-                                color: GameColors::TEXT_SECONDARY,
+                                ..default()
                             },
+                            TextColor(GameColors::TEXT_SECONDARY),
                         ),
                         InfoPanelDesc,
                     ));
                     // Stats
                     parent.spawn((
-                        TextBundle::from_section(
-                            "DMG: 25  RNG: 150\nSPD: 1.0/s",
-                            TextStyle {
+                        (
+                            Text::new("DMG: 25  RNG: 150\nSPD: 1.0/s"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 10.0,
-                                color: Color::srgb(0.7, 0.8, 0.95),
+                                ..default()
                             },
+                            TextColor(Color::srgb(0.7, 0.8, 0.95)),
                         ),
                         InfoPanelStats,
                     ));
                     // Cost
                     parent.spawn((
-                        TextBundle::from_section(
-                            "Cost: 50g",
-                            TextStyle {
+                        (
+                            Text::new("Cost: 50g"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 11.0,
-                                color: GameColors::GOLD,
+                                ..default()
                             },
+                            TextColor(GameColors::GOLD),
                         ),
                         InfoPanelCost,
                     ));
@@ -492,7 +509,7 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
             parent
                 .spawn((
                     ButtonBundle {
-                        style: Style {
+                        node: Node {
                             width: Val::Px(80.0),
                             height: Val::Px(55.0),
                             justify_content: JustifyContent::Center,
@@ -507,13 +524,14 @@ fn setup_bottom_bar(commands: &mut Commands, assets: &GameAssets) {
                 ))
                 .with_children(|parent| {
                     parent.spawn((
-                        TextBundle::from_section(
-                            "START",
-                            TextStyle {
+                        (
+                            Text::new("START"),
+                            TextFont {
                                 font: assets.font.clone(),
                                 font_size: 14.0,
-                                color: Color::WHITE,
+                                ..default()
                             },
+                            TextColor(Color::WHITE),
                         ),
                         StartWaveButtonText,
                     ));
@@ -526,7 +544,7 @@ fn setup_wave_preview(commands: &mut Commands, assets: &GameAssets) {
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     padding: UiRect::all(Val::Px(8.0)),
@@ -545,13 +563,14 @@ fn setup_wave_preview(commands: &mut Commands, assets: &GameAssets) {
         ))
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
+                (
+                    Text::new(""),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 11.0,
-                        color: Color::srgba(1.0, 1.0, 1.0, 0.8),
+                        ..default()
                     },
+                    TextColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
                 ),
                 WavePreviewText,
             ));
@@ -563,7 +582,7 @@ fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Px(150.0),
                     height: Val::Auto,
                     flex_direction: FlexDirection::Column,
@@ -589,17 +608,18 @@ fn setup_tower_detail_panel(commands: &mut Commands, assets: &GameAssets) {
 
             // Synergy display (hidden when no synergies active)
             parent.spawn((
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font: assets.font.clone(),
-                        font_size: 10.0,
-                        color: GameColors::SYNERGY, // Light purple for synergies
-                    },
-                ).with_style(Style {
+                Text::new(""),
+                TextFont {
+                    font: assets.font.clone(),
+                    font_size: 10.0,
+                    // Light purple for synergies,
+                    ..default()
+                },
+                TextColor(GameColors::SYNERGY),
+                Node {
                     margin: UiRect::bottom(Val::Px(6.0)),
                     ..default()
-                }),
+                },
                 SynergyText,
             ));
 
@@ -612,7 +632,7 @@ fn spawn_stats_section(parent: &mut ChildBuilder, assets: &GameAssets) {
     // Tower stats section with background
     parent
         .spawn(NodeBundle {
-            style: Style {
+            node: Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::all(Val::Px(6.0)),
                 margin: UiRect::bottom(Val::Px(6.0)),
@@ -651,7 +671,7 @@ fn spawn_upgrade_preview(parent: &mut ChildBuilder, assets: &GameAssets) {
     // Upgrade preview section
     parent
         .spawn(NodeBundle {
-            style: Style {
+            node: Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::all(Val::Px(6.0)),
                 margin: UiRect::bottom(Val::Px(6.0)),
@@ -691,7 +711,7 @@ fn spawn_spec_choice_panel(parent: &mut ChildBuilder, assets: &GameAssets) {
     parent
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Stretch,
@@ -705,24 +725,26 @@ fn spawn_spec_choice_panel(parent: &mut ChildBuilder, assets: &GameAssets) {
         ))
         .with_children(|parent| {
             // Header
-            parent.spawn(TextBundle::from_section(
-                "Choose Specialization:",
-                TextStyle {
+            parent.spawn((
+                Text::new("Choose Specialization:"),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 11.0,
-                    color: GameColors::PRIMARY,
+                    ..default()
                 },
-            ).with_style(Style {
-                margin: UiRect::bottom(Val::Px(6.0)),
-                ..default()
-            }));
+                TextColor(GameColors::PRIMARY),
+                Node {
+                    margin: UiRect::bottom(Val::Px(6.0)),
+                    ..default()
+                },
+            ));
 
             // Two spec buttons (text updated dynamically)
             for i in 0..2 {
                 parent
                     .spawn((
                         ButtonBundle {
-                            style: Style {
+                            node: Node {
                                 width: Val::Percent(100.0),
                                 min_height: Val::Px(36.0),
                                 padding: UiRect::all(Val::Px(6.0)),
@@ -740,13 +762,14 @@ fn spawn_spec_choice_panel(parent: &mut ChildBuilder, assets: &GameAssets) {
                     ))
                     .with_children(|parent| {
                         parent.spawn((
-                            TextBundle::from_section(
-                                "",
-                                TextStyle {
+                            (
+                                Text::new(""),
+                                TextFont {
                                     font: assets.font.clone(),
                                     font_size: 10.0,
-                                    color: Color::WHITE,
+                                    ..default()
                                 },
+                                TextColor(Color::WHITE),
                             ),
                             SpecButtonText,
                         ));
@@ -760,7 +783,7 @@ fn spawn_action_buttons(parent: &mut ChildBuilder, assets: &GameAssets) {
     parent
         .spawn((
             ButtonBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(44.0),
                     justify_content: JustifyContent::Center,
@@ -776,13 +799,14 @@ fn spawn_action_buttons(parent: &mut ChildBuilder, assets: &GameAssets) {
         ))
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_section(
-                    "Target: First [T]",
-                    TextStyle {
+                (
+                    Text::new("Target: First [T]"),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 11.0,
-                        color: Color::WHITE,
+                        ..default()
                     },
+                    TextColor(Color::WHITE),
                 ),
                 TargetingText,
             ));
@@ -792,7 +816,7 @@ fn spawn_action_buttons(parent: &mut ChildBuilder, assets: &GameAssets) {
     parent
         .spawn((
             ButtonBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(44.0),
                     justify_content: JustifyContent::Center,
@@ -808,13 +832,14 @@ fn spawn_action_buttons(parent: &mut ChildBuilder, assets: &GameAssets) {
         ))
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_section(
-                    "Upgrade [U] - 30g",
-                    TextStyle {
+                (
+                    Text::new("Upgrade [U] - 30g"),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 11.0,
-                        color: Color::WHITE,
+                        ..default()
                     },
+                    TextColor(Color::WHITE),
                 ),
                 UpgradeCostText,
             ));
@@ -824,7 +849,7 @@ fn spawn_action_buttons(parent: &mut ChildBuilder, assets: &GameAssets) {
     parent
         .spawn((
             ButtonBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(44.0),
                     justify_content: JustifyContent::Center,
@@ -839,13 +864,14 @@ fn spawn_action_buttons(parent: &mut ChildBuilder, assets: &GameAssets) {
         ))
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_section(
-                    "Sell [S] +37g",
-                    TextStyle {
+                (
+                    Text::new("Sell [S] +37g"),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 11.0,
-                        color: Color::WHITE,
+                        ..default()
                     },
+                    TextColor(Color::WHITE),
                 ),
                 SellValueText,
             ));
@@ -857,7 +883,7 @@ fn setup_combo_display(commands: &mut Commands, assets: &GameAssets) {
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     position_type: PositionType::Absolute,
                     top: Val::Px(80.0),
                     left: Val::Percent(50.0),
@@ -879,13 +905,14 @@ fn setup_combo_display(commands: &mut Commands, assets: &GameAssets) {
         ))
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_section(
-                    "COMBO x1",
-                    TextStyle {
+                (
+                    Text::new("COMBO x1"),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 32.0,
-                        color: GameColors::GOLD,
+                        ..default()
                     },
+                    TextColor(GameColors::GOLD),
                 ),
                 ComboText,
             ));
@@ -897,7 +924,7 @@ fn setup_ability_bar(commands: &mut Commands, assets: &GameAssets) {
     commands
         .spawn((
             NodeBundle {
-                style: Style {
+                node: Node {
                     position_type: PositionType::Absolute,
                     left: Val::Px(10.0),
                     top: Val::Px(60.0),
@@ -939,7 +966,7 @@ fn spawn_ability_button(
     parent
         .spawn((
             ButtonBundle {
-                style: Style {
+                node: Node {
                     width: Val::Px(110.0),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::FlexStart,
@@ -958,7 +985,7 @@ fn spawn_ability_button(
         .with_children(|btn| {
             // Top row: key badge + ability name
             btn.spawn(NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
@@ -969,7 +996,7 @@ fn spawn_ability_button(
             }).with_children(|row| {
                 // Key badge
                 row.spawn(NodeBundle {
-                    style: Style {
+                    node: Node {
                         padding: UiRect::new(Val::Px(4.0), Val::Px(4.0), Val::Px(1.0), Val::Px(1.0)),
                         ..default()
                     },
@@ -977,39 +1004,43 @@ fn spawn_ability_button(
                     border_radius: BorderRadius::all(Val::Px(3.0)),
                     ..default()
                 }).with_children(|chip| {
-                    chip.spawn(TextBundle::from_section(
-                        key,
-                        TextStyle {
+                    chip.spawn((
+                        Text::new(key),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 11.0,
-                            color: GameColors::TEXT_BRIGHT,
+                            ..default()
                         },
+                        TextColor(GameColors::TEXT_BRIGHT),
                     ));
                 });
                 // Ability name
-                row.spawn(TextBundle::from_section(
-                    name,
-                    TextStyle {
+                row.spawn((
+                    Text::new(name),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 13.0,
                         color,
+                        ..default()
                     },
+                    TextColor(Color::WHITE),
                 ));
             });
 
             // Stat line
-            btn.spawn(TextBundle::from_section(
-                stat_line,
-                TextStyle {
+            btn.spawn((
+                Text::new(stat_line),
+                TextFont {
                     font: assets.font.clone(),
                     font_size: 10.0,
-                    color: GameColors::TEXT_SECONDARY,
+                    ..default()
                 },
+                TextColor(GameColors::TEXT_SECONDARY),
             ));
 
             // Cooldown + status row
             btn.spawn(NodeBundle {
-                style: Style {
+                node: Node {
                     width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
                     justify_content: JustifyContent::SpaceBetween,
@@ -1018,22 +1049,24 @@ fn spawn_ability_button(
                 },
                 ..default()
             }).with_children(|row| {
-                row.spawn(TextBundle::from_section(
-                    cooldown_line,
-                    TextStyle {
+                row.spawn((
+                    Text::new(cooldown_line),
+                    TextFont {
                         font: assets.font.clone(),
                         font_size: 10.0,
-                        color: GameColors::TEXT_SECONDARY,
+                        ..default()
                     },
+                    TextColor(GameColors::TEXT_SECONDARY),
                 ));
                 row.spawn((
-                    TextBundle::from_section(
-                        "Ready",
-                        TextStyle {
+                    (
+                        Text::new("Ready"),
+                        TextFont {
                             font: assets.font.clone(),
                             font_size: 11.0,
-                            color: GameColors::SUCCESS,
+                            ..default()
                         },
+                        TextColor(GameColors::SUCCESS),
                     ),
                     AbilityCooldownText(ability),
                 ));
