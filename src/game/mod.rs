@@ -220,8 +220,10 @@ fn setup_game_over(
         wave + 1, score, game_stats.total_enemies_killed
     ));
 
-    // Track game over event with stats
-    let wave_reached = wave.to_string();
+    // Track game over event with stats.
+    // `wave` is the 0-indexed WaveManager cursor; the announce above reports `wave + 1`,
+    // so `wave_reached` uses the displayed number to match what the player saw.
+    let wave_reached = (wave + 1).to_string();
     let score_str = score.to_string();
     track_with_context(
         &analytics,

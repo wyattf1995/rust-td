@@ -1304,10 +1304,15 @@ fn check_wave_complete(
         wave_manager.wave_ended_at = Some(time.elapsed_seconds_f64());
         wave_manager.current_wave += 1;
 
-        // Track milestone waves (5, 10, 15, 20...) to measure progression
+        // Track milestone waves (1, 5, 10, 15, 20...) to measure progression.
+        // `current_wave` is 0-indexed internally; every player-facing surface adds 1
+        // (see the announce above), so the milestone test and the reported value both
+        // use the displayed wave number. Reporting the raw index made every row in the
+        // "Wave Reached Distribution" report one lower than what the player was told.
+        let displayed_wave = completed_wave + 1;
         #[allow(clippy::manual_is_multiple_of)]
-        if completed_wave % 5 == 0 || completed_wave == 1 {
-            let wave_str = completed_wave.to_string();
+        if displayed_wave % 5 == 0 || displayed_wave == 1 {
+            let wave_str = displayed_wave.to_string();
             let score_str = economy.score.to_string();
             let gold_str = economy.gold.to_string();
             track_with_context(
