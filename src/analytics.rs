@@ -6,27 +6,18 @@ use bevy::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-/// Analytics resource holding session info
+/// Analytics resource holding build info
 #[derive(Resource)]
 pub struct Analytics {
-    pub session_id: String,
     pub game_version: &'static str,
 }
 
 impl Default for Analytics {
     fn default() -> Self {
         Self {
-            session_id: generate_session_id(),
             game_version: env!("CARGO_PKG_VERSION"),
         }
     }
-}
-
-/// Generate a random session ID (not persisted)
-fn generate_session_id() -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    format!("{:016x}", rng.gen::<u64>())
 }
 
 // JavaScript interop for WASM builds — `catch` attribute converts JS exceptions
@@ -71,14 +62,9 @@ pub fn track_event(event: &str, properties: &[(&str, &str)]) {
 
 /// Track event with the analytics resource context
 pub fn track_with_context(analytics: &Analytics, event: &str, extra_props: &[(&str, &str)]) {
-    let session_id = analytics.session_id.as_str();
-    let version = analytics.game_version;
-
-    // Combine base properties with extra properties
-    let mut all_props: Vec<(&str, &str)> = vec![
-        ("session_id", session_id),
-        ("game_version", version),
-    ];
+    // Session identity comes from Umami itself, so only the build version is worth
+    // attaching to every event.
+    let mut all_props: Vec<(&str, &str)> = vec![("game_version", analytics.game_version)];
     all_props.extend_from_slice(extra_props);
 
     track_event(event, &all_props);
