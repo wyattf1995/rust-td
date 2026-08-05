@@ -72,7 +72,7 @@
     <link rel="manifest" href="/assets/manifest.json">
 
     <!-- Analytics (Umami — self-hosted, no cookies) -->
-    <script defer src="https://analytics.wyatt-fleming.com/script.js" data-website-id="e0790cd0-d123-4cb5-b1b6-7d2d12908444" data-performance="true"></script>
+    <script defer src="https://analytics.wyatt-fleming.com/script.js" data-website-id="e0790cd0-d123-4cb5-b1b6-7d2d12908444" data-domains="td.wyatt-fleming.com" data-performance="true"></script>
 
     <title>Neon Command</title>
     <style>
@@ -280,52 +280,97 @@
         };
 
         // Neon Command Analytics - Privacy-first, no cookies, no PII
+        // Bridges game events fired from Rust/WASM into Umami (window.umami.track).
         window.neonAnalytics = (function() {
-            const ANALYTICS_ENDPOINT = null; // Set to your endpoint, e.g., '/api/events' or Plausible URL
-            const DEBUG = true; // Console log events in dev
+            // Opt-in console tracing for local development: append ?analytics_debug=1
+            const DEBUG = new URLSearchParams(window.location.search).get('analytics_debug') === '1';
 
-            // Browser context (collected once)
-            const context = {
-                screen_width: window.screen.width,
-                screen_height: window.screen.height,
-                viewport_width: window.innerWidth,
-                viewport_height: window.innerHeight,
-                is_mobile: window.innerWidth < 800 || 'ontouchstart' in window,
-                platform: 'web',
-                referrer: document.referrer || 'direct',
-                timestamp: Date.now()
-            };
+            // The Umami script tag is deferred, so a Bevy Startup system can fire an event
+            // before window.umami exists. Those events wait here and replay in order.
+            const pending = [];
+            const MAX_PENDING = 100;
+            const POLL_INTERVAL_MS = 250;
+            const POLL_TIMEOUT_MS = 60000;
+            let pollTimer = null;
+            let pollElapsed = 0;
+
+            function umamiReady() {
+                return !!(window.umami && typeof window.umami.track === 'function');
+            }
+
+            function send(eventName, props) {
+                try {
+                    window.umami.track(eventName, props);
+                } catch (e) {
+                    if (DEBUG) console.warn('[Analytics] umami.track rejected "' + eventName + '": ' + e.message);
+                }
+            }
+
+            // Replays queued events oldest-first. Returns true once Umami is available,
+            // which is also the signal to stop polling for it.
+            function flush() {
+                if (!umamiReady()) return false;
+                while (pending.length > 0) {
+                    const queued = pending.shift();
+                    send(queued.name, queued.props);
+                }
+                return true;
+            }
+
+            function startPolling() {
+                if (pollTimer !== null) return;
+                pollElapsed = 0;
+                pollTimer = setInterval(function() {
+                    pollElapsed += POLL_INTERVAL_MS;
+                    if (flush() || pollElapsed >= POLL_TIMEOUT_MS) {
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                    }
+                }, POLL_INTERVAL_MS);
+            }
+
+            // Rust builds the property JSON with format!("\"{}\":\"{}\"") so every value
+            // arrives quoted. Umami types event_data by JS typeof, so numeric values must be
+            // real numbers or the score/wave breakdown reports come back as strings.
+            function isNumericString(value) {
+                // Round-trip check keeps hex-looking ids, zero-padded values and integers
+                // beyond Number precision as strings.
+                if (!/^-?\d+(\.\d+)?$/.test(value)) return false;
+                return String(Number(value)) === value;
+            }
+
+            function coerceNumbers(props) {
+                const out = {};
+                for (const key in props) {
+                    if (!Object.prototype.hasOwnProperty.call(props, key)) continue;
+                    const value = props[key];
+                    out[key] = (typeof value === 'string' && isNumericString(value)) ? Number(value) : value;
+                }
+                return out;
+            }
 
             function trackEvent(eventName, propertiesJson) {
+                let props;
                 try {
-                    const props = JSON.parse(propertiesJson || '{}');
-                    const event = {
-                        event: eventName,
-                        ...context,
-                        ...props,
-                        timestamp: Date.now()
-                    };
-
-                    if (DEBUG) {
-                        console.log('[Analytics]', eventName, event);
-                    }
-
-                    // Send to endpoint if configured
-                    if (ANALYTICS_ENDPOINT) {
-                        fetch(ANALYTICS_ENDPOINT, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(event),
-                            keepalive: true // Ensure sent even on page close
-                        }).catch(() => {}); // Silently fail
-                    }
-
-                    // Plausible integration (if loaded)
-                    if (window.plausible) {
-                        window.plausible(eventName, { props });
-                    }
+                    props = coerceNumbers(JSON.parse(propertiesJson || '{}'));
                 } catch (e) {
-                    if (DEBUG) console.warn('[Analytics] Error:', e);
+                    if (DEBUG) console.warn('[Analytics] Malformed property JSON for "' + eventName + '": ' + e.message);
+                    props = {};
+                }
+
+                if (DEBUG) console.log('[Analytics]', eventName, props);
+
+                if (umamiReady()) {
+                    flush(); // anything queued before Umami loaded goes first
+                    send(eventName, props);
+                    return;
+                }
+
+                if (pending.length < MAX_PENDING) {
+                    pending.push({ name: eventName, props: props });
+                    startPolling();
+                } else if (DEBUG) {
+                    console.warn('[Analytics] Dropped "' + eventName + '": Umami never loaded and the ' + MAX_PENDING + ' event queue is full');
                 }
             }
 
